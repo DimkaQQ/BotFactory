@@ -84,6 +84,42 @@ docker compose up --build
 `api` (FastAPI на 8000), `bot` (мета-бот, long polling), `frontend`
 (nginx на 80, отдаёт Mini App и проксирует `/api` и `/webhook` на `api`).
 
+## Продакшен-деплой на VPS (Caddy + свой домен)
+
+Для реального сервера с доменом используется тот же `docker-compose.yml`
+плюс оверлей `docker-compose.prod.yml`, который добавляет `caddy` —
+он сам получает и продлевает Let's Encrypt сертификат и терминирует HTTPS,
+а `frontend`-нжинкс перестаёт торчать наружу напрямую.
+
+**Перед стартом:**
+
+1. Настрой DNS: A-запись `your-domain.com → IP_VPS`.
+2. Открой на VPS порты `80` и `443` (например, `ufw allow 80,443/tcp`).
+3. Установи Docker Engine + Compose plugin, если их ещё нет:
+   ```bash
+   curl -fsSL https://get.docker.com | sh
+   ```
+
+**Деплой:**
+
+```bash
+git clone https://github.com/DimkaQQ/BotFactory.git
+cd BotFactory
+git checkout claude/davay-sdelaem-eto-59liqr
+
+cp .env.example .env
+# заполнить META_BOT_TOKEN, FERNET_KEY,
+# PUBLIC_BASE_URL=https://your-domain.com, DOMAIN=your-domain.com,
+# и сменить POSTGRES_PASSWORD на нечто не дефолтное
+
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Caddy сам выпустит сертификат при первом запросе на порт 80/443 —
+логи можно посмотреть через `docker compose logs -f caddy`. После этого
+`https://your-domain.com/builder` должен открываться с валидным HTTPS
+без дополнительных действий.
+
 ## Путь пользователя end-to-end
 
 1. Пользователь пишет `/start` мета-боту → получает кнопку

@@ -1,0 +1,9 @@
+# Production TLS termination for a VPS deploy. Caddy gets/renews a
+# Let's Encrypt certificate for $DOMAIN automatically (needs an A record
+# pointing at this server's IP, and ports 80+443 open) and forwards
+# everything to the frontend/nginx container, which already knows how to
+# route /builder (Mini App), /api/* and /webhook/* to the right place.
+{$DOMAIN} {
+    encode gzip
+    reverse_proxy frontend:80
+}
