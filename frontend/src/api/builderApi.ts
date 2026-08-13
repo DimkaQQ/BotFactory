@@ -26,10 +26,12 @@ export interface BotBlock {
 export interface Bot {
   id: string;
   client_id: string;
+  name: string | null;
   telegram_bot_username: string | null;
   status: "draft" | "active" | "disabled";
   created_at: string;
   published_at: string | null;
+  block_count: number;
 }
 
 export interface BotWithBlocks extends Bot {
@@ -93,6 +95,9 @@ export const builderApi = {
   listBots: () => request<Bot[]>("/bots"),
   createBot: () => request<Bot>("/bots", { method: "POST" }),
   getBot: (botId: string) => request<BotWithBlocks>(`/bots/${botId}`),
+  deleteBot: (botId: string) => request<void>(`/bots/${botId}`, { method: "DELETE" }),
+  renameBot: (botId: string, name: string) =>
+    request<Bot>(`/bots/${botId}`, { method: "PATCH", body: JSON.stringify({ name }) }),
 
   publishBot: (botId: string, token: string) =>
     request<{ status: string; telegram_bot_username: string }>(`/bots/${botId}/publish`, {

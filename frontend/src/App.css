@@ -51,6 +51,38 @@
 
 .app-header__titles {
   min-width: 0;
+  flex: 1;
+}
+
+.back-link {
+  display: inline-block;
+  border: none;
+  background: transparent;
+  color: var(--tg-link);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0 0 var(--sp-2);
+  cursor: pointer;
+}
+
+.bot-delete-button {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+
+.bot-delete-button:active {
+  background: color-mix(in srgb, var(--tg-destructive) 14%, transparent);
+  color: var(--tg-destructive);
 }
 
 .app-header h1 {
@@ -58,6 +90,38 @@
   font-weight: 700;
   margin: 0;
   letter-spacing: -0.01em;
+}
+
+.app-header__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-header__edit-hint {
+  font-size: 13px;
+  opacity: 0.35;
+  flex-shrink: 0;
+}
+
+.app-header__name-input {
+  width: 100%;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  border: none;
+  border-bottom: 1.5px solid var(--tg-button);
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0 0 2px;
+}
+
+.app-header__name-input:focus {
+  outline: none;
 }
 
 .app-header__greeting {
@@ -113,6 +177,122 @@
   margin: 0;
   color: var(--text-tertiary);
   font-size: 13px;
+}
+
+/* ===== Bot list ("Мои боты") ===== */
+
+.bot-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.bot-list__empty {
+  text-align: center;
+  padding: var(--sp-6) var(--sp-2) var(--sp-4);
+  color: var(--text-tertiary);
+}
+
+.bot-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--tg-secondary-bg);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: transform 0.1s ease;
+}
+
+.bot-card:active {
+  transform: scale(0.98);
+}
+
+.bot-card:disabled {
+  opacity: 0.5;
+}
+
+.bot-card__icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: color-mix(in srgb, var(--tg-hint) 16%, transparent);
+}
+
+.bot-card__icon--active {
+  background: color-mix(in srgb, var(--accent-success) 18%, transparent);
+}
+
+.bot-card__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bot-card__name {
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bot-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.bot-card__status {
+  font-weight: 500;
+}
+
+.bot-card__status--active {
+  color: var(--accent-success);
+}
+
+.bot-card__dot {
+  opacity: 0.5;
+}
+
+.bot-card__delete {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.bot-card__delete:active {
+  background: color-mix(in srgb, var(--tg-destructive) 14%, transparent);
+  color: var(--tg-destructive);
+}
+
+.publish-button--link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 
 /* ===== Chat canvas — the constructor IS the message feed ===== */

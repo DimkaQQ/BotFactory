@@ -2,18 +2,19 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.deps import get_current_client
 from app.models.bot import Bot, BotStatus
+from app.models.bot_block import BotBlock
 from app.models.client import Client
-from app.schemas.bot import BotOut, BotWithBlocksOut, PublishRequest, PublishResponse
+from app.schemas.bot import BotOut, BotUpdate, BotWithBlocksOut, PublishRequest, PublishResponse
 from app.schemas.client import ClientOut
 from app.services import bot_registry
-from app.services.security import encrypt_token
+from app.services.security import decrypt_token, encrypt_token
 from app.services.telegram_validator import InvalidBotToken, validate_bot_token
 
 router = APIRouter(prefix="/api", tags=["bots"])
@@ -39,9 +40,19 @@ async def get_me(client: Client = Depends(get_current_client)) -> Client:
 async def list_bots(
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
-) -> list[Bot]:
-    result = await db.execute(select(Bot).where(Bot.client_id == client.id).order_by(Bot.created_at.desc()))
-    return list(result.scalars().all())
+) -> list[BotOut]:
+    stmt = (
+        select(Bot, func.count(BotBlock.id))
+        .outerjoin(BotBlock, BotBlock.bot_id == Bot.id)
+        .where(Bot.client_id == client.id)
+        .group_by(Bot.id)
+        .order_by(Bot.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    return [
+        BotOut.model_validate(bot, from_attributes=True).model_copy(update={"block_count": count})
+        for bot, count in result.all()
+    ]
 
 
 @router.post("/bots", response_model=BotOut, status_code=status.HTTP_201_CREATED)
@@ -63,6 +74,38 @@ async def get_bot(
     db: AsyncSession = Depends(get_db),
 ) -> Bot:
     return await _get_owned_bot(bot_id, client, db, with_blocks=True)
+
+
+@router.patch("/bots/{bot_id}", response_model=BotOut)
+async def update_bot(
+    bot_id: uuid.UUID,
+    payload: BotUpdate,
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> Bot:
+    bot = await _get_owned_bot(bot_id, client, db)
+    if payload.name is not None:
+        bot.name = payload.name.strip() or None
+    await db.commit()
+    await db.refresh(bot)
+    return bot
+
+
+@router.delete("/bots/{bot_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_bot(
+    bot_id: uuid.UUID,
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    bot = await _get_owned_bot(bot_id, client, db)
+
+    token = decrypt_token(bot.bot_token_encrypted) if bot.bot_token_encrypted else None
+    # Best-effort: detach the webhook and drop the cached Bot instance
+    # before the row (and its blocks, via ON DELETE CASCADE) disappear.
+    await bot_registry.remove(bot_id, token)
+
+    await db.delete(bot)
+    await db.commit()
 
 
 @router.post("/bots/{bot_id}/publish", response_model=PublishResponse)

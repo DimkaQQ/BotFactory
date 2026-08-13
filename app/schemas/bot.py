@@ -12,14 +12,20 @@ class BotOut(BaseModel):
 
     id: uuid.UUID
     client_id: uuid.UUID
+    name: str | None
     telegram_bot_username: str | None
     status: BotStatus
     created_at: datetime
     published_at: datetime | None
+    block_count: int = 0
 
 
 class BotWithBlocksOut(BotOut):
     blocks: list[BotBlockOut] = []
+
+
+class BotUpdate(BaseModel):
+    name: str | None = None
 
 
 class PublishRequest(BaseModel):

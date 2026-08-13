@@ -62,6 +62,28 @@ async def register_webhook(bot_id: uuid.UUID, token: str) -> None:
     put(bot_id, instance)
 
 
+async def remove(bot_id: uuid.UUID, token: str | None = None) -> None:
+    """Tear down a deleted bot: best-effort unset its Telegram webhook and
+    drop it (or a fresh throwaway instance, if it was never cached) from
+    the in-memory registry. Never raises — deletion should succeed even if
+    Telegram itself is unreachable."""
+
+    instance = _registry.pop(bot_id, None)
+
+    if instance is None and token:
+        instance = Bot(token=token, session=build_bot_session())
+
+    if instance is None:
+        return
+
+    try:
+        await instance.delete_webhook(drop_pending_updates=True)
+    except Exception:
+        logger.exception("Failed to delete webhook for bot %s (continuing)", bot_id)
+    finally:
+        await instance.session.close()
+
+
 async def close_all() -> None:
     for instance in _registry.values():
         await instance.session.close()

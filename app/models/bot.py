@@ -26,6 +26,10 @@ class Bot(Base):
         UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
+    # User-chosen label, so several bots (all "Новый бот" until published) can
+    # be told apart in the list. Independent of telegram_bot_username.
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # Encrypted with Fernet — never exposed decrypted outside bot_registry.
     bot_token_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 

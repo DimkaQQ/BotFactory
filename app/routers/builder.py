@@ -6,19 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.deps import get_owned_bot
-from app.models.bot import Bot, BotStatus
+from app.models.bot import Bot
 from app.models.bot_block import BotBlock
 from app.schemas.bot_block import BlockReorderRequest, BotBlockCreate, BotBlockOut, BotBlockUpdate
 
 router = APIRouter(prefix="/api/bots/{bot_id}/blocks", tags=["builder"])
 
-
-def _ensure_draft(bot: Bot) -> None:
-    if bot.status != BotStatus.draft:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Опубликованного бота нельзя редактировать",
-        )
+# Editing is allowed for both draft and already-published bots — the
+# dispatcher (app/services/bot_dispatcher.py) always reads blocks fresh
+# from the DB on every /start, so edits to a live bot take effect
+# immediately, no republish needed.
 
 
 async def _get_owned_block(bot_id: uuid.UUID, block_id: uuid.UUID, db: AsyncSession) -> BotBlock:
@@ -46,8 +43,6 @@ async def create_block(
     bot: Bot = Depends(get_owned_bot),
     db: AsyncSession = Depends(get_db),
 ) -> BotBlock:
-    _ensure_draft(bot)
-
     if payload.order_index is None:
         result = await db.execute(select(BotBlock.order_index).where(BotBlock.bot_id == bot_id))
         existing = [row[0] for row in result.all()]
@@ -69,8 +64,6 @@ async def reorder_blocks(
     bot: Bot = Depends(get_owned_bot),
     db: AsyncSession = Depends(get_db),
 ) -> list[BotBlock]:
-    _ensure_draft(bot)
-
     block_ids = [item.id for item in payload.items]
     result = await db.execute(select(BotBlock).where(BotBlock.bot_id == bot_id, BotBlock.id.in_(block_ids)))
     blocks_by_id = {block.id: block for block in result.scalars().all()}
@@ -95,8 +88,6 @@ async def update_block(
     bot: Bot = Depends(get_owned_bot),
     db: AsyncSession = Depends(get_db),
 ) -> BotBlock:
-    _ensure_draft(bot)
-
     block = await _get_owned_block(bot_id, block_id, db)
     if payload.content is not None:
         block.content = payload.content
@@ -115,8 +106,6 @@ async def delete_block(
     bot: Bot = Depends(get_owned_bot),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    _ensure_draft(bot)
-
     block = await _get_owned_block(bot_id, block_id, db)
     await db.delete(block)
     await db.commit()
