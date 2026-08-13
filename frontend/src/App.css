@@ -1,6 +1,6 @@
 .screen {
   min-height: 100vh;
-  padding: var(--sp-4) var(--sp-4) calc(96px + env(safe-area-inset-bottom));
+  padding: var(--sp-4) var(--sp-4) calc(110px + env(safe-area-inset-bottom));
 }
 
 .screen--center {
@@ -28,7 +28,7 @@
 /* Header */
 
 .app-header {
-  margin-bottom: var(--sp-5);
+  margin-bottom: var(--sp-4);
 }
 
 .app-header__top {
@@ -69,7 +69,7 @@
 .app-hint {
   color: var(--text-tertiary);
   font-size: 13px;
-  margin: var(--sp-4) 0 var(--sp-4);
+  margin: 0 0 var(--sp-3);
 }
 
 /* Published success banner — the "peak moment" */
@@ -82,7 +82,7 @@
   border: 1px solid color-mix(in srgb, var(--accent-success) 24%, transparent);
   border-radius: var(--radius-lg);
   padding: var(--sp-4);
-  margin: 0 0 var(--sp-5);
+  margin: 0 0 var(--sp-4);
 }
 
 .published-banner__badge {
@@ -115,39 +115,268 @@
   font-size: 13px;
 }
 
-/* Block list */
+/* ===== Chat canvas — the constructor IS the message feed ===== */
 
-.block-list {
+.chat-canvas {
+  position: relative;
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4) var(--sp-3) var(--sp-2);
+  background-color: color-mix(in srgb, var(--tg-button) 4%, var(--tg-bg));
+  background-image: radial-gradient(color-mix(in srgb, var(--tg-text) 6%, transparent) 1px, transparent 1px);
+  background-size: 16px 16px;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: 2px;
 }
 
-.block-list__empty {
-  text-align: center;
-  padding: var(--sp-6) var(--sp-2) var(--sp-4);
-  color: var(--text-tertiary);
-}
-
-.block-list__empty-icon {
-  font-size: 34px;
+.chat-row {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: var(--sp-2);
+  align-items: flex-end;
   margin-bottom: var(--sp-2);
 }
 
-.block-list__empty-title {
-  margin: 0 0 var(--sp-1);
-  font-size: 16px;
-  font-weight: 600;
+.chat-row__avatar {
+  width: 28px;
+  height: 28px;
+}
+
+.chat-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.chat-row__content {
+  min-width: 0;
+  max-width: 88%;
+}
+
+.chat-bubble {
+  position: relative;
+  background: var(--tg-secondary-bg);
+  border-radius: 16px 16px 16px 4px;
+  padding: 10px 32px 10px 14px;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, background 0.15s ease;
+  border: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+
+.chat-bubble--editing {
+  cursor: text;
+  box-shadow: 0 0 0 2px var(--tg-button);
+}
+
+.chat-bubble--ghost {
+  border: 1.5px dashed var(--tg-separator);
+  background: transparent;
+  box-shadow: none;
+  padding: 12px 14px;
+}
+
+.chat-bubble__text {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-bubble__text--placeholder {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.chat-bubble__textarea {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 14.5px;
+  line-height: 1.4;
   color: var(--text-primary);
+  resize: none;
+  overflow: hidden;
 }
 
-.block-list__empty-hint {
-  margin: 0 0 var(--sp-5);
+.chat-bubble__textarea:focus {
+  outline: none;
+}
+
+.chat-bubble__delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  border-radius: 999px;
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.chat-bubble__delete:active {
+  opacity: 1;
+  background: color-mix(in srgb, var(--tg-destructive) 16%, transparent);
+  color: var(--tg-destructive);
+}
+
+/* Buttons attached under a bubble, styled like a real inline keyboard */
+
+.chat-buttons {
+  margin-top: 4px;
+}
+
+.chat-buttons__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.chat-buttons__pill {
+  display: block;
+  text-align: center;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--tg-secondary-bg);
+  border: 1px solid var(--tg-separator);
+  color: var(--tg-link);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.chat-buttons__ghost {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: transparent;
+  border: 1.5px dashed var(--tg-separator);
+  color: var(--tg-link);
   font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
 }
 
-/* Tappable "choose a block type" chips — used both in the empty state and
-   inside the add-block menu. */
+/* Composer-style "add message" bar */
+
+.chat-composer {
+  position: sticky;
+  bottom: var(--sp-2);
+  padding-top: var(--sp-2);
+}
+
+.chat-composer__button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 12px 16px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-tertiary);
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+}
+
+.chat-composer__plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tg-button) 16%, transparent);
+  color: var(--tg-button);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Bottom sheet for picking a block type */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, black 40%, transparent);
+  z-index: 20;
+  animation: backdrop-in 0.15s ease;
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 21;
+  background: var(--tg-bg);
+  border-radius: 20px 20px 0 0;
+  padding: var(--sp-2) var(--sp-4) calc(var(--sp-5) + env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 32px color-mix(in srgb, black 20%, transparent);
+  animation: sheet-in 0.18s ease;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(16px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.sheet__handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--tg-separator);
+  margin: var(--sp-2) auto var(--sp-3);
+}
+
+.sheet__title {
+  margin: 0 0 var(--sp-3);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Tappable "choose a block type" chips — used in the empty state and the
+   bottom sheet. */
 .block-chips {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -186,102 +415,6 @@
   font-size: 15px;
 }
 
-.block-list__add {
-  position: relative;
-  margin-top: var(--sp-2);
-}
-
-.block-list__add-button {
-  width: 100%;
-  padding: var(--sp-3);
-  border-radius: var(--radius-md);
-  border: 1.5px dashed var(--tg-separator);
-  background: transparent;
-  color: var(--tg-link);
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-
-.block-list__add-button:active {
-  background: color-mix(in srgb, var(--tg-button) 8%, transparent);
-}
-
-.block-list__add-menu {
-  position: absolute;
-  bottom: calc(100% + var(--sp-2));
-  left: 0;
-  right: 0;
-  background: var(--tg-bg);
-  border: 1px solid var(--tg-separator);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: var(--sp-2);
-  z-index: 10;
-  animation: menu-in 0.14s ease;
-}
-
-@keyframes menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Block card */
-
-.block-card {
-  background: var(--tg-secondary-bg);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-card);
-  transition: box-shadow 0.15s ease;
-}
-
-.block-card__header {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-2);
-}
-
-.block-card__handle {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: grab;
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  color: var(--text-tertiary);
-  touch-action: none;
-  border-radius: var(--radius-md);
-}
-
-.block-card__handle:active {
-  cursor: grabbing;
-  background: color-mix(in srgb, var(--tg-text) 6%, transparent);
-}
-
-.block-card__icon {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-}
-
 .block-card__icon--welcome {
   background: color-mix(in srgb, var(--accent-welcome) 16%, transparent);
 }
@@ -295,136 +428,55 @@
   background: color-mix(in srgb, var(--accent-delivery) 16%, transparent);
 }
 
-.block-card__title {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  border: none;
-  background: transparent;
-  padding: var(--sp-2) var(--sp-1);
-  text-align: left;
-  cursor: pointer;
-}
-
-.block-card__label {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.block-card__summary {
-  font-size: 13px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.block-card__chevron {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  transition: transform 0.15s ease;
-}
-
-.block-card__chevron--open {
-  transform: rotate(180deg);
-}
-
-.block-card__delete {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  font-size: 15px;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-md);
-}
-
-.block-card__delete:active {
-  background: color-mix(in srgb, var(--tg-destructive) 12%, transparent);
-  color: var(--tg-destructive);
-}
-
-.block-card__body {
-  padding: 0 var(--sp-3) var(--sp-3);
-  animation: body-in 0.15s ease;
-}
-
-@keyframes body-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.block-editor__textarea {
-  width: 100%;
-  border-radius: var(--radius-md);
-  border: 1.5px solid var(--tg-separator);
-  padding: var(--sp-3);
-  font-size: 14px;
-  font-family: inherit;
-  background: var(--tg-bg);
-  color: var(--text-primary);
-  resize: vertical;
-  transition: border-color 0.12s ease;
-}
-
-.block-editor__textarea:focus {
-  outline: none;
-  border-color: var(--tg-button);
-}
-
-/* Buttons editor */
+/* Buttons editor (inline, inside a bubble) */
 
 .buttons-editor {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+  cursor: default;
 }
 
-.buttons-editor__row {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr 1.2fr auto;
-  gap: var(--sp-1);
-  align-items: center;
-}
-
-.buttons-editor__row input,
-.buttons-editor__row select {
+.buttons-editor__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   padding: var(--sp-2);
-  border-radius: 10px;
+  border-radius: 12px;
+  border: 1.5px solid var(--tg-separator);
+  background: var(--tg-bg);
+}
+
+.buttons-editor__item-row {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.buttons-editor__item-row input,
+.buttons-editor__item-row select {
+  min-width: 0;
+  flex: 1;
+  padding: 7px var(--sp-2);
+  border-radius: 8px;
   border: 1.5px solid var(--tg-separator);
   font-size: 13px;
-  background: var(--tg-bg);
+  background: var(--tg-secondary-bg);
   color: var(--text-primary);
 }
 
-.buttons-editor__row input:focus,
-.buttons-editor__row select:focus {
+.buttons-editor__type {
+  flex: 0 0 92px;
+}
+
+.buttons-editor__item-row input:focus,
+.buttons-editor__item-row select:focus {
   outline: none;
   border-color: var(--tg-button);
 }
 
 .buttons-editor__remove {
+  flex: 0 0 auto;
   width: 32px;
   height: 32px;
   border: none;

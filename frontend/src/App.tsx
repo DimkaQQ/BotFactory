@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type BlockType, type BotBlock, type BotWithBlocks, builderApi, configureBuilderApi } from "./api/builderApi";
 import "./App.css";
-import { BlockList } from "./components/BlockList";
+import { ChatCanvas } from "./components/ChatCanvas";
 import { PublishButton } from "./components/PublishButton";
 import { useTelegramWebApp } from "./hooks/useTelegramWebApp";
 
@@ -79,11 +79,12 @@ export default function App() {
   );
 
   const handleAdd = useCallback(
-    async (blockType: BlockType) => {
-      if (!bot) return;
+    async (blockType: BlockType): Promise<string> => {
+      if (!bot) throw new Error("Bot not loaded");
       const defaultContent = blockType === "buttons" ? { buttons: [] } : { text: "" };
       const created = await builderApi.createBlock(bot.id, blockType, defaultContent);
       setBot((prev) => (prev ? { ...prev, blocks: [...prev.blocks, created] } : prev));
+      return created.id;
     },
     [bot],
   );
@@ -176,10 +177,10 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <p className="app-hint">Собери диалог из блоков — перетаскивай ⠿, чтобы менять порядок.</p>
+        <p className="app-hint">Так и будет выглядеть переписка. Нажми на сообщение, чтобы изменить, зажми — чтобы переставить.</p>
       )}
 
-      <BlockList
+      <ChatCanvas
         blocks={bot.blocks}
         onReorder={handleReorder}
         onChangeContent={handleChangeContent}

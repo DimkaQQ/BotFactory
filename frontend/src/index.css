@@ -63,6 +63,7 @@ body {
   background: var(--tg-bg);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 button,
