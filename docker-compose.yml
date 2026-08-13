@@ -64,3 +64,16 @@ services:
 
 volumes:
   db_data:
+
+networks:
+  # Some VPS/cloud hosts have a real interface MTU below Docker's default
+  # bridge MTU of 1500 (overlay/SDN networks are the usual cause) — that
+  # mismatch silently drops large packets like TLS handshakes, which shows
+  # up as containers timing out on HTTPS calls (e.g. to api.telegram.org)
+  # while small requests work fine. Override via DOCKER_NETWORK_MTU in
+  # .env if `ip link show <default-iface>` reports something other than
+  # 1500; leave unset otherwise.
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "${DOCKER_NETWORK_MTU:-1500}"
