@@ -118,40 +118,65 @@ export default function App() {
   );
 
   if (loadState === "loading") {
-    return <div className="screen screen--center">Загрузка…</div>;
+    return (
+      <div className="screen screen--center">
+        <div className="state-icon">🛠</div>
+        <p>Загружаем конструктор…</p>
+      </div>
+    );
   }
 
   if (loadState === "error") {
     return (
       <div className="screen screen--center">
-        <p>😕 {loadError}</p>
+        <div className="state-icon">😕</div>
+        <p>{loadError}</p>
       </div>
     );
   }
 
   if (!bot) {
-    return <div className="screen screen--center">Бот не найден</div>;
+    return (
+      <div className="screen screen--center">
+        <div className="state-icon">🤷</div>
+        <p>Бот не найден</p>
+      </div>
+    );
   }
 
   return (
     <div className="screen">
       <header className="app-header">
-        <h1>🛠 Конструктор бота</h1>
-        {user && (
-          <p className="app-header__greeting">
-            Привет, {user.first_name}
-            {user.last_name ? ` ${user.last_name}` : ""}!
-          </p>
-        )}
+        <div className="app-header__top">
+          <div className="app-header__icon" aria-hidden="true">
+            🛠
+          </div>
+          <div className="app-header__titles">
+            <h1>Конструктор бота</h1>
+            {user && (
+              <p className="app-header__greeting">
+                Привет, {user.first_name}
+                {user.last_name ? ` ${user.last_name}` : ""}!
+              </p>
+            )}
+          </div>
+        </div>
       </header>
 
       {bot.status === "active" ? (
         <div className="published-banner">
-          ✅ Бот опубликован: <strong>@{bot.telegram_bot_username}</strong>
-          <p>Редактирование опубликованного бота пока не поддерживается.</p>
+          <div className="published-banner__badge" aria-hidden="true">
+            ✓
+          </div>
+          <div>
+            <p className="published-banner__title">
+              Бот опубликован: <strong>@{bot.telegram_bot_username}</strong>
+            </p>
+            <p className="published-banner__hint">Редактирование опубликованного бота пока не поддерживается.</p>
+          </div>
         </div>
       ) : (
-        <p className="app-hint">Собери диалог из блоков — перетаскивай, чтобы менять порядок.</p>
+        <p className="app-hint">Собери диалог из блоков — перетаскивай ⠿, чтобы менять порядок.</p>
       )}
 
       <BlockList

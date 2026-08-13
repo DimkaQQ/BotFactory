@@ -7,6 +7,7 @@ ordered by `order_index` and send them one after another
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 
@@ -18,6 +19,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.bot_block import BlockType, BotBlock
 
 logger = logging.getLogger(__name__)
+
+# Blocks are sent with a short "typing…" pause in between instead of all at
+# once, so a multi-block reply reads like a conversation rather than a wall
+# of text dumped in a single instant.
+_TYPING_DELAY_MIN = 0.5
+_TYPING_DELAY_MAX = 1.8
+_CHARS_PER_SECOND = 45
+
+
+def _typing_delay(text: str) -> float:
+    seconds = len(text) / _CHARS_PER_SECOND
+    return max(_TYPING_DELAY_MIN, min(seconds, _TYPING_DELAY_MAX))
 
 
 def _build_keyboard(content: dict) -> InlineKeyboardMarkup | None:
@@ -84,8 +97,12 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
         await bot.send_message(chat_id, "Этот бот пока пуст 🤷")
         return
 
-    for block in blocks:
+    for index, block in enumerate(blocks):
         try:
+            if index > 0:
+                text = (block.content or {}).get("text") or ""
+                await bot.send_chat_action(chat_id, "typing")
+                await asyncio.sleep(_typing_delay(text))
             await _send_block(bot, chat_id, block)
         except Exception:
             logger.exception("Failed to send block %s for bot %s", block.id, bot_id)
