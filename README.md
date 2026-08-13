@@ -84,12 +84,15 @@ docker compose up --build
 `api` (FastAPI на 8000), `bot` (мета-бот, long polling), `frontend`
 (nginx на 80, отдаёт Mini App и проксирует `/api` и `/webhook` на `api`).
 
-## Продакшен-деплой на VPS (Caddy + свой домен)
+## Продакшен-деплой на VPS
 
-Для реального сервера с доменом используется тот же `docker-compose.yml`
-плюс оверлей `docker-compose.prod.yml`, который добавляет `caddy` —
-он сам получает и продлевает Let's Encrypt сертификат и терминирует HTTPS,
-а `frontend`-нжинкс перестаёт торчать наружу напрямую.
+Есть два сценария — какой использовать, зависит от того, свободен сервер
+или на нём уже что-то работает.
+
+### Вариант А — чистый VPS, ничего больше не крутится
+
+`docker-compose.prod.yml` добавляет `caddy`, который сам получает и
+продлевает Let's Encrypt сертификат и владеет портами 80/443.
 
 **Перед стартом:**
 
@@ -116,9 +119,41 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 Caddy сам выпустит сертификат при первом запросе на порт 80/443 —
-логи можно посмотреть через `docker compose logs -f caddy`. После этого
-`https://your-domain.com/builder` должен открываться с валидным HTTPS
-без дополнительных действий.
+логи можно посмотреть через `docker compose logs -f caddy`.
+
+### Вариант Б — на VPS уже есть свой nginx на хосте (порты 80/443 заняты)
+
+Здесь `caddy` не подойдёт — он тоже хочет владеть 80/443. Вместо этого
+используется оверлей `docker-compose.shared-vps.yml`: контейнер `frontend`
+слушает только `127.0.0.1:8010` (наружу не торчит), а `api`/`bot`/`db`
+вообще не публикуют портов на хост. Существующий nginx получает новый
+vhost, который проксирует на `127.0.0.1:8010`, и TLS для него выпускает
+certbot — так же, как для остальных сайтов на сервере, без затрагивания
+их конфигов.
+
+```bash
+git clone https://github.com/DimkaQQ/BotFactory.git
+cd BotFactory
+git checkout claude/davay-sdelaem-eto-59liqr
+
+cp .env.example .env
+# заполнить META_BOT_TOKEN, FERNET_KEY,
+# PUBLIC_BASE_URL=https://your-domain.com
+# (DOMAIN отсюда не используется — Caddy тут не участвует)
+# сменить POSTGRES_PASSWORD на нечто не дефолтное
+
+docker compose -f docker-compose.yml -f docker-compose.shared-vps.yml up -d --build
+
+# добавляем vhost в существующий host-nginx
+sudo cp deploy/nginx-vhost.example.conf /etc/nginx/sites-available/botfactory.conf
+sudo nano /etc/nginx/sites-available/botfactory.conf   # прописать реальный домен
+sudo ln -s /etc/nginx/sites-available/botfactory.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d your-domain.com
+```
+
+Оба сервиса (`api`, `bot`, `db`) в этом варианте получают лимиты памяти
+(`mem_limit`), чтобы не мешать другим сервисам на общем сервере.
 
 ## Путь пользователя end-to-end
 

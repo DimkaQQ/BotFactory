@@ -1,0 +1,32 @@
+# Production overlay for a VPS that ALREADY runs other services behind its
+# own host-level nginx (not the clean-box Caddy scenario in
+# docker-compose.prod.yml). Here we don't touch ports 80/443 at all — the
+# frontend container only binds to 127.0.0.1 on an internal port, and the
+# existing host nginx gets a new vhost that reverse-proxies to it (see
+# deploy/nginx-vhost.example.conf). TLS is issued by certbot for just that
+# one vhost, same way the other sites on the box already do it.
+#
+# Also sets conservative memory limits, since this box is tight on RAM —
+# BotFactory shouldn't be able to starve the other live services.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.shared-vps.yml up -d --build
+
+services:
+  frontend:
+    ports: !override
+      - "127.0.0.1:8010:80"
+    mem_limit: 64m
+
+  api:
+    ports: !reset []
+    mem_limit: 256m
+
+  bot:
+    mem_limit: 128m
+
+  db:
+    mem_limit: 256m
+
+  migrate:
+    mem_limit: 128m
