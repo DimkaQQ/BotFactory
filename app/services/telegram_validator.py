@@ -19,8 +19,6 @@ import httpx
 
 from app.config import get_settings
 
-TELEGRAM_API_BASE = "https://api.telegram.org"
-
 
 @dataclass
 class TelegramMe:
@@ -44,7 +42,8 @@ async def validate_bot_token(token: str) -> TelegramMe:
     if not token or ":" not in token:
         raise InvalidBotToken("Токен пустой или имеет неверный формат")
 
-    url = f"{TELEGRAM_API_BASE}/bot{token}/getMe"
+    api_base = get_settings().telegram_api_base_url or "https://api.telegram.org"
+    url = f"{api_base.rstrip('/')}/bot{token}/getMe"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url)

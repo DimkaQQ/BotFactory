@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     # Meta-bot (the bot that opens the constructor Mini App)
     meta_bot_token: str = ""
 
+    # Optional: base URL of a reverse proxy in front of the Telegram Bot API
+    # (e.g. a Cloudflare Worker), for deployments where api.telegram.org is
+    # blocked/throttled directly (common for RU-hosted servers). Leave empty
+    # to talk to api.telegram.org directly. Expected to proxy requests
+    # 1:1 — https://<worker>/bot<token>/<method> -> Telegram's own endpoint.
+    telegram_api_base_url: str = ""
+
     # Public HTTPS base URL of the deployment, e.g. https://your-domain.com
     public_base_url: str = "https://your-domain.com"
 

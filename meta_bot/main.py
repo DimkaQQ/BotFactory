@@ -10,7 +10,7 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from app.config import get_settings
-from app.services.telegram_session import Ipv4AiohttpSession
+from app.services.telegram_session import build_bot_session
 from meta_bot.handlers.start import router as start_router
 
 logging.basicConfig(level=logging.INFO)
@@ -22,7 +22,7 @@ async def main() -> None:
     if not settings.meta_bot_token:
         raise RuntimeError("META_BOT_TOKEN is not set")
 
-    bot = Bot(token=settings.meta_bot_token, session=Ipv4AiohttpSession())
+    bot = Bot(token=settings.meta_bot_token, session=build_bot_session())
     dp = Dispatcher()
     dp.include_router(start_router)
 

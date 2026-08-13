@@ -19,7 +19,7 @@ from app.config import get_settings
 from app.models.bot import Bot as BotModel
 from app.models.bot import BotStatus
 from app.services.security import decrypt_token
-from app.services.telegram_session import Ipv4AiohttpSession
+from app.services.telegram_session import build_bot_session
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def get_or_create(bot_id: uuid.UUID, db: AsyncSession) -> Bot | None:
         return None
 
     token = decrypt_token(bot_row.bot_token_encrypted)
-    instance = Bot(token=token, session=Ipv4AiohttpSession())
+    instance = Bot(token=token, session=build_bot_session())
     _registry[bot_id] = instance
     return instance
 
@@ -52,7 +52,7 @@ async def register_webhook(bot_id: uuid.UUID, token: str) -> None:
     """Set the Telegram webhook for a just-published bot and warm the cache."""
 
     settings = get_settings()
-    instance = Bot(token=token, session=Ipv4AiohttpSession())
+    instance = Bot(token=token, session=build_bot_session())
     try:
         await instance.set_webhook(settings.webhook_url(str(bot_id)))
     except Exception:
