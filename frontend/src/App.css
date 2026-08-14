@@ -107,7 +107,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   cursor: pointer;
+}
+
+.app-header__name-text {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -139,6 +144,14 @@
   margin: 2px 0 0;
   color: var(--text-tertiary);
   font-size: 13px;
+}
+
+.save-status--saving {
+  color: var(--accent-buttons);
+}
+
+.save-status--saved {
+  color: var(--accent-success);
 }
 
 .app-hint {
@@ -288,6 +301,7 @@
 }
 
 .bot-card__name {
+  min-width: 0;
   font-weight: 600;
   font-size: 15px;
   white-space: nowrap;
@@ -298,6 +312,8 @@
 .bot-card__meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 2px;
   gap: 5px;
   font-size: 13px;
   color: var(--text-tertiary);
@@ -413,7 +429,9 @@
 
 .chat-bubble__text {
   margin: 0;
-  font-size: 14.5px;
+  /* 16px, not 14.5 — below that iOS Safari auto-zooms on focus, which is
+     especially jarring here since editing text is the app's core action. */
+  font-size: 16px;
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
@@ -432,7 +450,9 @@
   padding: 0;
   margin: 0;
   font: inherit;
-  font-size: 14.5px;
+  /* 16px, not 14.5 — below that iOS Safari auto-zooms on focus, which is
+     especially jarring here since editing text is the app's core action. */
+  font-size: 16px;
   line-height: 1.4;
   color: var(--text-primary);
   resize: none;
@@ -764,10 +784,11 @@
 .buttons-editor__item-row select {
   min-width: 0;
   flex: 1;
-  padding: 7px var(--sp-2);
+  padding: 8px var(--sp-2);
   border-radius: 8px;
   border: 1.5px solid var(--tg-separator);
-  font-size: 13px;
+  /* 16px — below that iOS Safari auto-zooms the whole page on focus. */
+  font-size: 16px;
   background: var(--tg-secondary-bg);
   color: var(--text-primary);
 }
@@ -869,7 +890,9 @@
   padding: var(--sp-3);
   border-radius: 12px;
   border: 1.5px solid var(--tg-separator);
-  font-size: 14px;
+  /* 16px, not 14px — anything smaller triggers an unwanted auto-zoom on
+     iOS Safari when this field is focused. */
+  font-size: 16px;
   background: var(--tg-bg);
   color: var(--text-primary);
 }
@@ -918,6 +941,67 @@
 .publish-form__actions button[type="button"] {
   background: color-mix(in srgb, var(--tg-text) 8%, transparent);
   color: var(--text-primary);
+}
+
+/* =========================================================================
+   Pointer-device hover polish — gated on (hover: hover) and (pointer:
+   fine) rather than viewport width, so it applies to any mouse/trackpad
+   user (including a narrow browser window), never sticks on touch.
+   ========================================================================= */
+
+@media (hover: hover) and (pointer: fine) {
+  .chat-bubble:not(.chat-bubble--editing):not(.chat-bubble--ghost):hover {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--tg-button) 35%, transparent), var(--shadow-card);
+  }
+
+  .chat-bubble--ghost:hover {
+    border-color: var(--tg-button);
+    background: color-mix(in srgb, var(--tg-button) 4%, transparent);
+  }
+
+  .template-card:hover {
+    border-color: color-mix(in srgb, var(--tg-button) 40%, transparent);
+    background: color-mix(in srgb, var(--tg-button) 6%, var(--tg-secondary-bg));
+    transform: translateY(-1px);
+  }
+
+  .block-chip:hover {
+    background: color-mix(in srgb, var(--tg-button) 8%, var(--tg-secondary-bg));
+  }
+
+  .publish-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 12px 24px color-mix(in srgb, var(--tg-button) 42%, transparent);
+  }
+
+  .chat-composer__button:hover {
+    border-color: color-mix(in srgb, var(--tg-button) 40%, transparent);
+    color: var(--text-secondary);
+  }
+
+  .bot-delete-button:hover,
+  .chat-bubble__delete:hover,
+  .bot-card__delete:hover {
+    background: color-mix(in srgb, var(--tg-destructive) 12%, transparent);
+    color: var(--tg-destructive);
+  }
+
+  .back-link:hover,
+  .buttons-editor__add:hover {
+    text-decoration: underline;
+  }
+
+  .buttons-editor__item:has(input:focus, select:focus) {
+    border-color: var(--tg-button);
+  }
+
+  .publish-form__actions button[type="button"]:hover {
+    background: color-mix(in srgb, var(--tg-text) 12%, transparent);
+  }
+
+  .publish-form__actions button[type="submit"]:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
 }
 
 /* ===== Persistent block library (desktop sidebar; hidden on mobile —

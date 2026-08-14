@@ -90,3 +90,26 @@ textarea {
 button {
   touch-action: manipulation;
 }
+
+/* Consistent keyboard-focus ring everywhere — replaces the browser default
+   outline (which clashes with our rounded corners) but only shows for
+   keyboard/programmatic focus, never on a mouse/touch tap. */
+a,
+button,
+input,
+select,
+textarea,
+[tabindex] {
+  outline: none;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--tg-button);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}

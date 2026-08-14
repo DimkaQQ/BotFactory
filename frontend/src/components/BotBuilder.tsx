@@ -8,6 +8,7 @@ import { PublishButton } from "./PublishButton";
 const AUTOSAVE_DEBOUNCE_MS = 500;
 
 type LoadState = "loading" | "ready" | "error";
+type SaveStatus = "idle" | "saving" | "saved";
 
 interface Props {
   botId: string;
@@ -22,9 +23,25 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [bot, setBot] = useState<BotWithBlocks | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [editingName, setEditingName] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const nameTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // Tracks which fields (block ids, "name", "reorder") currently have an
+  // autosave in flight, so the "Сохраняем… / Сохранено" indicator in the
+  // header reflects reality even with several fields mid-edit at once —
+  // repeated keystrokes on the same field are a no-op (Set), and the
+  // status only flips back to "saved" once every field has settled.
+  const pendingSaves = useRef<Set<string>>(new Set());
+  const markPending = useCallback((key: string) => {
+    pendingSaves.current.add(key);
+    setSaveStatus("saving");
+  }, []);
+  const markSettled = useCallback((key: string) => {
+    pendingSaves.current.delete(key);
+    if (pendingSaves.current.size === 0) setSaveStatus("saved");
+  }, []);
 
   useEffect(() => {
     setLoadState("loading");
@@ -47,16 +64,19 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         prev ? { ...prev, blocks: prev.blocks.map((b) => (b.id === blockId ? { ...b, content } : b)) } : prev,
       );
 
+      markPending(blockId);
       clearTimeout(saveTimers.current[blockId]);
       saveTimers.current[blockId] = setTimeout(async () => {
         try {
           await builderApi.updateBlock(bot.id, blockId, { content });
         } catch {
           // best-effort autosave; a subsequent edit will retry
+        } finally {
+          markSettled(blockId);
         }
       }, AUTOSAVE_DEBOUNCE_MS);
     },
-    [bot],
+    [bot, markPending, markSettled],
   );
 
   const handleDelete = useCallback(
@@ -90,6 +110,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       const reordered = orderedIds.map((id, index) => ({ ...byId.get(id)!, order_index: index }));
       setBot((prev) => (prev ? { ...prev, blocks: reordered } : prev));
 
+      markPending("reorder");
       builderApi
         .reorderBlocks(
           bot.id,
@@ -97,9 +118,10 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         )
         .catch(() => {
           /* optimistic update already applied; ignore transient failures */
-        });
+        })
+        .finally(() => markSettled("reorder"));
     },
-    [bot],
+    [bot, markPending, markSettled],
   );
 
   const handleNameChange = useCallback(
@@ -107,16 +129,19 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       if (!bot) return;
       setBot((prev) => (prev ? { ...prev, name } : prev));
 
+      markPending("name");
       clearTimeout(nameTimer.current);
       nameTimer.current = setTimeout(async () => {
         try {
           await builderApi.renameBot(bot.id, name);
         } catch {
           // best-effort; a subsequent edit will retry
+        } finally {
+          markSettled("name");
         }
       }, AUTOSAVE_DEBOUNCE_MS);
     },
-    [bot],
+    [bot, markPending, markSettled],
   );
 
   const handlePublish = useCallback(
@@ -189,7 +214,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               />
             ) : (
               <h1 className="app-header__name" onClick={() => setEditingName(true)}>
-                {bot.name || (bot.telegram_bot_username ? `@${bot.telegram_bot_username}` : "Новый бот")}
+                <span className="app-header__name-text">
+                  {bot.name || (bot.telegram_bot_username ? `@${bot.telegram_bot_username}` : "Новый бот")}
+                </span>
                 <span className="app-header__edit-hint" aria-hidden="true">
                   ✎
                 </span>
@@ -198,6 +225,11 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             <p className="app-header__greeting">
               {bot.status === "active" ? "Опубликован — изменения применяются сразу" : "Черновик"}
               {bot.name && bot.telegram_bot_username ? ` · @${bot.telegram_bot_username}` : ""}
+              {!isMiniApp && saveStatus !== "idle" && (
+                <span className={`save-status save-status--${saveStatus}`}>
+                  {saveStatus === "saving" ? " · Сохраняем…" : " · Сохранено"}
+                </span>
+              )}
             </p>
           </div>
           <button type="button" className="bot-delete-button" onClick={handleDeleteBot} disabled={deleting} aria-label="Удалить бота">
