@@ -1,8 +1,18 @@
 # Bot Factory — MVP (Фаза 1)
 
-Telegram Mini App, в котором человек без навыков программирования визуально
-собирает своего Telegram-бота через drag-and-drop конструктор блоков и
-получает готового работающего бота.
+Визуальный drag-and-drop конструктор Telegram-ботов — без кода. Один и тот
+же React-фронтенд работает в двух режимах:
+
+- **Веб** (`https://your-domain.com/`, вход через Telegram Login Widget) —
+  основной, полноценный конструктор: шаблоны сценариев, live-превью чата,
+  редактирование сообщений прямо в пузырях, drag-and-drop порядок.
+- **Telegram Mini App** (открывается кнопкой у мета-бота) — лёгкий
+  дашборд: список ботов, статус, публикация, просмотр содержимого. Сложное
+  редактирование в Telegram WebView неудобно, поэтому там read-only превью
+  и кнопка «Открыть на компьютере →».
+
+Оба режима работают под одним аккаунтом — `telegram_user_id` объединяет
+вход через Mini App (`initData`) и через веб-логин (Login Widget).
 
 **Фаза 1** — без оплаты. Цель: полный механизм от начала до конца —
 мета-бот → конструктор → публикация → готовый клиентский бот.
@@ -12,7 +22,8 @@ Telegram Mini App, в котором человек без навыков про
 - Backend: Python 3.12, FastAPI, SQLAlchemy 2.0 (async), asyncpg
 - БД: PostgreSQL
 - Мета-бот и клиентские боты: aiogram 3
-- Mini App: React + Vite + `@twa-dev/sdk`-совместимый `window.Telegram.WebApp`
+- Frontend: React + Vite, `window.Telegram.WebApp` (Mini App) +
+  Telegram Login Widget (веб)
 - Drag-and-drop: `@dnd-kit/core` + `@dnd-kit/sortable`
 - Деплой: Docker Compose (db + api + bot + frontend/nginx)
 
@@ -21,7 +32,7 @@ Telegram Mini App, в котором человек без навыков про
 ```
 app/            FastAPI backend (модели, роутеры, сервисы)
 meta_bot/       мета-бот (aiogram, long polling)
-frontend/       Mini App (React + Vite)
+frontend/       конструктор (React + Vite) — веб и Mini App одним билдом
 migrations/     alembic
 nginx/          конфиг реверс-прокси для прод-деплоя
 docker-compose.yml

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type BlockType, type BotBlock, type BotWithBlocks, ApiError, builderApi } from "../api/builderApi";
-import { confirmDialog } from "../hooks/useTelegramWebApp";
+import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
 import { ChatCanvas } from "./ChatCanvas";
 import { PublishButton } from "./PublishButton";
 
@@ -11,11 +11,12 @@ type LoadState = "loading" | "ready" | "error";
 
 interface Props {
   botId: string;
+  isMiniApp?: boolean;
   onBack: () => void;
   onDeleted: () => void;
 }
 
-export function BotBuilder({ botId, onBack, onDeleted }: Props) {
+export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [bot, setBot] = useState<BotWithBlocks | null>(null);
@@ -205,6 +206,15 @@ export function BotBuilder({ botId, onBack, onDeleted }: Props) {
         </div>
       </header>
 
+      {isMiniApp && (
+        <div className="miniapp-banner">
+          <p>📱 Просмотр сообщений. Редактировать удобнее на компьютере.</p>
+          <button type="button" onClick={() => openExternal(`${window.location.origin}/`)}>
+            Открыть на компьютере →
+          </button>
+        </div>
+      )}
+
       {bot.status === "active" ? (
         <div className="published-banner">
           <div className="published-banner__badge" aria-hidden="true">
@@ -218,7 +228,9 @@ export function BotBuilder({ botId, onBack, onDeleted }: Props) {
           </div>
         </div>
       ) : (
-        <p className="app-hint">Так и будет выглядеть переписка. Нажми на сообщение, чтобы изменить, зажми — чтобы переставить.</p>
+        !isMiniApp && (
+          <p className="app-hint">Так и будет выглядеть переписка. Нажми на сообщение, чтобы изменить, зажми — чтобы переставить.</p>
+        )
       )}
 
       <ChatCanvas
@@ -227,6 +239,7 @@ export function BotBuilder({ botId, onBack, onDeleted }: Props) {
         onChangeContent={handleChangeContent}
         onDelete={handleDelete}
         onAdd={handleAdd}
+        disabled={isMiniApp}
       />
 
       {bot.status === "draft" && (

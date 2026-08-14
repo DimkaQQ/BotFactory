@@ -36,7 +36,9 @@ class Settings(BaseSettings):
 
     @property
     def webapp_url(self) -> str:
-        return f"{self.public_base_url.rstrip('/')}/builder"
+        # Same app the web version lives at — the Mini App just opens it and
+        # detects at runtime that it's inside Telegram (see App.tsx).
+        return self.public_base_url.rstrip("/") + "/"
 
     def webhook_url(self, bot_id: str) -> str:
         return f"{self.public_base_url.rstrip('/')}/webhook/{bot_id}"

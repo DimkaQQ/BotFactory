@@ -84,9 +84,15 @@ export function ChatCanvas({ blocks, onReorder, onChangeContent, onDelete, onAdd
             <span className="chat-avatar">🤖</span>
           </div>
           <div className="chat-row__content">
-            <button type="button" className="chat-bubble chat-bubble--ghost" onClick={() => !disabled && setSheetOpen(true)}>
-              <p className="chat-bubble__text chat-bubble__text--placeholder">Нажми, чтобы отправить первое сообщение…</p>
-            </button>
+            {disabled ? (
+              <div className="chat-bubble chat-bubble--ghost">
+                <p className="chat-bubble__text chat-bubble__text--placeholder">Пока нет сообщений</p>
+              </div>
+            ) : (
+              <button type="button" className="chat-bubble chat-bubble--ghost" onClick={() => setSheetOpen(true)}>
+                <p className="chat-bubble__text chat-bubble__text--placeholder">Нажми, чтобы отправить первое сообщение…</p>
+              </button>
+            )}
           </div>
         </div>
       ) : (

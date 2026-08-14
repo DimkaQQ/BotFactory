@@ -42,6 +42,19 @@ export function confirmDialog(message: string): Promise<boolean> {
   return Promise.resolve(window.confirm(message));
 }
 
+/** Open a URL in the system browser — used to hand the user off from the
+ * Mini App "dashboard" to the full web constructor. `Telegram.WebApp.openLink`
+ * leaves the Mini App (unlike a plain <a>, which Telegram would open in its
+ * own in-app browser); falls back to window.open outside Telegram. */
+export function openExternal(url: string) {
+  const webApp = window.Telegram?.WebApp;
+  if (webApp?.openLink) {
+    webApp.openLink(url);
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 declare global {
   interface Window {
     Telegram?: {
@@ -62,6 +75,7 @@ declare global {
         };
         showAlert?: (message: string) => void;
         showConfirm?: (message: string, callback: (confirmed: boolean) => void) => void;
+        openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
         BackButton: {
           isVisible: boolean;
           show: () => void;

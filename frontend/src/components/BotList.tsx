@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { type Bot, ApiError, builderApi } from "../api/builderApi";
-import { confirmDialog } from "../hooks/useTelegramWebApp";
+import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
 import { BOT_TEMPLATES } from "../templates";
 
 interface Props {
   greetingName?: string;
+  isMiniApp?: boolean;
   onOpen: (botId: string) => void;
 }
 
@@ -28,7 +29,7 @@ function blockCountLabel(count: number): string {
   return `${count} сообщений`;
 }
 
-export function BotList({ greetingName, onOpen }: Props) {
+export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
@@ -73,6 +74,17 @@ export function BotList({ greetingName, onOpen }: Props) {
     }
   }
 
+  function handleCreateClick() {
+    if (isMiniApp) {
+      // Building/editing a bot is a full drag-and-drop canvas — awkward
+      // inside Telegram's WebView. Send the user to the real browser
+      // instead of opening the in-app template picker.
+      openExternal(`${window.location.origin}/`);
+      return;
+    }
+    setPickerOpen(true);
+  }
+
   async function handleDelete(bot: Bot, e: React.MouseEvent) {
     e.stopPropagation();
     const confirmed = await confirmDialog(`Удалить бота ${botTitle(bot)}? Это нельзя отменить.`);
@@ -103,6 +115,12 @@ export function BotList({ greetingName, onOpen }: Props) {
             {greetingName && <p className="app-header__greeting">Привет, {greetingName}!</p>}
           </div>
         </div>
+        {isMiniApp && (
+          <p className="app-hint" style={{ marginTop: "var(--sp-3)" }}>
+            📱 Здесь можно посмотреть статус и опубликовать бота. Собирать сообщения удобнее на компьютере —
+            открой {window.location.host} в браузере.
+          </p>
+        )}
       </header>
 
       {error && <p className="publish-form__error" style={{ marginBottom: "var(--sp-3)" }}>{error}</p>}
@@ -113,7 +131,11 @@ export function BotList({ greetingName, onOpen }: Props) {
         <div className="bot-list__empty">
           <div className="block-list__empty-icon">🏭</div>
           <p className="block-list__empty-title">Ещё нет ни одного бота</p>
-          <p className="block-list__empty-hint">Начни с готового сценария — это займёт пару минут</p>
+          <p className="block-list__empty-hint">
+            {isMiniApp
+              ? "Собери первого на компьютере — там удобный конструктор"
+              : "Начни с готового сценария — это займёт пару минут"}
+          </p>
         </div>
       ) : (
         <div className="bot-list">
@@ -156,8 +178,8 @@ export function BotList({ greetingName, onOpen }: Props) {
       )}
 
       <div className="app-footer">
-        <button type="button" className="publish-button" onClick={() => setPickerOpen(true)}>
-          + Новый бот
+        <button type="button" className="publish-button" onClick={handleCreateClick}>
+          {isMiniApp ? "Открыть на компьютере →" : "+ Новый бот"}
         </button>
       </div>
 

@@ -19,6 +19,11 @@ type Screen = { name: "list" } | { name: "builder"; botId: string };
 
 export default function App() {
   const { ready, initData } = useTelegramWebApp();
+  // Real Telegram initData only ever exists inside the Mini App — that's
+  // the one reliable signal to tell "opened from the bot" apart from "opened
+  // as a regular website" (including a plain browser tab with a restored
+  // web session, which has no initData either).
+  const isMiniApp = !!initData;
 
   const [bootState, setBootState] = useState<BootState>("loading");
   const [bootError, setBootError] = useState<string | null>(null);
@@ -100,11 +105,18 @@ export default function App() {
     return (
       <BotBuilder
         botId={screen.botId}
+        isMiniApp={isMiniApp}
         onBack={() => setScreen({ name: "list" })}
         onDeleted={() => setScreen({ name: "list" })}
       />
     );
   }
 
-  return <BotList greetingName={clientName} onOpen={(botId) => setScreen({ name: "builder", botId })} />;
+  return (
+    <BotList
+      greetingName={clientName}
+      isMiniApp={isMiniApp}
+      onOpen={(botId) => setScreen({ name: "builder", botId })}
+    />
+  );
 }

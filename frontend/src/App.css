@@ -147,6 +147,40 @@
   margin: 0 0 var(--sp-3);
 }
 
+/* Mini App "dashboard mode" notice — full editing lives on the web */
+
+.miniapp-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  background: var(--tg-secondary-bg);
+  border-radius: var(--radius-md);
+  padding: var(--sp-3);
+  margin: 0 0 var(--sp-4);
+}
+
+.miniapp-banner p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 160px;
+}
+
+.miniapp-banner button {
+  flex-shrink: 0;
+  border: none;
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
 /* Published success banner — the "peak moment" */
 
 .published-banner {
