@@ -167,7 +167,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   }
 
   return (
-    <div className="screen">
+    <div className="screen screen--builder">
       <header className="app-header">
         <button type="button" className="back-link" onClick={onBack}>
           ← Мои боты

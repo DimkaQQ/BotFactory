@@ -1,17 +1,21 @@
 :root {
   color-scheme: light dark;
 
-  /* Telegram theme tokens (injected at runtime; sensible fallbacks for
-     standalone/browser preview). */
+  /* Telegram theme tokens (injected at runtime inside the Mini App).
+     Outside Telegram — the standalone web constructor — none of the
+     --tg-theme-* variables exist, so these fallbacks become the actual
+     Bot Factory web brand palette. Inside the Mini App, Telegram's
+     injected values win automatically; nothing here needs to know which
+     mode it's running in. */
   --tg-bg: var(--tg-theme-bg-color, #ffffff);
-  --tg-text: var(--tg-theme-text-color, #0f0f10);
-  --tg-hint: var(--tg-theme-hint-color, #8e8e93);
-  --tg-link: var(--tg-theme-link-color, #3b82f6);
-  --tg-button: var(--tg-theme-button-color, #3b82f6);
+  --tg-text: var(--tg-theme-text-color, #16161f);
+  --tg-hint: var(--tg-theme-hint-color, #8b8b9a);
+  --tg-link: var(--tg-theme-link-color, #4f46e5);
+  --tg-button: var(--tg-theme-button-color, #4f46e5);
   --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
-  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f4f4f6);
+  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f5f5fb);
   --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
-  --tg-separator: var(--tg-theme-section-separator-color, rgba(120, 120, 128, 0.16));
+  --tg-separator: var(--tg-theme-section-separator-color, rgba(22, 22, 40, 0.09));
   --tg-destructive: var(--tg-theme-destructive-text-color, #ef4444);
 
   /* Text hierarchy via opacity of the base text color. */
@@ -27,22 +31,31 @@
   --sp-5: 24px;
   --sp-6: 32px;
   --sp-7: 48px;
+  --sp-8: 64px;
 
   --radius-md: 14px;
   --radius-lg: 20px;
+  --radius-xl: 28px;
   --radius-full: 999px;
 
   /* Soft, background-tinted shadow — never pure black. */
   --shadow-card: 0 1px 2px color-mix(in srgb, var(--tg-text) 6%, transparent),
     0 8px 24px color-mix(in srgb, var(--tg-text) 6%, transparent);
+  --shadow-elevated: 0 2px 4px color-mix(in srgb, var(--tg-text) 5%, transparent),
+    0 24px 48px -12px color-mix(in srgb, var(--tg-text) 16%, transparent);
 
   /* Category accents — fixed hues, independent of Telegram's dynamic
      theme, used only as small decorative badges. */
-  --accent-welcome: #3b82f6;
+  --accent-welcome: #4f46e5;
   --accent-description: #8b5cf6;
   --accent-buttons: #f59e0b;
   --accent-delivery: #10b981;
   --accent-success: #10b981;
+
+  /* Desktop shell (web constructor only — the Mini App never reaches
+     these widths). */
+  --shell-max: 1180px;
+  --sidebar-w: 272px;
 }
 
 * {

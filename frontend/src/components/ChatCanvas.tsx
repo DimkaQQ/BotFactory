@@ -13,11 +13,11 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import type { BlockType, BotBlock } from "../api/builderApi";
 import { ChatBubble } from "./ChatBubble";
 
-const BLOCK_TYPES: { type: BlockType; label: string; icon: string; accent: string }[] = [
-  { type: "welcome", label: "Приветствие", icon: "👋", accent: "welcome" },
-  { type: "description", label: "Описание", icon: "📝", accent: "description" },
-  { type: "buttons", label: "Кнопки", icon: "🔘", accent: "buttons" },
-  { type: "delivery", label: "Выдача", icon: "🎁", accent: "delivery" },
+const BLOCK_TYPES: { type: BlockType; label: string; icon: string; accent: string; hint: string }[] = [
+  { type: "welcome", label: "Приветствие", icon: "👋", accent: "welcome", hint: "Первое сообщение при /start" },
+  { type: "description", label: "Описание", icon: "📝", accent: "description", hint: "Расскажи о продукте" },
+  { type: "buttons", label: "Кнопки", icon: "🔘", accent: "buttons", hint: "Ссылки и переходы" },
+  { type: "delivery", label: "Выдача", icon: "🎁", accent: "delivery", hint: "Файл, ссылка или доступ" },
 ];
 
 interface Props {
@@ -77,7 +77,24 @@ export function ChatCanvas({ blocks, onReorder, onChangeContent, onDelete, onAdd
   }
 
   return (
-    <div className="chat-canvas" ref={canvasRef}>
+    <>
+      {!disabled && (
+        <aside className="block-library" aria-label="Библиотека блоков">
+          <p className="block-library__title">Добавить блок</p>
+          {BLOCK_TYPES.map(({ type, label, icon, accent, hint }) => (
+            <button key={type} type="button" className="block-library__item" onClick={() => handleAdd(type)}>
+              <span className={`block-library__icon block-card__icon--${accent}`} aria-hidden="true">
+                {icon}
+              </span>
+              <span className="block-library__text">
+                <span className="block-library__label">{label}</span>
+                <span className="block-library__hint">{hint}</span>
+              </span>
+            </button>
+          ))}
+        </aside>
+      )}
+      <div className="chat-canvas" ref={canvasRef}>
       {blocks.length === 0 ? (
         <div className="chat-row">
           <div className="chat-row__avatar">
@@ -142,6 +159,7 @@ export function ChatCanvas({ blocks, onReorder, onChangeContent, onDelete, onAdd
           </div>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

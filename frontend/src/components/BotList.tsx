@@ -104,7 +104,7 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
   }
 
   return (
-    <div className="screen">
+    <div className="screen screen--list">
       <header className="app-header">
         <div className="app-header__top">
           <div className="app-header__icon" aria-hidden="true">
@@ -114,6 +114,11 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
             <h1>Мои боты</h1>
             {greetingName && <p className="app-header__greeting">Привет, {greetingName}!</p>}
           </div>
+          {!isMiniApp && (
+            <button type="button" className="header-create-button" onClick={handleCreateClick}>
+              + Новый бот
+            </button>
+          )}
         </div>
         {isMiniApp && (
           <p className="app-hint" style={{ marginTop: "var(--sp-3)" }}>

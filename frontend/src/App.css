@@ -919,3 +919,388 @@
   background: color-mix(in srgb, var(--tg-text) 8%, transparent);
   color: var(--text-primary);
 }
+
+/* ===== Persistent block library (desktop sidebar; hidden on mobile —
+   the bottom sheet covers block-picking there instead) ===== */
+
+.block-library {
+  display: none;
+}
+
+.header-create-button {
+  display: none;
+}
+
+/* =========================================================================
+   Desktop web shell (≥960px) — the Mini App never renders at this width,
+   so everything below is exclusive to the standalone web constructor.
+   ========================================================================= */
+
+@media (min-width: 960px) {
+  body {
+    background: var(--tg-secondary-bg);
+  }
+
+  .screen {
+    padding: var(--sp-6) var(--sp-6) var(--sp-7);
+  }
+
+  /* ----- Shared header polish ----- */
+
+  .app-header {
+    max-width: var(--shell-max);
+    margin: 0 auto var(--sp-5);
+  }
+
+  .app-header__top {
+    gap: var(--sp-4);
+  }
+
+  .app-header h1,
+  .app-header__name {
+    font-size: 26px;
+  }
+
+  .header-create-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    border: none;
+    background: var(--tg-button);
+    color: var(--tg-button-text);
+    font-size: 14.5px;
+    font-weight: 600;
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--tg-button) 35%, transparent);
+    transition: transform 0.1s ease;
+  }
+
+  .header-create-button:hover {
+    transform: translateY(-1px);
+  }
+
+  /* ----- Bot list → real dashboard grid ----- */
+
+  .screen--list .bot-list {
+    max-width: var(--shell-max);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--sp-4);
+  }
+
+  .screen--list .bot-list__empty {
+    max-width: var(--shell-max);
+    margin: 0 auto;
+    padding: var(--sp-8) var(--sp-2);
+  }
+
+  .screen--list .bot-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: var(--sp-4);
+    border-radius: var(--radius-lg);
+  }
+
+  .screen--list .bot-card:hover {
+    box-shadow: var(--shadow-elevated);
+    transform: translateY(-2px);
+  }
+
+  .screen--list .bot-card__icon {
+    width: 48px;
+    height: 48px;
+    font-size: 22px;
+    margin-bottom: var(--sp-2);
+  }
+
+  .screen--list .bot-card__delete {
+    position: absolute;
+    top: var(--sp-3);
+    right: var(--sp-3);
+  }
+
+  .screen--list .bot-card {
+    position: relative;
+  }
+
+  .screen--list .app-footer {
+    display: none;
+  }
+
+  .screen--list > .publish-form__error {
+    max-width: var(--shell-max);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ----- Bot builder → two-pane shell with a persistent block library ----- */
+
+  .screen--builder {
+    max-width: var(--shell-max);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    column-gap: var(--sp-6);
+    row-gap: var(--sp-4);
+    align-items: start;
+  }
+
+  /* The sidebar spans a generous fixed number of rows (rather than "to
+     the last line", which only resolves against the *explicit* grid and
+     is unreliable once sibling rows are auto-generated) so it always
+     covers however many rows the main column ends up needing, and
+     sticks alongside it as the page scrolls. */
+  .screen--builder > .block-library {
+    grid-column: 1;
+    grid-row: 1 / span 8;
+    position: sticky;
+    top: var(--sp-6);
+  }
+
+  .screen--builder > .app-header,
+  .screen--builder > .miniapp-banner,
+  .screen--builder > .published-banner,
+  .screen--builder > .app-hint,
+  .screen--builder > .chat-canvas,
+  .screen--builder > .app-footer {
+    grid-column: 2;
+  }
+
+  .screen--builder > .app-header {
+    margin: 0;
+  }
+
+  .block-library {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    background: var(--tg-bg);
+    border-radius: var(--radius-lg);
+    padding: var(--sp-4);
+    box-shadow: var(--shadow-card);
+  }
+
+  .block-library__title {
+    margin: 0 0 var(--sp-1);
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+  }
+
+  .block-library__item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    padding: var(--sp-2);
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+
+  .block-library__item:hover {
+    background: var(--tg-secondary-bg);
+  }
+
+  .block-library__icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+  }
+
+  .block-library__text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .block-library__label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .block-library__hint {
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+
+  /* The chat canvas becomes a centered "phone" mockup with room to
+     breathe, plus a proper card frame instead of edge-to-edge mobile. */
+
+  .screen--builder .chat-canvas {
+    max-width: 560px;
+    padding: var(--sp-5) var(--sp-4) var(--sp-4);
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .screen--builder .chat-composer {
+    display: none;
+  }
+
+  .screen--builder .app-footer {
+    position: static;
+    background: none;
+    padding: 0;
+    max-width: 560px;
+  }
+
+  .screen--builder .miniapp-banner,
+  .screen--builder .published-banner,
+  .screen--builder .app-hint {
+    max-width: 560px;
+  }
+
+  /* Sheets (template picker, block picker) become centered modals instead
+     of full-bleed bottom sheets — there's no thumb-reach constraint on a
+     desktop pointer. */
+  .sheet {
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(520px, calc(100vw - var(--sp-6) * 2));
+    max-height: min(600px, calc(100vh - var(--sp-6) * 2));
+    overflow-y: auto;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .sheet__handle {
+    display: none;
+  }
+
+  @keyframes sheet-in {
+    from {
+      transform: translate(-50%, -46%);
+      opacity: 0.6;
+    }
+    to {
+      transform: translate(-50%, -50%);
+      opacity: 1;
+    }
+  }
+}
+
+/* =========================================================================
+   Standalone web login — hero landing on wide screens (Mini App never
+   reaches this screen at all, so no width-gating needed for behaviour,
+   only for layout).
+   ========================================================================= */
+
+.screen--login {
+  padding: var(--sp-4);
+}
+
+.login-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  max-width: 420px;
+  margin: 0 auto;
+  padding-top: var(--sp-6);
+}
+
+.login-hero__pitch {
+  text-align: center;
+}
+
+.login-hero__lead {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.login-hero__features {
+  list-style: none;
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  text-align: left;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.login-card {
+  background: var(--tg-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.login-card__title {
+  margin: 0 0 var(--sp-3);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+@media (min-width: 960px) {
+  .screen--login {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(
+        circle at 15% 20%,
+        color-mix(in srgb, var(--tg-button) 10%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(circle at 85% 80%, color-mix(in srgb, var(--accent-description) 8%, transparent), transparent 55%),
+      var(--tg-secondary-bg);
+  }
+
+  .login-hero {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--sp-7);
+    max-width: 980px;
+    padding-top: 0;
+  }
+
+  .login-hero__pitch {
+    flex: 1;
+    text-align: left;
+  }
+
+  .login-hero__pitch .state-icon {
+    font-size: 48px;
+  }
+
+  .login-title {
+    font-size: 40px;
+  }
+
+  .login-hero__lead {
+    font-size: 17px;
+    max-width: 440px;
+  }
+
+  .login-hero__features {
+    font-size: 15px;
+  }
+
+  .login-card {
+    flex: 0 0 340px;
+    padding: var(--sp-6);
+    box-shadow: var(--shadow-elevated);
+  }
+}

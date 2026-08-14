@@ -61,20 +61,32 @@ export function LoginScreen({ onLoggedIn }: Props) {
   }, [botUsername, onLoggedIn]);
 
   return (
-    <div className="screen screen--center">
-      <div className="state-icon">🏭</div>
-      <h1 className="login-title">Bot Factory</h1>
-      <p>Собирай Telegram-ботов визуально — без кода</p>
+    <div className="screen screen--login">
+      <div className="login-hero">
+        <div className="login-hero__pitch">
+          <div className="state-icon">🏭</div>
+          <h1 className="login-title">Bot Factory</h1>
+          <p className="login-hero__lead">Собирай Telegram-ботов визуально — без кода. Пиши сообщения прямо в
+            превью чата, перетаскивай порядок, публикуй за пару минут.</p>
+          <ul className="login-hero__features">
+            <li>👋 Готовые шаблоны — товар, подписка, запись, рассылка</li>
+            <li>💬 Редактор выглядит как настоящая переписка</li>
+            <li>🤖 Управляй несколькими ботами из одного аккаунта</li>
+          </ul>
+        </div>
 
-      {loading ? (
-        <p className="app-hint">Входим…</p>
-      ) : botUsername ? (
-        <div ref={widgetRef} className="login-widget" />
-      ) : !error ? (
-        <p className="app-hint">Загрузка…</p>
-      ) : null}
-
-      {error && <p className="publish-form__error">{error}</p>}
+        <div className="login-card">
+          <p className="login-card__title">Войти через Telegram</p>
+          {loading ? (
+            <p className="app-hint">Входим…</p>
+          ) : botUsername ? (
+            <div ref={widgetRef} className="login-widget" />
+          ) : !error ? (
+            <p className="app-hint">Загрузка…</p>
+          ) : null}
+          {error && <p className="publish-form__error">{error}</p>}
+        </div>
+      </div>
     </div>
   );
 }
