@@ -25,6 +25,17 @@
   max-width: 280px;
 }
 
+.login-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.login-widget {
+  margin-top: var(--sp-3);
+}
+
 /* Header */
 
 .app-header {
@@ -553,6 +564,88 @@
   font-size: 15px;
   font-weight: 600;
   text-align: center;
+}
+
+/* Template picker */
+
+.template-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.template-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-secondary-bg);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.template-card:active {
+  transform: scale(0.98);
+  background: color-mix(in srgb, var(--tg-button) 8%, var(--tg-secondary-bg));
+}
+
+.template-card:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.template-card__icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  background: color-mix(in srgb, var(--tg-button) 14%, transparent);
+}
+
+.template-card__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.template-card__label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.template-card__pitch {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  line-height: 1.35;
+}
+
+.template-card__spinner {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--tg-button) 30%, transparent);
+  border-top-color: var(--tg-button);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Tappable "choose a block type" chips — used in the empty state and the

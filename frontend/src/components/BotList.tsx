@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { type Bot, ApiError, builderApi } from "../api/builderApi";
 import { confirmDialog } from "../hooks/useTelegramWebApp";
+import { BOT_TEMPLATES } from "../templates";
 
 interface Props {
   greetingName?: string;
@@ -30,8 +31,9 @@ function blockCountLabel(count: number): string {
 export function BotList({ greetingName, onOpen }: Props) {
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -47,15 +49,27 @@ export function BotList({ greetingName, onOpen }: Props) {
     refresh();
   }, [refresh]);
 
-  async function handleCreate() {
-    setCreating(true);
+  async function handlePickTemplate(templateId: string) {
+    const template = BOT_TEMPLATES.find((t) => t.id === templateId);
+    if (!template) return;
+
+    setCreatingTemplateId(templateId);
     try {
       const bot = await builderApi.createBot();
+      if (template.suggestedName) {
+        await builderApi.renameBot(bot.id, template.suggestedName);
+      }
+      // Sequential on purpose — order_index falls back to "append", so
+      // blocks must land in template order, not race each other.
+      for (const block of template.blocks) {
+        await builderApi.createBlock(bot.id, block.block_type, block.content);
+      }
+      setPickerOpen(false);
       onOpen(bot.id);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось создать бота");
     } finally {
-      setCreating(false);
+      setCreatingTemplateId(null);
     }
   }
 
@@ -99,7 +113,7 @@ export function BotList({ greetingName, onOpen }: Props) {
         <div className="bot-list__empty">
           <div className="block-list__empty-icon">🏭</div>
           <p className="block-list__empty-title">Ещё нет ни одного бота</p>
-          <p className="block-list__empty-hint">Создай первого — это займёт пару минут</p>
+          <p className="block-list__empty-hint">Начни с готового сценария — это займёт пару минут</p>
         </div>
       ) : (
         <div className="bot-list">
@@ -142,10 +156,40 @@ export function BotList({ greetingName, onOpen }: Props) {
       )}
 
       <div className="app-footer">
-        <button type="button" className="publish-button" onClick={handleCreate} disabled={creating}>
-          {creating ? "Создаём…" : "+ Новый бот"}
+        <button type="button" className="publish-button" onClick={() => setPickerOpen(true)}>
+          + Новый бот
         </button>
       </div>
+
+      {pickerOpen && (
+        <>
+          <div className="sheet-backdrop" onClick={() => !creatingTemplateId && setPickerOpen(false)} />
+          <div className="sheet">
+            <div className="sheet__handle" />
+            <p className="sheet__title">С чего начнём?</p>
+            <div className="template-list">
+              {BOT_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className="template-card"
+                  onClick={() => handlePickTemplate(template.id)}
+                  disabled={creatingTemplateId !== null}
+                >
+                  <span className="template-card__icon" aria-hidden="true">
+                    {template.icon}
+                  </span>
+                  <span className="template-card__text">
+                    <span className="template-card__label">{template.label}</span>
+                    <span className="template-card__pitch">{template.pitch}</span>
+                  </span>
+                  {creatingTemplateId === template.id && <span className="template-card__spinner" aria-hidden="true" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -45,6 +45,7 @@ export interface ClientInfo {
 }
 
 const API_BASE = "/api";
+const SESSION_STORAGE_KEY = "bf_session_token";
 
 class ApiError extends Error {
   constructor(
@@ -55,19 +56,39 @@ class ApiError extends Error {
   }
 }
 
-let initDataProvider: () => string = () => "";
+type AuthMode = { kind: "telegram-webapp"; getInitData: () => string } | { kind: "session-token"; token: string };
 
-/** Called once from App.tsx after the Telegram WebApp becomes available. */
+let auth: AuthMode = { kind: "telegram-webapp", getInitData: () => "" };
+
+/** Mini App path — called once from App.tsx after window.Telegram.WebApp is ready. */
 export function configureBuilderApi(getInitData: () => string) {
-  initDataProvider = getInitData;
+  auth = { kind: "telegram-webapp", getInitData };
+}
+
+/** Web login path — called after a successful Telegram Login Widget round trip, or on
+ * startup to restore a token already saved in localStorage. */
+export function configureSessionAuth(token: string) {
+  auth = { kind: "session-token", token };
+  localStorage.setItem(SESSION_STORAGE_KEY, token);
+}
+
+export function getStoredSessionToken(): string | null {
+  return localStorage.getItem(SESSION_STORAGE_KEY);
+}
+
+export function clearSessionAuth() {
+  localStorage.removeItem(SESSION_STORAGE_KEY);
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const authHeaders: Record<string, string> =
+    auth.kind === "session-token" ? { Authorization: `Bearer ${auth.token}` } : { "X-Telegram-Init-Data": auth.getInitData() };
+
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "X-Telegram-Init-Data": initDataProvider(),
+      ...authHeaders,
       ...options.headers,
     },
   });
@@ -89,8 +110,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
+export interface TelegramLoginPayload {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+}
+
 export const builderApi = {
   getMe: () => request<ClientInfo>("/me"),
+  getPublicConfig: () => request<{ meta_bot_username: string }>("/config"),
+  loginWithTelegram: (payload: TelegramLoginPayload) =>
+    request<{ token: string }>("/auth/telegram-login", { method: "POST", body: JSON.stringify(payload) }),
 
   listBots: () => request<Bot[]>("/bots"),
   createBot: () => request<Bot>("/bots", { method: "POST" }),

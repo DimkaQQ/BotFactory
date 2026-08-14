@@ -24,6 +24,12 @@ def _fernet() -> Fernet:
     return Fernet(settings.fernet_key.encode())
 
 
+def get_fernet() -> Fernet:
+    """Shared Fernet instance, for other modules that need authenticated
+    encryption under the same master key (e.g. web session tokens)."""
+    return _fernet()
+
+
 def encrypt_token(token: str) -> bytes:
     return _fernet().encrypt(token.encode())
 

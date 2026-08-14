@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import bots, builder, webhook
+from app.routers import auth, bots, builder, webhook
 from app.services import bot_registry
 
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(bots.router)
 app.include_router(builder.router)
 app.include_router(webhook.router)

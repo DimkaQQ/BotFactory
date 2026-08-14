@@ -13,6 +13,9 @@ class Settings(BaseSettings):
 
     # Meta-bot (the bot that opens the constructor Mini App)
     meta_bot_token: str = ""
+    # Its @username (no @), needed client-side to render the Telegram Login
+    # Widget for the standalone web version of the constructor.
+    meta_bot_username: str = ""
 
     # Optional: base URL of a reverse proxy in front of the Telegram Bot API
     # (e.g. a Cloudflare Worker), for deployments where api.telegram.org is
