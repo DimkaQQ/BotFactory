@@ -12,6 +12,7 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 
 import type { BlockType, BotBlock } from "../api/builderApi";
 import { BLOCK_TYPES } from "../blockTypes";
+import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
 import { BlockPreviewFlyout } from "./BlockPreviewFlyout";
 import { ChatBubble } from "./ChatBubble";
 import { LivePreview } from "./LivePreview";
@@ -35,6 +36,7 @@ export function ChatCanvas({ blocks, botName, onReorder, onChangeContent, onDele
   const [previewOpen, setPreviewOpen] = useState(false);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const { sheetRef, handleProps } = useSwipeToDismiss(() => setSheetOpen(false));
 
   // Play a shrink-and-fade before the bubble actually leaves the list,
   // instead of it just vanishing — the delete button feels like it did
@@ -182,8 +184,8 @@ export function ChatCanvas({ blocks, botName, onReorder, onChangeContent, onDele
       {sheetOpen && (
         <>
           <div className="sheet-backdrop" onClick={() => setSheetOpen(false)} />
-          <div className="sheet">
-            <div className="sheet__handle" />
+          <div className="sheet" ref={sheetRef}>
+            <div className="sheet__handle" {...handleProps} />
             <p className="sheet__title">Что добавить?</p>
             <div className="block-chips">
               {BLOCK_TYPES.map(({ type, label, icon, accent, hint }) => (

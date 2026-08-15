@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 
 import { type Bot, ApiError, builderApi } from "../api/builderApi";
 import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
+import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
 import { BOT_TEMPLATES } from "../templates";
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
@@ -38,6 +39,9 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const { sheetRef, handleProps } = useSwipeToDismiss(() => {
+    if (!creatingTemplateId) setPickerOpen(false);
+  });
 
   const refresh = useCallback(async () => {
     try {
@@ -224,8 +228,8 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
       {pickerOpen && (
         <>
           <div className="sheet-backdrop" onClick={() => !creatingTemplateId && setPickerOpen(false)} />
-          <div className="sheet">
-            <div className="sheet__handle" />
+          <div className="sheet" ref={sheetRef}>
+            <div className="sheet__handle" {...handleProps} />
             <p className="sheet__title">С чего начнём?</p>
             <div className="template-list">
               {BOT_TEMPLATES.map((template) => (

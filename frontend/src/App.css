@@ -876,6 +876,7 @@
   padding: var(--sp-2) var(--sp-4) calc(var(--sp-5) + env(safe-area-inset-bottom));
   box-shadow: 0 -8px 32px color-mix(in srgb, black 20%, transparent);
   animation: sheet-in var(--dur-slow) var(--ease-out);
+  transition: transform var(--dur-base) var(--ease-spring);
   max-height: 82vh;
   overflow-y: auto;
 }
@@ -891,12 +892,30 @@
   }
 }
 
+/* A bigger invisible hit area than the visible pill (::after) — a 4px
+   tall bar is a fine visual cue but a hopeless drag target. */
 .sheet__handle {
+  width: 100%;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0 var(--sp-1);
+  touch-action: none;
+  cursor: grab;
+}
+
+.sheet__handle::after {
+  content: "";
   width: 36px;
   height: 4px;
   border-radius: 999px;
   background: var(--tg-separator);
-  margin: var(--sp-2) auto var(--sp-3);
+  transition: background var(--dur-fast) var(--ease-smooth);
+}
+
+.sheet__handle:active::after {
+  background: var(--tg-button);
 }
 
 .sheet__title {
