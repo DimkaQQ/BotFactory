@@ -6,17 +6,23 @@
      --tg-theme-* variables exist, so these fallbacks become the actual
      Bot Factory web brand palette. Inside the Mini App, Telegram's
      injected values win automatically; nothing here needs to know which
-     mode it's running in. */
-  --tg-bg: var(--tg-theme-bg-color, #ffffff);
-  --tg-text: var(--tg-theme-text-color, #16161f);
-  --tg-hint: var(--tg-theme-hint-color, #8b8b9a);
-  --tg-link: var(--tg-theme-link-color, #4f46e5);
-  --tg-button: var(--tg-theme-button-color, #4f46e5);
+     mode it's running in.
+
+     Deep, desaturated "jewel tone" palette instead of bright startup
+     candy colors — a near-black with a violet undertone, a richer
+     indigo brand color, and off-white surfaces instead of stark
+     #ffffff (a flat pure white is what reads as cheap/unfinished; real
+     premium products almost never use it edge to edge). */
+  --tg-bg: var(--tg-theme-bg-color, #fdfcfe);
+  --tg-text: var(--tg-theme-text-color, #14121f);
+  --tg-hint: var(--tg-theme-hint-color, #83829a);
+  --tg-link: var(--tg-theme-link-color, #4338ca);
+  --tg-button: var(--tg-theme-button-color, #4338ca);
   --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
-  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f5f5fb);
+  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #eeebf7);
   --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
-  --tg-separator: var(--tg-theme-section-separator-color, rgba(22, 22, 40, 0.09));
-  --tg-destructive: var(--tg-theme-destructive-text-color, #ef4444);
+  --tg-separator: var(--tg-theme-section-separator-color, rgba(20, 18, 31, 0.1));
+  --tg-destructive: var(--tg-theme-destructive-text-color, #dc2626);
 
   /* Text hierarchy via opacity of the base text color. */
   --text-primary: var(--tg-text);
@@ -45,16 +51,20 @@
     0 24px 48px -12px color-mix(in srgb, var(--tg-text) 16%, transparent);
 
   /* Category accents — fixed hues, independent of Telegram's dynamic
-     theme, used only as small decorative badges. */
-  --accent-welcome: #4f46e5;
-  --accent-description: #8b5cf6;
-  --accent-image: #ec4899;
-  --accent-video: #f43f5e;
-  --accent-buttons: #f59e0b;
-  --accent-poll: #06b6d4;
-  --accent-delivery: #10b981;
-  --accent-delay: #64748b;
-  --accent-success: #10b981;
+     theme, used as small decorative badges throughout the app and the
+     landing page's feature grid. Deep jewel tones (indigo, violet,
+     magenta, wine, bronze, teal, emerald, slate) instead of a bright
+     8-color "startup rainbow" — restraint and depth read as expensive,
+     a wall of saturated hues reads as a toy. */
+  --accent-welcome: #4338ca;
+  --accent-description: #6d28d9;
+  --accent-image: #a21caf;
+  --accent-video: #9f1239;
+  --accent-buttons: #b45309;
+  --accent-poll: #0e7490;
+  --accent-delivery: #047857;
+  --accent-delay: #475569;
+  --accent-success: #059669;
 
   /* Desktop shell (web constructor only — the Mini App never reaches
      these widths). */
