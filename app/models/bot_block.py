@@ -13,8 +13,12 @@ from app.database import Base
 class BlockType(str, enum.Enum):
     welcome = "welcome"
     description = "description"
+    image = "image"
+    video = "video"
     buttons = "buttons"
+    poll = "poll"
     delivery = "delivery"
+    delay = "delay"
 
 
 class BotBlock(Base):

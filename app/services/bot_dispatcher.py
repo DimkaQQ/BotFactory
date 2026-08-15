@@ -1,8 +1,9 @@
 """Executes a client bot's blocks as a simple linear dialogue.
 
 Phase 1 scope: on `/start` from an end user, read `bot_blocks` for this bot
-ordered by `order_index` and send them one after another
-(welcome -> description -> buttons -> delivery). No branching logic.
+ordered by `order_index` and send them one after another — text, photo,
+video, buttons, poll, a file/link "delivery", or a bare pause. No
+branching logic.
 """
 
 from __future__ import annotations
@@ -55,6 +56,15 @@ def _build_keyboard(content: dict) -> InlineKeyboardMarkup | None:
 
 async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
     content = block.content or {}
+
+    if block.block_type == BlockType.poll:
+        question = (content.get("question") or "").strip()
+        options = [opt.strip() for opt in content.get("options") or [] if opt and opt.strip()]
+        if not question or len(options) < 2:
+            return
+        await bot.send_poll(chat_id, question=question, options=options, is_anonymous=content.get("anonymous", True))
+        return
+
     text = content.get("text") or ""
     media_file_id = content.get("media_file_id")
     media_type = content.get("media_type")
@@ -99,6 +109,16 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
 
     for index, block in enumerate(blocks):
         try:
+            if block.block_type == BlockType.delay:
+                # A bare pause — no message of its own, just stretches the
+                # gap before the next block. Clamped defensively: the
+                # webhook request stays open for this long, and both
+                # Telegram and a reverse proxy in front of us have their
+                # own patience limits.
+                seconds = (block.content or {}).get("seconds", 2)
+                await asyncio.sleep(max(0.0, min(float(seconds), 15.0)))
+                continue
+
             if index > 0:
                 text = (block.content or {}).get("text") or ""
                 await bot.send_chat_action(chat_id, "typing")

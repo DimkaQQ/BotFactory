@@ -11,17 +11,14 @@ import {
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
 import type { BlockType, BotBlock } from "../api/builderApi";
+import { BLOCK_TYPES } from "../blockTypes";
+import { BlockPreviewFlyout } from "./BlockPreviewFlyout";
 import { ChatBubble } from "./ChatBubble";
-
-const BLOCK_TYPES: { type: BlockType; label: string; icon: string; accent: string; hint: string }[] = [
-  { type: "welcome", label: "Приветствие", icon: "👋", accent: "welcome", hint: "Первое сообщение при /start" },
-  { type: "description", label: "Описание", icon: "📝", accent: "description", hint: "Расскажи о продукте" },
-  { type: "buttons", label: "Кнопки", icon: "🔘", accent: "buttons", hint: "Ссылки и переходы" },
-  { type: "delivery", label: "Выдача", icon: "🎁", accent: "delivery", hint: "Файл, ссылка или доступ" },
-];
+import { LivePreview } from "./LivePreview";
 
 interface Props {
   blocks: BotBlock[];
+  botName?: string;
   onReorder: (orderedIds: string[]) => void;
   onChangeContent: (blockId: string, content: BotBlock["content"]) => void;
   onDelete: (blockId: string) => void;
@@ -29,9 +26,11 @@ interface Props {
   disabled?: boolean;
 }
 
-export function ChatCanvas({ blocks, onReorder, onChangeContent, onDelete, onAdd, disabled }: Props) {
+export function ChatCanvas({ blocks, botName, onReorder, onChangeContent, onDelete, onAdd, disabled }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [hoveredType, setHoveredType] = useState<BlockType | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
 
   // Tapping outside the currently-active bubble (another message, the
@@ -72,6 +71,7 @@ export function ChatCanvas({ blocks, onReorder, onChangeContent, onDelete, onAdd
 
   async function handleAdd(type: BlockType) {
     setSheetOpen(false);
+    setHoveredType(null);
     const newId = await onAdd(type);
     setActiveId(newId);
   }
@@ -82,7 +82,16 @@ export function ChatCanvas({ blocks, onReorder, onChangeContent, onDelete, onAdd
         <aside className="block-library" aria-label="Библиотека блоков">
           <p className="block-library__title">Добавить блок</p>
           {BLOCK_TYPES.map(({ type, label, icon, accent, hint }) => (
-            <button key={type} type="button" className="block-library__item" onClick={() => handleAdd(type)}>
+            <button
+              key={type}
+              type="button"
+              className="block-library__item"
+              onClick={() => handleAdd(type)}
+              onMouseEnter={() => setHoveredType(type)}
+              onMouseLeave={() => setHoveredType((cur) => (cur === type ? null : cur))}
+              onFocus={() => setHoveredType(type)}
+              onBlur={() => setHoveredType((cur) => (cur === type ? null : cur))}
+            >
               <span className={`block-library__icon block-card__icon--${accent}`} aria-hidden="true">
                 {icon}
               </span>
@@ -92,9 +101,19 @@ export function ChatCanvas({ blocks, onReorder, onChangeContent, onDelete, onAdd
               </span>
             </button>
           ))}
+          {hoveredType && (
+            <div className="block-preview-flyout">
+              <BlockPreviewFlyout type={hoveredType} />
+            </div>
+          )}
         </aside>
       )}
       <div className="chat-canvas" ref={canvasRef}>
+      {blocks.length > 0 && (
+        <button type="button" className="chat-canvas__preview-btn" onClick={() => setPreviewOpen(true)}>
+          ▶ Смотреть, как в реальности
+        </button>
+      )}
       {blocks.length === 0 ? (
         <div className="chat-row">
           <div className="chat-row__avatar">
@@ -119,6 +138,7 @@ export function ChatCanvas({ blocks, onReorder, onChangeContent, onDelete, onAdd
               <ChatBubble
                 key={block.id}
                 block={block}
+                staggerIndex={index}
                 isLast={index === blocks.length - 1}
                 active={activeId === block.id}
                 onActivate={() => setActiveId(block.id)}
@@ -147,12 +167,15 @@ export function ChatCanvas({ blocks, onReorder, onChangeContent, onDelete, onAdd
             <div className="sheet__handle" />
             <p className="sheet__title">Что добавить?</p>
             <div className="block-chips">
-              {BLOCK_TYPES.map(({ type, label, icon, accent }) => (
+              {BLOCK_TYPES.map(({ type, label, icon, accent, hint }) => (
                 <button key={type} type="button" className="block-chip" onClick={() => handleAdd(type)}>
                   <span className={`block-chip__icon block-card__icon--${accent}`} aria-hidden="true">
                     {icon}
                   </span>
-                  {label}
+                  <span className="block-chip__text">
+                    <span className="block-chip__label">{label}</span>
+                    <span className="block-chip__hint">{hint}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -160,6 +183,8 @@ export function ChatCanvas({ blocks, onReorder, onChangeContent, onDelete, onAdd
         </>
       )}
       </div>
+
+      {previewOpen && <LivePreview blocks={blocks} botName={botName ?? ""} onClose={() => setPreviewOpen(false)} />}
     </>
   );
 }

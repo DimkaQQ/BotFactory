@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type BlockType, type BotBlock, type BotWithBlocks, ApiError, builderApi } from "../api/builderApi";
 import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
+import { BLOCK_TYPE_BY_ID } from "../blockTypes";
 import { ChatCanvas } from "./ChatCanvas";
 import { PublishButton } from "./PublishButton";
 
@@ -95,7 +96,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const handleAdd = useCallback(
     async (blockType: BlockType): Promise<string> => {
       if (!bot) throw new Error("Bot not loaded");
-      const defaultContent = blockType === "buttons" ? { buttons: [] } : { text: "" };
+      const defaultContent = BLOCK_TYPE_BY_ID[blockType].defaultContent();
       const created = await builderApi.createBlock(bot.id, blockType, defaultContent);
       setBot((prev) => (prev ? { ...prev, blocks: [...prev.blocks, created] } : prev));
       return created.id;
@@ -267,6 +268,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
 
       <ChatCanvas
         blocks={bot.blocks}
+        botName={bot.name || bot.telegram_bot_username || undefined}
         onReorder={handleReorder}
         onChangeContent={handleChangeContent}
         onDelete={handleDelete}

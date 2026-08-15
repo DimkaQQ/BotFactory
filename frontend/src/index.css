@@ -48,8 +48,12 @@
      theme, used only as small decorative badges. */
   --accent-welcome: #4f46e5;
   --accent-description: #8b5cf6;
+  --accent-image: #ec4899;
+  --accent-video: #f43f5e;
   --accent-buttons: #f59e0b;
+  --accent-poll: #06b6d4;
   --accent-delivery: #10b981;
+  --accent-delay: #64748b;
   --accent-success: #10b981;
 
   /* Desktop shell (web constructor only — the Mini App never reaches

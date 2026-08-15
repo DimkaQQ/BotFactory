@@ -1,4 +1,4 @@
-export type BlockType = "welcome" | "description" | "buttons" | "delivery";
+export type BlockType = "welcome" | "description" | "image" | "video" | "buttons" | "poll" | "delivery" | "delay";
 
 export interface ButtonAction {
   label: string;
@@ -11,6 +11,10 @@ export interface BlockContent {
   media_file_id?: string | null;
   media_type?: string | null;
   buttons?: ButtonAction[];
+  question?: string;
+  options?: string[];
+  anonymous?: boolean;
+  seconds?: number;
 }
 
 export interface BotBlock {

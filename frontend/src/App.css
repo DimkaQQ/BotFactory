@@ -376,6 +376,23 @@
   gap: var(--sp-2);
   align-items: flex-end;
   margin-bottom: var(--sp-2);
+  animation: bubble-in 0.32s ease backwards;
+  animation-delay: calc(var(--stagger, 0) * 45ms);
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-row {
+    animation: none;
+  }
 }
 
 .chat-row__avatar {
@@ -526,6 +543,135 @@
   cursor: pointer;
 }
 
+/* Image/video bubble — a thumbnail above the caption, in both the read
+   preview and (empty) placeholder states. */
+
+.chat-bubble__media-thumb {
+  width: 100%;
+  height: 120px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tg-text) 6%, var(--tg-bg));
+  font-size: 26px;
+  color: var(--text-tertiary);
+}
+
+.chat-bubble__media-thumb--video {
+  background: color-mix(in srgb, black 78%, var(--accent-video));
+  color: #fff;
+  font-size: 22px;
+}
+
+.chat-bubble__media-thumb--empty {
+  border: 1.5px dashed var(--tg-separator);
+  background: transparent;
+}
+
+/* Poll bubble read preview */
+
+.poll-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.poll-preview__option {
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+  font-size: 13px;
+}
+
+/* Pause "block" — a slim system pill instead of a chat bubble, since it
+   has no message content of its own. */
+
+.chat-row--delay {
+  /* Overrides .chat-row's 2-column avatar grid — a pause has no avatar
+     column, just one centered pill spanning the row. */
+  display: block;
+  margin-bottom: var(--sp-1);
+}
+
+.chat-delay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 6px 32px 6px 12px;
+  position: relative;
+  border-radius: var(--radius-full);
+  border: 1.5px dashed var(--tg-separator);
+  background: color-mix(in srgb, var(--accent-delay) 8%, transparent);
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.chat-delay--editing {
+  cursor: default;
+  border-style: solid;
+  border-color: var(--tg-button);
+  background: var(--tg-secondary-bg);
+}
+
+.chat-delay .chat-bubble__delete {
+  top: 2px;
+  right: 2px;
+}
+
+.chat-delay__icon {
+  font-size: 13px;
+}
+
+.chat-delay__control {
+  display: flex;
+  gap: 4px;
+}
+
+.chat-delay__preset {
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chat-delay__preset--active {
+  background: var(--tg-button);
+  border-color: var(--tg-button);
+  color: var(--tg-button-text);
+}
+
+/* "Watch it play out" trigger, above the canvas */
+
+.chat-canvas__preview-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: var(--sp-3);
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: color-mix(in srgb, var(--tg-button) 12%, transparent);
+  color: var(--tg-button);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
 /* Composer-style "add message" bar */
 
 .chat-composer {
@@ -592,6 +738,8 @@
   padding: var(--sp-2) var(--sp-4) calc(var(--sp-5) + env(safe-area-inset-bottom));
   box-shadow: 0 -8px 32px color-mix(in srgb, black 20%, transparent);
   animation: sheet-in 0.18s ease;
+  max-height: 82vh;
+  overflow-y: auto;
 }
 
 @keyframes sheet-in {
@@ -703,43 +851,59 @@
 }
 
 /* Tappable "choose a block type" chips — used in the empty state and the
-   bottom sheet. */
+   bottom sheet. One column with a hint line each, since the library now
+   spans 8 types — a 2-up icon grid stopped being scannable. */
 .block-chips {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-2);
 }
 
 .block-chip {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-3);
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
   border-radius: var(--radius-md);
   border: 1px solid var(--tg-separator);
   background: var(--tg-secondary-bg);
   color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 500;
   text-align: left;
   cursor: pointer;
   transition: transform 0.12s ease, background 0.12s ease;
 }
 
 .block-chip:active {
-  transform: scale(0.97);
+  transform: scale(0.98);
   background: color-mix(in srgb, var(--tg-button) 10%, var(--tg-secondary-bg));
 }
 
 .block-chip__icon {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: 17px;
+}
+
+.block-chip__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.block-chip__label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.block-chip__hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .block-card__icon--welcome {
@@ -748,12 +912,288 @@
 .block-card__icon--description {
   background: color-mix(in srgb, var(--accent-description) 16%, transparent);
 }
+.block-card__icon--image {
+  background: color-mix(in srgb, var(--accent-image) 16%, transparent);
+}
+.block-card__icon--video {
+  background: color-mix(in srgb, var(--accent-video) 16%, transparent);
+}
 .block-card__icon--buttons {
   background: color-mix(in srgb, var(--accent-buttons) 16%, transparent);
+}
+.block-card__icon--poll {
+  background: color-mix(in srgb, var(--accent-poll) 16%, transparent);
 }
 .block-card__icon--delivery {
   background: color-mix(in srgb, var(--accent-delivery) 16%, transparent);
 }
+.block-card__icon--delay {
+  background: color-mix(in srgb, var(--accent-delay) 16%, transparent);
+}
+
+/* Hover flyout — a tiny looping animated mockup of the block you're
+   pointing at, so picking a type isn't a guess from an icon alone. */
+
+.block-preview-flyout {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 0;
+  z-index: 5;
+  width: 240px;
+  animation: flyout-in 0.15s ease;
+  pointer-events: none;
+}
+
+@keyframes flyout-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.block-preview {
+  background: var(--tg-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-3);
+  box-shadow: var(--shadow-elevated);
+  min-height: 84px;
+}
+
+.block-preview--delay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  text-align: center;
+  padding: var(--sp-4) var(--sp-3);
+}
+
+.block-preview__caption {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+
+.block-preview__dots {
+  display: flex;
+  gap: 4px;
+  padding: 10px 12px;
+  width: fit-content;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--tg-secondary-bg);
+  animation: preview-dots-cycle 2.6s ease-in-out infinite;
+}
+
+.block-preview__dots--solo {
+  animation: none;
+  opacity: 1;
+  background: transparent;
+  padding: 0;
+}
+
+.block-preview__dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--text-tertiary);
+  animation: preview-dot-bounce 1s ease-in-out infinite;
+}
+
+.block-preview__dots span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.block-preview__dots span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+@keyframes preview-dot-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@keyframes preview-dots-cycle {
+  0%,
+  18% {
+    opacity: 1;
+  }
+  26%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.block-preview__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  animation: preview-bubble-cycle 2.6s ease-in-out infinite;
+}
+
+@keyframes preview-bubble-cycle {
+  0%,
+  22% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  34%,
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.block-preview__avatar {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--tg-button);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.block-preview__bubble {
+  flex: 1;
+  min-width: 0;
+  background: var(--tg-secondary-bg);
+  border-radius: 12px 12px 12px 4px;
+  padding: 8px 10px;
+}
+
+.block-preview__text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.block-preview__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.block-preview__line {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tg-text) 14%, transparent);
+}
+
+.block-preview__media {
+  height: 44px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: color-mix(in srgb, var(--accent-image) 16%, transparent);
+  animation: preview-pop 2.6s ease-in-out infinite;
+}
+
+.block-preview__media--video {
+  background: color-mix(in srgb, black 78%, var(--accent-video));
+  color: #fff;
+}
+
+@keyframes preview-pop {
+  0%,
+  34% {
+    transform: scale(0.85);
+  }
+  46%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+.block-preview__pill {
+  display: block;
+  margin-top: 6px;
+  text-align: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  color: var(--tg-link);
+  font-size: 11px;
+  font-weight: 600;
+  animation: preview-slide-up 2.6s ease-in-out infinite;
+}
+
+@keyframes preview-slide-up {
+  0%,
+  46% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  58%,
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.block-preview__poll {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.block-preview__bar {
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  overflow: hidden;
+}
+
+.block-preview__bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--fill, 50%);
+  background: color-mix(in srgb, var(--accent-poll) 45%, transparent);
+  animation: preview-bar-fill 2.6s ease-in-out infinite;
+}
+
+@keyframes preview-bar-fill {
+  0%,
+  40% {
+    width: 0%;
+  }
+  70%,
+  100% {
+    width: var(--fill, 50%);
+  }
+}
+
+.block-preview__bar--static {
+  height: auto;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.block-preview__bar--static::after {
+  content: none;
+}
+
 
 /* Buttons editor (inline, inside a bubble) */
 
@@ -829,6 +1269,165 @@
   font-weight: 500;
   cursor: pointer;
   padding: var(--sp-1) 0;
+}
+
+/* Poll editor (inline, inside a bubble) */
+
+.poll-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: default;
+}
+
+.poll-editor__question {
+  display: block;
+  width: 100%;
+  border: none;
+  border-bottom: 1.5px solid var(--tg-separator);
+  background: transparent;
+  padding: 0 0 6px;
+  margin: 0 0 4px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  resize: none;
+  overflow: hidden;
+}
+
+.poll-editor__question:focus {
+  outline: none;
+  border-color: var(--tg-button);
+}
+
+.poll-editor__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.poll-editor__bullet {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--tg-secondary-bg);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.poll-editor__option input {
+  min-width: 0;
+  flex: 1;
+  padding: 7px var(--sp-2);
+  border-radius: 8px;
+  border: 1.5px solid var(--tg-separator);
+  font-size: 16px;
+  background: var(--tg-secondary-bg);
+  color: var(--text-primary);
+}
+
+.poll-editor__option input:focus {
+  outline: none;
+  border-color: var(--tg-button);
+}
+
+.poll-editor__remove {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  border-radius: 8px;
+}
+
+.poll-editor__remove:active {
+  background: color-mix(in srgb, var(--tg-destructive) 12%, transparent);
+  color: var(--tg-destructive);
+}
+
+/* Image/video editor (inline, inside a bubble) */
+
+.media-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: default;
+}
+
+.media-editor__thumb {
+  height: 110px;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--tg-text) 6%, var(--tg-bg));
+}
+
+.media-editor__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-editor__placeholder {
+  font-size: 28px;
+  color: var(--text-tertiary);
+}
+
+.media-editor__placeholder--error {
+  font-size: 12.5px;
+  text-align: center;
+  padding: 0 var(--sp-3);
+  color: var(--tg-destructive);
+}
+
+.media-editor__video-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--sp-3);
+  color: #fff;
+  width: 100%;
+  height: 100%;
+  background: color-mix(in srgb, black 78%, var(--accent-video));
+}
+
+.media-editor__video-url {
+  font-size: 12px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-editor__url {
+  width: 100%;
+  padding: 8px var(--sp-2);
+  border-radius: 8px;
+  border: 1.5px solid var(--tg-separator);
+  font-size: 16px;
+  background: var(--tg-secondary-bg);
+  color: var(--text-primary);
+}
+
+.media-editor__url:focus {
+  outline: none;
+  border-color: var(--tg-button);
+}
+
+.media-editor__caption {
+  border-top: 1.5px solid var(--tg-separator);
+  padding-top: 8px !important;
 }
 
 /* Publish */
@@ -1159,6 +1758,7 @@
   }
 
   .block-library {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--sp-2);
@@ -1289,7 +1889,18 @@
    ========================================================================= */
 
 .screen--login {
+  min-height: 100vh;
   padding: var(--sp-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(
+      circle at 20% 15%,
+      color-mix(in srgb, var(--tg-button) 14%, transparent),
+      transparent 55%
+    ),
+    radial-gradient(circle at 85% 85%, color-mix(in srgb, var(--accent-description) 12%, transparent), transparent 50%),
+    var(--tg-secondary-bg);
 }
 
 .login-hero {
@@ -1298,7 +1909,6 @@
   gap: var(--sp-5);
   max-width: 420px;
   margin: 0 auto;
-  padding-top: var(--sp-6);
 }
 
 .login-hero__pitch {
@@ -1338,19 +1948,6 @@
 }
 
 @media (min-width: 960px) {
-  .screen--login {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(
-        circle at 15% 20%,
-        color-mix(in srgb, var(--tg-button) 10%, transparent),
-        transparent 60%
-      ),
-      radial-gradient(circle at 85% 80%, color-mix(in srgb, var(--accent-description) 8%, transparent), transparent 55%),
-      var(--tg-secondary-bg);
-  }
 
   .login-hero {
     flex-direction: row;
@@ -1386,5 +1983,123 @@
     flex: 0 0 340px;
     padding: var(--sp-6);
     box-shadow: var(--shadow-elevated);
+  }
+}
+
+/* =========================================================================
+   Live preview — "watch it play out": an animated, read-only replay of
+   the whole bot with typing pauses and staggered reveal, matching the
+   real dispatcher's pacing (app/services/bot_dispatcher.py).
+   ========================================================================= */
+
+.live-preview {
+  position: fixed;
+  left: var(--sp-3);
+  right: var(--sp-3);
+  top: 5vh;
+  bottom: 5vh;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  background: var(--tg-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 -8px 32px color-mix(in srgb, black 24%, transparent);
+  animation: sheet-in 0.18s ease;
+  overflow: hidden;
+}
+
+.live-preview__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--tg-separator);
+}
+
+.live-preview__title {
+  font-weight: 700;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-preview__close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: var(--tg-secondary-bg);
+  color: var(--text-tertiary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.live-preview__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: 0;
+}
+
+.live-preview__footer {
+  flex-shrink: 0;
+  padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--tg-separator);
+}
+
+.live-preview__skip {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-secondary-bg);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.live-preview__typing {
+  width: fit-content;
+  padding: 10px 14px;
+  cursor: default;
+}
+
+.live-preview__pause {
+  text-align: center;
+  padding: var(--sp-2);
+}
+
+.live-preview__pause-marker {
+  margin: 2px 0 var(--sp-2);
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.live-preview__poll {
+  margin-top: 6px;
+}
+
+.live-preview__media {
+  height: 120px;
+  margin-bottom: 8px;
+  font-size: 26px;
+  border-radius: 10px;
+}
+
+@media (min-width: 960px) {
+  .live-preview {
+    left: 50%;
+    right: auto;
+    top: 50%;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    width: min(420px, calc(100vw - var(--sp-6) * 2));
+    height: min(680px, calc(100vh - var(--sp-6) * 2));
   }
 }

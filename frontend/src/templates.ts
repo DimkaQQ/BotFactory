@@ -22,6 +22,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         block_type: "description",
         content: { text: "Расскажи, что внутри и кому это подойдёт — 2-3 предложения хватит." },
       },
+      { block_type: "image", content: { media_type: "photo", media_file_id: "", text: "Как это выглядит" } },
       {
         block_type: "buttons",
         content: { buttons: [{ label: "Купить", action_type: "text", action_value: "Хочу купить" }] },
@@ -78,6 +79,10 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     blocks: [
       { block_type: "welcome", content: { text: "Привет! Подпишись, чтобы не пропускать акции и новинки 🎉" } },
       { block_type: "description", content: { text: "Расскажи о заведении или магазине в паре предложений." } },
+      {
+        block_type: "poll",
+        content: { question: "Что вам интереснее всего?", options: ["Скидки", "Новинки", "Акции выходного дня"], anonymous: true },
+      },
       {
         block_type: "buttons",
         content: { buttons: [{ label: "Наш сайт / меню", action_type: "url", action_value: "https://" }] },
