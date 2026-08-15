@@ -1784,7 +1784,13 @@
 
 @media (min-width: 960px) {
   body {
-    background: var(--tg-secondary-bg);
+    /* A faint ambient wash instead of flat --tg-secondary-bg — keeps the
+       rest of the app from feeling like a stark cut from the landing
+       page's depth once you're logged in. */
+    background: radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--tg-button) 5%, transparent), transparent 45%),
+      radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--accent-description) 4%, transparent), transparent 40%),
+      var(--tg-secondary-bg);
+    background-attachment: fixed;
   }
 
   .screen {
@@ -2045,19 +2051,22 @@
 }
 
 /* =========================================================================
-   Standalone web login — hero landing on wide screens (Mini App never
+   Standalone web login — a full marketing landing page (Mini App never
    reaches this screen at all, so no width-gating needed for behaviour,
-   only for layout).
+   only for layout). Deep instead of flat: layered shadows, glass cards,
+   a tilted live mockup, alternating section backgrounds.
    ========================================================================= */
 
 .screen--login {
+  overflow-x: hidden;
+}
+
+/* ---------- Hero ---------- */
+
+.landing-hero {
   position: relative;
-  min-height: 100vh;
-  padding: var(--sp-4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: hidden;
+  padding: var(--sp-6) var(--sp-4) var(--sp-7);
   background: var(--tg-secondary-bg);
 }
 
@@ -2065,8 +2074,8 @@
    kind of ambient motion that makes a landing screen feel alive without
    asking for any attention. GPU-friendly (transform only), and covered
    by the global prefers-reduced-motion override in index.css. */
-.screen--login::before,
-.screen--login::after {
+.landing-hero::before,
+.landing-hero::after {
   content: "";
   position: absolute;
   width: 50vmax;
@@ -2079,14 +2088,14 @@
   will-change: transform;
 }
 
-.screen--login::before {
+.landing-hero::before {
   background: var(--tg-button);
   top: -15%;
   left: -15%;
   animation: blob-drift-a 18s var(--ease-smooth) infinite alternate;
 }
 
-.screen--login::after {
+.landing-hero::after {
   background: var(--accent-description);
   bottom: -18%;
   right: -12%;
@@ -2121,8 +2130,26 @@
   margin: 0 auto;
 }
 
+.landing-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  background: color-mix(in srgb, var(--tg-button) 12%, var(--tg-bg));
+  color: var(--tg-button);
+  border: 1px solid color-mix(in srgb, var(--tg-button) 22%, transparent);
+  border-radius: var(--radius-full);
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: var(--sp-3);
+}
+
 .login-hero__pitch {
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .login-hero__lead {
@@ -2144,10 +2171,12 @@
 }
 
 .login-card {
+  position: relative;
+  z-index: 1;
   background: var(--tg-bg);
   border-radius: var(--radius-lg);
   padding: var(--sp-5);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-elevated);
   text-align: center;
   animation: login-card-in var(--dur-slow) var(--ease-out) 0.1s backwards;
 }
@@ -2169,19 +2198,380 @@
   font-weight: 600;
 }
 
-@media (min-width: 960px) {
+.login-card__trust {
+  margin: var(--sp-3) 0 0;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
 
-  .login-hero {
-    flex-direction: row;
+/* ---------- Hero mockup — a real, working chat preview, not a screenshot ---------- */
+
+.landing-hero__visual {
+  position: relative;
+  z-index: 1;
+  margin-top: var(--sp-6);
+  display: flex;
+  justify-content: center;
+}
+
+.landing-mockup {
+  width: 100%;
+  max-width: 340px;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--tg-bg);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--tg-text) 8%, transparent),
+    0 32px 64px -24px color-mix(in srgb, var(--tg-button) 40%, transparent);
+  animation: login-card-in var(--dur-slow) var(--ease-out) 0.2s backwards;
+}
+
+.landing-mockup__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--tg-separator);
+}
+
+.landing-mockup__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--tg-separator);
+}
+
+.landing-mockup__title {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.landing-mockup__canvas {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.landing-mockup__canvas .chat-row__avatar {
+  width: 28px;
+  height: 28px;
+}
+
+/* ---------- Section shell, reused by feature/steps/templates blocks ---------- */
+
+.landing-section {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--sp-7) var(--sp-4);
+}
+
+.landing-section--tint {
+  background: var(--tg-secondary-bg);
+  border-radius: var(--radius-xl);
+  margin: var(--sp-5) var(--sp-3);
+}
+
+.landing-section__head {
+  text-align: center;
+  max-width: 620px;
+  margin: 0 auto var(--sp-6);
+}
+
+.landing-section__eyebrow {
+  margin: 0 0 var(--sp-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tg-button);
+}
+
+.landing-section__title {
+  margin: 0 0 var(--sp-2);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.landing-section__lead {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ---------- Feature grid ---------- */
+
+.landing-features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--sp-3);
+}
+
+.landing-feature-card {
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--dur-base) var(--ease-spring), box-shadow var(--dur-base) var(--ease-smooth);
+}
+
+.landing-feature-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  font-size: 19px;
+  margin-bottom: var(--sp-3);
+}
+
+.landing-feature-card__title {
+  margin: 0 0 4px;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.landing-feature-card__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* ---------- Steps ---------- */
+
+.landing-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.landing-step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  background: var(--tg-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4);
+  box-shadow: var(--shadow-card);
+}
+
+.landing-step__n {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--tg-button), color-mix(in srgb, var(--accent-description) 70%, var(--tg-button)));
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.landing-step__title {
+  margin: 4px 0 2px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.landing-step__text {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* ---------- Live-preview callout ---------- */
+
+.landing-callout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-5);
+  text-align: center;
+  max-width: 1100px;
+  margin: var(--sp-5) var(--sp-3);
+  padding: var(--sp-6) var(--sp-4);
+  border-radius: var(--radius-xl);
+  background: radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--tg-button) 10%, transparent), transparent 60%),
+    var(--tg-secondary-bg);
+}
+
+.landing-callout__text {
+  max-width: 560px;
+}
+
+.landing-callout__demo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  background: var(--tg-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4) var(--sp-5);
+  box-shadow: var(--shadow-elevated);
+}
+
+.landing-callout__dots {
+  padding: 10px 14px;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--tg-secondary-bg);
+}
+
+.landing-callout__bubble {
+  cursor: default;
+}
+
+/* ---------- Templates ---------- */
+
+.landing-templates {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--sp-3);
+}
+
+.landing-template-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-3) var(--sp-4);
+  box-shadow: var(--shadow-card);
+}
+
+.landing-template-card__icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  background: color-mix(in srgb, var(--tg-button) 14%, transparent);
+}
+
+/* min-width: 0 — without it a flex child refuses to shrink below its
+   unwrapped text width and overflows the card instead of wrapping. */
+.landing-template-card__text-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.landing-template-card__title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.landing-template-card__text {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ---------- Final CTA band ---------- */
+
+.landing-cta {
+  text-align: center;
+  max-width: 1100px;
+  margin: var(--sp-5) var(--sp-3) var(--sp-7);
+  padding: var(--sp-7) var(--sp-4);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--tg-button), color-mix(in srgb, var(--accent-description) 75%, var(--tg-button)));
+  color: #fff;
+  box-shadow: var(--shadow-elevated);
+}
+
+.landing-cta__title {
+  margin: 0 0 var(--sp-2);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.landing-cta__text {
+  margin: 0 0 var(--sp-4);
+  opacity: 0.88;
+  font-size: 14px;
+}
+
+.landing-cta__button {
+  border: none;
+  background: #fff;
+  color: var(--tg-button);
+  font-weight: 700;
+  font-size: 15px;
+  padding: 14px 28px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  box-shadow: 0 12px 24px color-mix(in srgb, black 20%, transparent);
+  transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-base) var(--ease-smooth);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .landing-feature-card:hover,
+  .landing-template-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .landing-cta__button:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 16px 30px color-mix(in srgb, black 24%, transparent);
+  }
+
+  .landing-mockup {
+    transform: perspective(1400px) rotateY(-6deg) rotateX(3deg);
+    transition: transform var(--dur-slow) var(--ease-smooth);
+  }
+
+  .landing-mockup:hover {
+    transform: perspective(1400px) rotateY(0deg) rotateX(0deg) scale(1.02);
+  }
+}
+
+@media (min-width: 700px) {
+  .landing-features,
+  .landing-templates {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .landing-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
     align-items: center;
     gap: var(--sp-7);
-    max-width: 980px;
-    padding-top: 0;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: var(--sp-8) var(--sp-6) var(--sp-7);
+  }
+
+  .login-hero {
+    max-width: none;
+    margin: 0;
   }
 
   .login-hero__pitch {
-    flex: 1;
     text-align: left;
+    align-items: flex-start;
+  }
+
+  .landing-eyebrow {
+    align-self: flex-start;
   }
 
   .login-hero__pitch .state-icon {
@@ -2189,7 +2579,7 @@
   }
 
   .login-title {
-    font-size: 40px;
+    font-size: 42px;
   }
 
   .login-hero__lead {
@@ -2202,9 +2592,50 @@
   }
 
   .login-card {
-    flex: 0 0 340px;
+    align-self: flex-start;
+    max-width: 360px;
     padding: var(--sp-6);
-    box-shadow: var(--shadow-elevated);
+  }
+
+  .landing-hero__visual {
+    margin-top: 0;
+  }
+
+  .landing-features {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .landing-templates {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .landing-steps {
+    max-width: none;
+    flex-direction: row;
+  }
+
+  .landing-step {
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .landing-callout {
+    flex-direction: row;
+    text-align: left;
+    justify-content: space-between;
+    padding: var(--sp-7);
+  }
+
+  .landing-callout__text {
+    max-width: 460px;
+  }
+
+  .landing-section__title {
+    font-size: 30px;
+  }
+
+  .landing-cta__title {
+    font-size: 32px;
   }
 }
 

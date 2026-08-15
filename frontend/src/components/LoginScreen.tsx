@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
-import { type TelegramLoginPayload, ApiError, builderApi, configureSessionAuth } from "../api/builderApi";
+import { type BlockType, type TelegramLoginPayload, ApiError, builderApi, configureSessionAuth } from "../api/builderApi";
+import { BLOCK_TYPES } from "../blockTypes";
+import { BOT_TEMPLATES } from "../templates";
+import { HeroMockup } from "./HeroMockup";
 
 interface Props {
   onLoggedIn: () => void;
@@ -12,11 +15,45 @@ declare global {
   }
 }
 
-/** Standalone web entry point (outside the Telegram Mini App) — logs in via
- * the Telegram Login Widget, which hands us a signed payload we exchange
- * for a session token (see app/routers/auth.py). */
+// Marketing copy per block type — distinct from the short editor hint in
+// blockTypes.ts (which is instructional, "what to type here"). This is the
+// sell: why a client would want that block in their bot at all.
+const FEATURE_SELL: Record<BlockType, string> = {
+  welcome: "Гость пишет /start и сразу чувствует, что его здесь ждали — а не отвечает тишина.",
+  description: "Расскажи о продукте своими словами — никаких полей формы и ограничений.",
+  image: "Товар лицом: фото прямо в переписке. Вставил ссылку — готово, без загрузки файлов.",
+  video: "Покажи, а не рассказывай — обзор или демо конвертирует лучше любого текста.",
+  buttons: "Направь клиента куда нужно — «Купить» или «Записаться» в один тап.",
+  poll: "Узнай, чего хотят подписчики — нативный опрос Telegram, без сторонних форм.",
+  delivery: "Обещал — доставь: файл, ссылка или доступ приходят мгновенно после оплаты.",
+  delay: "Пауза между репликами — будто отвечает живой человек, а не скрипт.",
+};
+
+const STEPS = [
+  {
+    n: "1",
+    title: "Выбери сценарий",
+    text: "Пять готовых шаблонов под разные модели — разовая продажа, подписка, запись на сессию, рассылка — или начни с чистого листа.",
+  },
+  {
+    n: "2",
+    title: "Собери в live-редакторе",
+    text: "Пиши сообщения прямо в пузырях чата, добавляй блоки из библиотеки, перетаскивай порядок — видно ровно то, что увидит клиент.",
+  },
+  {
+    n: "3",
+    title: "Опубликуй за 2 минуты",
+    text: "Вставь токен от @BotFather — бот заработает мгновенно. Правки в сообщениях применяются сразу, без повторной публикации.",
+  },
+];
+
+/** Standalone web entry point (outside the Telegram Mini App) — the full
+ * marketing landing page, ending in a login via the Telegram Login Widget,
+ * which hands us a signed payload we exchange for a session token (see
+ * app/routers/auth.py). */
 export function LoginScreen({ onLoggedIn }: Props) {
   const widgetRef = useRef<HTMLDivElement | null>(null);
+  const heroRef = useRef<HTMLDivElement | null>(null);
   const [botUsername, setBotUsername] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -60,33 +97,145 @@ export function LoginScreen({ onLoggedIn }: Props) {
     };
   }, [botUsername, onLoggedIn]);
 
+  function scrollToLogin() {
+    heroRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  const loginWidget = (
+    <div className="login-card">
+      <p className="login-card__title">Войти через Telegram</p>
+      {loading ? (
+        <p className="app-hint">Входим…</p>
+      ) : botUsername ? (
+        <div ref={widgetRef} className="login-widget" />
+      ) : !error ? (
+        <p className="app-hint">Загрузка…</p>
+      ) : null}
+      {error && <p className="publish-form__error">{error}</p>}
+      <p className="login-card__trust">Бесплатно · Без кода · Публикация за 2 минуты</p>
+    </div>
+  );
+
   return (
     <div className="screen screen--login">
-      <div className="login-hero">
-        <div className="login-hero__pitch">
-          <div className="state-icon">🏭</div>
-          <h1 className="login-title">Bot Factory</h1>
-          <p className="login-hero__lead">Собирай Telegram-ботов визуально — без кода. Пиши сообщения прямо в
-            превью чата, перетаскивай порядок, публикуй за пару минут.</p>
-          <ul className="login-hero__features">
-            <li>👋 Готовые шаблоны — товар, подписка, запись, рассылка</li>
-            <li>💬 Редактор выглядит как настоящая переписка</li>
-            <li>🤖 Управляй несколькими ботами из одного аккаунта</li>
-          </ul>
+      {/* ===== Hero ===== */}
+      <section className="landing-hero" ref={heroRef}>
+        <div className="login-hero">
+          <div className="login-hero__pitch">
+            <div className="landing-eyebrow">
+              <span aria-hidden="true">🏭</span> Bot Factory
+            </div>
+            <h1 className="login-title">Telegram-бот, который продаёт, пока ты спишь</h1>
+            <p className="login-hero__lead">
+              Собирай сценарий в живом превью чата — видишь ровно то, что увидит клиент. Без кода, без
+              разработчиков, без ожидания.
+            </p>
+            <ul className="login-hero__features">
+              <li>👋 Готовые шаблоны — товар, подписка, запись, рассылка</li>
+              <li>💬 Редактор выглядит как настоящая переписка</li>
+              <li>🤖 Управляй несколькими ботами из одного аккаунта</li>
+            </ul>
+          </div>
+
+          {loginWidget}
         </div>
 
-        <div className="login-card">
-          <p className="login-card__title">Войти через Telegram</p>
-          {loading ? (
-            <p className="app-hint">Входим…</p>
-          ) : botUsername ? (
-            <div ref={widgetRef} className="login-widget" />
-          ) : !error ? (
-            <p className="app-hint">Загрузка…</p>
-          ) : null}
-          {error && <p className="publish-form__error">{error}</p>}
+        <div className="landing-hero__visual">
+          <HeroMockup />
         </div>
-      </div>
+      </section>
+
+      {/* ===== Feature grid — sells every block type ===== */}
+      <section className="landing-section">
+        <div className="landing-section__head">
+          <p className="landing-section__eyebrow">Библиотека блоков</p>
+          <h2 className="landing-section__title">Каждый блок — рабочий инструмент, а не украшение</h2>
+          <p className="landing-section__lead">
+            8 типов сообщений, из которых складывается любой сценарий — от простого приветствия до опроса и
+            паузы для реалистичного темпа.
+          </p>
+        </div>
+        <div className="landing-features">
+          {BLOCK_TYPES.map((block) => (
+            <div key={block.type} className="landing-feature-card">
+              <span className={`landing-feature-card__icon block-card__icon--${block.accent}`} aria-hidden="true">
+                {block.icon}
+              </span>
+              <p className="landing-feature-card__title">{block.label}</p>
+              <p className="landing-feature-card__text">{FEATURE_SELL[block.type]}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ===== How it works ===== */}
+      <section className="landing-section landing-section--tint">
+        <div className="landing-section__head">
+          <p className="landing-section__eyebrow">Как это работает</p>
+          <h2 className="landing-section__title">От пустого экрана до работающего бота за один присест</h2>
+        </div>
+        <div className="landing-steps">
+          {STEPS.map((step) => (
+            <div key={step.n} className="landing-step">
+              <span className="landing-step__n">{step.n}</span>
+              <p className="landing-step__title">{step.title}</p>
+              <p className="landing-step__text">{step.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ===== Live preview callout ===== */}
+      <section className="landing-callout">
+        <div className="landing-callout__text">
+          <p className="landing-section__eyebrow">▶ Смотреть, как в реальности</p>
+          <h2 className="landing-section__title">Прежде чем показать клиенту — посмотри сам</h2>
+          <p className="landing-section__lead">
+            Кнопка предпросмотра проигрывает весь диалог с той же скоростью печати, что и у настоящего бота —
+            с паузами между сообщениями и индикатором «печатает…». Никаких сюрпризов после публикации.
+          </p>
+        </div>
+        <div className="landing-callout__demo">
+          <span className="block-preview__dots block-preview__dots--solo landing-callout__dots">
+            <span />
+            <span />
+            <span />
+          </span>
+          <div className="chat-bubble landing-callout__bubble">
+            <p className="chat-bubble__text">Отлично! Первый материал уже готовится 👀</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== Templates showcase ===== */}
+      <section className="landing-section">
+        <div className="landing-section__head">
+          <p className="landing-section__eyebrow">Готовые сценарии</p>
+          <h2 className="landing-section__title">Не с чистого листа — с рабочей заготовки</h2>
+        </div>
+        <div className="landing-templates">
+          {BOT_TEMPLATES.filter((t) => t.id !== "blank").map((template) => (
+            <div key={template.id} className="landing-template-card">
+              <span className="landing-template-card__icon" aria-hidden="true">
+                {template.icon}
+              </span>
+              <span className="landing-template-card__text-group">
+                <p className="landing-template-card__title">{template.label}</p>
+                <p className="landing-template-card__text">{template.pitch}</p>
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ===== Final CTA ===== */}
+      <section className="landing-cta">
+        <h2 className="landing-cta__title">Собери первого бота прямо сейчас</h2>
+        <p className="landing-cta__text">Вход через Telegram — без пароля, без формы регистрации.</p>
+        <button type="button" className="landing-cta__button" onClick={scrollToLogin}>
+          Начать бесплатно ↑
+        </button>
+      </section>
     </div>
   );
 }
