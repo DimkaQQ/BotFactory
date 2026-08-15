@@ -26,12 +26,30 @@ interface Props {
   disabled?: boolean;
 }
 
+const DELETE_ANIM_MS = 220;
+
 export function ChatCanvas({ blocks, botName, onReorder, onChangeContent, onDelete, onAdd, disabled }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hoveredType, setHoveredType] = useState<BlockType | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
   const canvasRef = useRef<HTMLDivElement | null>(null);
+
+  // Play a shrink-and-fade before the bubble actually leaves the list,
+  // instead of it just vanishing — the delete button feels like it did
+  // something, not like the DOM silently snapped shut.
+  function handleDeleteBlock(blockId: string) {
+    setRemovingIds((prev) => new Set(prev).add(blockId));
+    setTimeout(() => {
+      onDelete(blockId);
+      setRemovingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(blockId);
+        return next;
+      });
+    }, DELETE_ANIM_MS);
+  }
 
   // Tapping outside the currently-active bubble (another message, the
   // header, the composer, empty canvas space) ends editing — a single
@@ -141,9 +159,10 @@ export function ChatCanvas({ blocks, botName, onReorder, onChangeContent, onDele
                 staggerIndex={index}
                 isLast={index === blocks.length - 1}
                 active={activeId === block.id}
+                removing={removingIds.has(block.id)}
                 onActivate={() => setActiveId(block.id)}
                 onChange={(content) => onChangeContent(block.id, content)}
-                onDelete={() => onDelete(block.id)}
+                onDelete={() => handleDeleteBlock(block.id)}
                 disabled={disabled}
               />
             ))}

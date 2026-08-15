@@ -52,6 +52,7 @@ export function PublishButton({ disabled, onPublish }: Props) {
           Отмена
         </button>
         <button type="submit" disabled={submitting || !token.trim()}>
+          {submitting && <span className="btn-spinner" aria-hidden="true" />}
           {submitting ? "Публикуем…" : "Опубликовать"}
         </button>
       </div>

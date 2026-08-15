@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 
 import { type Bot, ApiError, builderApi } from "../api/builderApi";
 import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
 import { BOT_TEMPLATES } from "../templates";
+
+const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
 interface Props {
   greetingName?: string;
@@ -131,54 +134,84 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
       {error && <p className="publish-form__error" style={{ marginBottom: "var(--sp-3)" }}>{error}</p>}
 
       {bots === null ? (
-        <p className="app-hint">Загрузка…</p>
-      ) : bots.length === 0 ? (
-        <div className="bot-list__empty">
-          <div className="block-list__empty-icon">🏭</div>
-          <p className="block-list__empty-title">Ещё нет ни одного бота</p>
-          <p className="block-list__empty-hint">
-            {isMiniApp
-              ? "Собери первого на компьютере — там удобный конструктор"
-              : "Начни с готового сценария — это займёт пару минут"}
-          </p>
+        <div className="bot-list" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="bot-card bot-card--skeleton" style={{ animationDelay: `${i * 80}ms` }}>
+              <div className="skeleton-block skeleton-block--icon" />
+              <div className="bot-card__info">
+                <div className="skeleton-block" style={{ width: "62%", height: 14 }} />
+                <div className="skeleton-block" style={{ width: "40%", height: 11, marginTop: 6 }} />
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <div className="bot-list">
-          {bots.map((bot) => (
-            <button
-              type="button"
-              key={bot.id}
-              className="bot-card"
-              onClick={() => onOpen(bot.id)}
-              disabled={deletingId === bot.id}
-            >
-              <div className={`bot-card__icon bot-card__icon--${bot.status}`} aria-hidden="true">
-                🤖
-              </div>
-              <div className="bot-card__info">
-                <span className="bot-card__name">{botTitle(bot)}</span>
-                <span className="bot-card__meta">
-                  <span className={`bot-card__status bot-card__status--${bot.status}`}>{STATUS_LABEL[bot.status]}</span>
-                  <span className="bot-card__dot">·</span>
-                  {blockCountLabel(bot.block_count)}
-                  {bot.name && bot.telegram_bot_username && (
-                    <>
-                      <span className="bot-card__dot">·</span>@{bot.telegram_bot_username}
-                    </>
-                  )}
-                </span>
-              </div>
-              <span
-                role="button"
-                tabIndex={0}
-                className="bot-card__delete"
-                aria-label="Удалить бота"
-                onClick={(e) => handleDelete(bot, e)}
+          {/* Empty-state and cards share one AnimatePresence so deleting the
+              last bot crossfades into "no bots yet" instead of the whole
+              list container getting swapped out mid-exit-animation. */}
+          <AnimatePresence initial={false} mode="popLayout">
+            {bots.length === 0 && (
+              <motion.div
+                key="empty"
+                className="bot-list__empty"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: EASE_OUT }}
               >
-                🗑
-              </span>
-            </button>
-          ))}
+                <div className="block-list__empty-icon">🏭</div>
+                <p className="block-list__empty-title">Ещё нет ни одного бота</p>
+                <p className="block-list__empty-hint">
+                  {isMiniApp
+                    ? "Собери первого на компьютере — там удобный конструктор"
+                    : "Начни с готового сценария — это займёт пару минут"}
+                </p>
+              </motion.div>
+            )}
+            {bots.map((bot, index) => (
+              <motion.button
+                type="button"
+                key={bot.id}
+                layout
+                className="bot-card"
+                onClick={() => onOpen(bot.id)}
+                disabled={deletingId === bot.id}
+                initial={{ opacity: 0, y: 14, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.16, ease: "easeIn" } }}
+                transition={{ duration: 0.32, delay: index * 0.04, ease: EASE_OUT }}
+                whileHover={{ y: -3, transition: { duration: 0.15, ease: EASE_OUT } }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <div className={`bot-card__icon bot-card__icon--${bot.status}`} aria-hidden="true">
+                  🤖
+                </div>
+                <div className="bot-card__info">
+                  <span className="bot-card__name">{botTitle(bot)}</span>
+                  <span className="bot-card__meta">
+                    <span className={`bot-card__status bot-card__status--${bot.status}`}>{STATUS_LABEL[bot.status]}</span>
+                    <span className="bot-card__dot">·</span>
+                    {blockCountLabel(bot.block_count)}
+                    {bot.name && bot.telegram_bot_username && (
+                      <>
+                        <span className="bot-card__dot">·</span>@{bot.telegram_bot_username}
+                      </>
+                    )}
+                  </span>
+                </div>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="bot-card__delete"
+                  aria-label="Удалить бота"
+                  onClick={(e) => handleDelete(bot, e)}
+                >
+                  🗑
+                </span>
+              </motion.button>
+            ))}
+          </AnimatePresence>
         </div>
       )}
 

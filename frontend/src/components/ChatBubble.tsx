@@ -31,13 +31,14 @@ interface Props {
   isLast: boolean;
   active: boolean;
   staggerIndex?: number;
+  removing?: boolean;
   onActivate: () => void;
   onChange: (content: BotBlock["content"]) => void;
   onDelete: () => void;
   disabled?: boolean;
 }
 
-export function ChatBubble({ block, isLast, active, staggerIndex, onActivate, onChange, onDelete, disabled }: Props) {
+export function ChatBubble({ block, isLast, active, staggerIndex, removing, onActivate, onChange, onDelete, disabled }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -90,7 +91,12 @@ export function ChatBubble({ block, isLast, active, staggerIndex, onActivate, on
   if (block.block_type === "delay") {
     const seconds = Math.max(0, Math.min(Number(block.content.seconds ?? 2), 15));
     return (
-      <div ref={setNodeRef} style={style} className="chat-row chat-row--delay" data-block-id={block.id}>
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={`chat-row chat-row--delay ${removing ? "chat-row--removing" : ""}`}
+        data-block-id={block.id}
+      >
         <div
           className={`chat-delay ${active ? "chat-delay--editing" : ""}`}
           {...(!disabled && !active ? attributes : {})}
@@ -131,7 +137,7 @@ export function ChatBubble({ block, isLast, active, staggerIndex, onActivate, on
   const pollOptions = (block.content.options ?? []).filter((o) => o.trim());
 
   return (
-    <div ref={setNodeRef} style={style} className="chat-row" data-block-id={block.id}>
+    <div ref={setNodeRef} style={style} className={`chat-row ${removing ? "chat-row--removing" : ""}`} data-block-id={block.id}>
       <div className="chat-row__avatar">{isLast && <span className="chat-avatar">🤖</span>}</div>
 
       <div className="chat-row__content">

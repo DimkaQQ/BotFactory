@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 
 import {
   ApiError,
@@ -101,22 +102,32 @@ export default function App() {
     );
   }
 
-  if (screen.name === "builder") {
-    return (
-      <BotBuilder
-        botId={screen.botId}
-        isMiniApp={isMiniApp}
-        onBack={() => setScreen({ name: "list" })}
-        onDeleted={() => setScreen({ name: "list" })}
-      />
-    );
-  }
+  const screenKey = screen.name === "builder" ? `builder-${screen.botId}` : "list";
 
   return (
-    <BotList
-      greetingName={clientName}
-      isMiniApp={isMiniApp}
-      onOpen={(botId) => setScreen({ name: "builder", botId })}
-    />
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={screenKey}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+      >
+        {screen.name === "builder" ? (
+          <BotBuilder
+            botId={screen.botId}
+            isMiniApp={isMiniApp}
+            onBack={() => setScreen({ name: "list" })}
+            onDeleted={() => setScreen({ name: "list" })}
+          />
+        ) : (
+          <BotList
+            greetingName={clientName}
+            isMiniApp={isMiniApp}
+            onOpen={(botId) => setScreen({ name: "builder", botId })}
+          />
+        )}
+      </motion.div>
+    </AnimatePresence>
   );
 }
