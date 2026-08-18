@@ -135,6 +135,18 @@ export function ChatBubble({ block, isLast, active, staggerIndex, removing, onAc
   const isPollBlock = block.block_type === "poll";
   const mediaUrl = block.content.media_file_id;
   const pollOptions = (block.content.options ?? []).filter((o) => o.trim());
+  const hasRealButton = buttons.some((b) => b.label.trim() || b.action_value.trim());
+
+  // Mirrors the backend's "nothing to send" guard (bot_dispatcher.py) —
+  // a block that would silently vanish from the real bot used to just...
+  // silently vanish, with no clue why. Flag it here instead.
+  const isEmptyInBot = isMediaBlock
+    ? !mediaUrl && !hasText
+    : isButtonsBlock
+      ? !hasRealButton && !hasText
+      : isPollBlock
+        ? !block.content.question?.trim() || pollOptions.length < 2
+        : !hasText;
 
   return (
     <div ref={setNodeRef} style={style} className={`chat-row ${removing ? "chat-row--removing" : ""}`} data-block-id={block.id}>
@@ -210,6 +222,10 @@ export function ChatBubble({ block, isLast, active, staggerIndex, removing, onAc
             </p>
           )}
         </div>
+
+        {!active && isEmptyInBot && (
+          <p className="chat-bubble__empty-warning">⚠️ Пусто — бот пропустит это сообщение</p>
+        )}
 
         {isButtonsBlock && (
           <div className="chat-buttons" onPointerDown={(e) => e.stopPropagation()}>

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 
 from aiogram import Bot
@@ -34,24 +35,44 @@ def _typing_delay(text: str) -> float:
     return max(_TYPING_DELAY_MIN, min(seconds, _TYPING_DELAY_MAX))
 
 
+_URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+
+
 def _build_keyboard(content: dict) -> InlineKeyboardMarkup | None:
     buttons = content.get("buttons") or []
-    if not buttons:
-        return None
-
     rows = []
     for button in buttons:
-        label = button.get("label") or "..."
+        label = (button.get("label") or "").strip()
         action_type = button.get("action_type", "text")
-        action_value = button.get("action_value") or ""
+        action_value = (button.get("action_value") or "").strip()
+
+        # A fully blank row (added via "+ Добавить кнопку" and never filled
+        # in) used to still build a "..." button whose callback_data could
+        # end up empty — Telegram then rejects the whole sendMessage call,
+        # which our per-block try/except swallows, so the *entire* block
+        # (caption text included) would silently vanish. Skip blank rows
+        # instead of ever building an invalid button from them.
+        if not label and not action_value:
+            continue
+        label = label or "…"
+
         if action_type == "url" and action_value:
-            rows.append([InlineKeyboardButton(text=label, url=action_value)])
+            url = action_value
+            # The single most common way a URL button breaks a block: the
+            # user typed "example.com" instead of "https://example.com".
+            # Telegram rejects a schemeless URL outright — assume https
+            # rather than let one typo take the whole message down.
+            if not _URL_SCHEME_RE.match(url):
+                url = f"https://{url}"
+            rows.append([InlineKeyboardButton(text=label, url=url)])
         else:
             # Phase 1 has no branching, so "text" buttons carry the value as
-            # callback_data purely for display — nothing handles the click yet.
-            rows.append([InlineKeyboardButton(text=label, callback_data=(action_value or label)[:64])])
+            # callback_data purely for display — nothing handles the click
+            # yet beyond acknowledging it (see process_update).
+            callback_data = (action_value or label)[:64] or "noop"
+            rows.append([InlineKeyboardButton(text=label, callback_data=callback_data)])
 
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
 async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
@@ -86,6 +107,20 @@ async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
 
 
 async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
+    callback_query = update.get("callback_query")
+    if callback_query:
+        # Phase 1 has no branching (see module docstring), so a tapped
+        # "text" button has nowhere to go yet — but Telegram still shows a
+        # spinning loading state on the button until answerCallbackQuery is
+        # called, and leaves it spinning indefinitely (eventually erroring)
+        # if it never is. Acknowledging it is the minimum for the button to
+        # not feel broken, independent of whether it does anything yet.
+        try:
+            await bot.answer_callback_query(callback_query["id"])
+        except Exception:
+            logger.exception("Failed to answer callback query for bot %s", bot_id)
+        return
+
     message = update.get("message")
     if not message:
         return

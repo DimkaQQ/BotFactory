@@ -56,6 +56,20 @@ export function ChatCanvas({ blocks, botName, onReorder, onChangeContent, onDele
   // Tapping outside the currently-active bubble (another message, the
   // header, the composer, empty canvas space) ends editing — a single
   // "active" bubble at a time, like a real chat's compose focus.
+  //
+  // Deliberately "pointerdown", not "click": a document-level "click"
+  // listener registered *as a result of* a click (e.g. the same click
+  // that activates a bubble via its own onClick) can still catch that
+  // very click on its way further up the bubble chain and immediately
+  // deactivate what it just activated — the classic self-closing
+  // "outside click" bug. pointerdown doesn't have this problem here since
+  // activation itself fires on "click", one step later.
+  //
+  // The tradeoff: pointerdown fires *before* the browser resolves any
+  // resulting blur/focus shift, so a field inside the bubble this closes
+  // can't reliably use a React onBlur to react to that — see
+  // ButtonsEditor's URL-normalizing blur handler, which is attached as a
+  // native listener via a ref for exactly this reason instead.
   useEffect(() => {
     if (!activeId) return;
     function handlePointerDown(e: PointerEvent) {
