@@ -34,6 +34,18 @@ class Settings(BaseSettings):
     # CORS - Mini App origin(s), comma separated. "*" for local dev.
     cors_origins: str = "*"
 
+    # Where uploaded media (photos/videos attached directly, not via a
+    # pasted link) land on disk. Relative paths resolve against the
+    # process's cwd — /srv in the Docker image (see Dockerfile's WORKDIR),
+    # mounted as a named volume in docker-compose.yml so uploads survive
+    # a redeploy.
+    media_upload_dir: str = "media_uploads"
+    # Cap on a direct upload — Telegram itself allows much larger files,
+    # but this app proxies the bytes onto local disk, so a generous-but-
+    # bounded limit here. Bigger files are what the "paste a link" option
+    # (still on every media block) is for.
+    media_max_upload_mb: int = 20
+
     @property
     def webapp_url(self) -> str:
         # Same app the web version lives at — the Mini App just opens it and

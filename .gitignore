@@ -22,3 +22,7 @@ frontend/.vite/
 
 # Logs
 *.log
+
+# Directly-uploaded media (local dev — see Settings.media_upload_dir;
+# docker-compose uses a named volume instead).
+/media_uploads/

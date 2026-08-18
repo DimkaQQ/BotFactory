@@ -276,6 +276,7 @@ function Inner({ bot, onChangeContent, onDelete, onAdd, onSetNext, onSetStart, o
       {editingBlock && (
         <BlockEditPanel
           block={editingBlock}
+          botId={bot.id}
           onChange={(content) => onChangeContent(editingBlock.id, content)}
           onDelete={() => handleDelete(editingBlock.id)}
           onClose={() => setEditingId(null)}

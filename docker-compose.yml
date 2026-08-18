@@ -33,6 +33,11 @@ services:
     env_file: .env
     ports:
       - "8000:8000"
+    volumes:
+      # Directly-uploaded media (Settings.media_upload_dir, relative to the
+      # image's /srv WORKDIR) — a named volume so uploads survive a
+      # redeploy instead of vanishing with the container's writable layer.
+      - media_uploads:/srv/media_uploads
     depends_on:
       db:
         condition: service_healthy
@@ -64,6 +69,7 @@ services:
 
 volumes:
   db_data:
+  media_uploads:
 
 networks:
   # Some VPS/cloud hosts have a real interface MTU below Docker's default

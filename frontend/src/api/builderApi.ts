@@ -93,15 +93,16 @@ export function clearSessionAuth() {
   localStorage.removeItem(SESSION_STORAGE_KEY);
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const authHeaders: Record<string, string> =
-    auth.kind === "session-token" ? { Authorization: `Bearer ${auth.token}` } : { "X-Telegram-Init-Data": auth.getInitData() };
+function authHeaders(): Record<string, string> {
+  return auth.kind === "session-token" ? { Authorization: `Bearer ${auth.token}` } : { "X-Telegram-Init-Data": auth.getInitData() };
+}
 
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...authHeaders,
+      ...authHeaders(),
       ...options.headers,
     },
   });
@@ -119,6 +120,33 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (response.status === 204) {
     return undefined as T;
+  }
+  return (await response.json()) as T;
+}
+
+/** Multipart upload — kept separate from request() because it must NOT
+ * send a Content-Type header itself (the browser sets one with the right
+ * multipart boundary from the FormData body; overriding it breaks parsing
+ * on the server side). */
+async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const body = new FormData();
+  body.append("file", file);
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body,
+  });
+
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const body = await response.json();
+      detail = body.detail ?? detail;
+    } catch {
+      // response wasn't JSON — keep statusText
+    }
+    throw new ApiError(detail, response.status);
   }
   return (await response.json()) as T;
 }
@@ -189,6 +217,9 @@ export const builderApi = {
 
   deleteBlock: (botId: string, blockId: string) =>
     request<void>(`/bots/${botId}/blocks/${blockId}`, { method: "DELETE" }),
+
+  uploadMedia: (botId: string, file: File) =>
+    uploadFile<{ url: string; media_type: "photo" | "video" }>(`/bots/${botId}/media/upload`, file),
 
   reorderBlocks: (botId: string, items: { id: string; order_index: number }[]) =>
     request<BotBlock[]>(`/bots/${botId}/blocks/reorder`, {

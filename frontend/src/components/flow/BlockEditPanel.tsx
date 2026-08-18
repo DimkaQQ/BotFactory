@@ -19,6 +19,7 @@ const DELAY_PRESETS = [1, 2, 3, 5, 8, 10];
 
 interface Props {
   block: BotBlock;
+  botId: string;
   onChange: (content: BotBlock["content"]) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -28,7 +29,7 @@ interface Props {
  * (mobile) when its node is clicked on the flow canvas — this is where
  * MediaEditor/PollEditor/ButtonsEditor now live, having moved out of the old
  * inline chat-bubble editor they were built for. */
-export function BlockEditPanel({ block, onChange, onDelete, onClose }: Props) {
+export function BlockEditPanel({ block, botId, onChange, onDelete, onClose }: Props) {
   const def = BLOCK_TYPE_BY_ID[block.block_type];
   const isMediaBlock = block.block_type === "image" || block.block_type === "video";
   const isPollBlock = block.block_type === "poll";
@@ -68,7 +69,7 @@ export function BlockEditPanel({ block, onChange, onDelete, onClose }: Props) {
               ))}
             </div>
           ) : isMediaBlock ? (
-            <MediaEditor kind={block.block_type as "image" | "video"} content={block.content} onChange={onChange} />
+            <MediaEditor kind={block.block_type as "image" | "video"} botId={botId} content={block.content} onChange={onChange} />
           ) : isPollBlock ? (
             <PollEditor content={block.content} onChange={onChange} />
           ) : (

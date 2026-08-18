@@ -1,11 +1,13 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.routers import auth, bots, builder, webhook
+from app.routers import auth, bots, builder, media, webhook
 from app.services import bot_registry
 
 logging.basicConfig(level=logging.INFO)
@@ -31,7 +33,14 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(bots.router)
 app.include_router(builder.router)
+app.include_router(media.router)
 app.include_router(webhook.router)
+
+# Serves what media.router just saved to disk — mounted under /api/ so it
+# rides the same nginx/Caddy proxy rule as the rest of the API, no separate
+# reverse-proxy config needed per deployment flavor.
+Path(settings.media_upload_dir).mkdir(parents=True, exist_ok=True)
+app.mount("/api/media", StaticFiles(directory=settings.media_upload_dir), name="media")
 
 
 @app.get("/health")
