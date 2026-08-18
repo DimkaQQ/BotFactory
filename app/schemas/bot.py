@@ -18,6 +18,7 @@ class BotOut(BaseModel):
     created_at: datetime
     published_at: datetime | None
     block_count: int = 0
+    start_block_id: uuid.UUID | None = None
 
 
 class BotWithBlocksOut(BotOut):
@@ -26,6 +27,9 @@ class BotWithBlocksOut(BotOut):
 
 class BotUpdate(BaseModel):
     name: str | None = None
+    # Explicit clear (dragging the "▶ Старт" arrow away) vs. "not sent"
+    # matters here too — see BotBlockUpdate.next_block_id.
+    start_block_id: uuid.UUID | None = None
 
 
 class PublishRequest(BaseModel):

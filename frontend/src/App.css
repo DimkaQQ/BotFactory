@@ -1942,7 +1942,9 @@
   .screen--builder > .miniapp-banner,
   .screen--builder > .published-banner,
   .screen--builder > .app-hint,
-  .screen--builder > .chat-canvas,
+  .screen--builder > .chat-canvas__preview-btn,
+  .screen--builder > .flow-canvas,
+  .screen--builder > .flow-canvas__composer,
   .screen--builder > .app-footer {
     grid-column: 2;
   }
@@ -2018,16 +2020,16 @@
     color: var(--text-tertiary);
   }
 
-  /* The chat canvas becomes a centered "phone" mockup with room to
-     breathe, plus a proper card frame instead of edge-to-edge mobile. */
+  /* The flow canvas gets the full width of the main column instead of the
+     old fixed-width "phone" mockup — a graph needs room to breathe, not a
+     narrow chat-shaped strip. */
 
-  .screen--builder .chat-canvas {
-    max-width: 560px;
-    padding: var(--sp-5) var(--sp-4) var(--sp-4);
+  .screen--builder .flow-canvas {
+    height: 74vh;
     box-shadow: var(--shadow-elevated);
   }
 
-  .screen--builder .chat-composer {
+  .screen--builder .flow-canvas__composer {
     display: none;
   }
 
@@ -2041,7 +2043,7 @@
   .screen--builder .miniapp-banner,
   .screen--builder .published-banner,
   .screen--builder .app-hint {
-    max-width: 560px;
+    max-width: 720px;
   }
 
   /* Sheets (template picker, block picker) become centered modals instead
@@ -2281,6 +2283,39 @@
 .landing-mockup__canvas .chat-row__avatar {
   width: 28px;
   height: 28px;
+}
+
+/* The "this is what you build it with" strip under the chat mockup — a
+   plain-language stand-in for the flow canvas's actual arrows/handles,
+   not a scaled-down React Flow render. */
+.landing-mockup__branches {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px dashed var(--tg-separator);
+  background: color-mix(in srgb, var(--tg-button) 4%, var(--tg-bg));
+}
+
+.landing-mockup__branch-source {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.landing-mockup__branch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: var(--sp-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-buttons);
+}
+
+.landing-mockup__branch-arrow {
+  color: var(--text-tertiary);
+  font-weight: 400;
 }
 
 /* ---------- Section shell, reused by feature/steps/templates blocks ---------- */
@@ -2781,4 +2816,416 @@
     width: min(420px, calc(100vw - var(--sp-6) * 2));
     height: min(680px, calc(100vh - var(--sp-6) * 2));
   }
+}
+
+/* =========================================================================
+   Flow canvas — the HRM-style visual constructor: nodes + arrows instead
+   of a flat chat feed. React Flow (@xyflow/react) does the pan/zoom/drag/
+   connection-line mechanics; everything below just themes it to match the
+   rest of the app and styles BlockNode/StartNode's own markup.
+   ========================================================================= */
+
+.flow-canvas {
+  position: relative;
+  height: 62vh;
+  min-height: 420px;
+  margin-bottom: var(--sp-3);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background-color: color-mix(in srgb, var(--tg-button) 4%, var(--tg-bg));
+  box-shadow: var(--shadow-card);
+}
+
+.flow-canvas .react-flow__background {
+  color: color-mix(in srgb, var(--tg-text) 10%, transparent);
+}
+
+.flow-canvas .react-flow__controls {
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.flow-canvas .react-flow__controls-button {
+  background: var(--tg-bg);
+  border-bottom: 1px solid var(--tg-separator);
+  color: var(--text-secondary);
+}
+
+.flow-canvas .react-flow__controls-button:hover {
+  background: var(--tg-secondary-bg);
+}
+
+.flow-canvas .react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.flow-canvas .react-flow__edge-path {
+  stroke: var(--tg-button);
+  stroke-width: 2;
+}
+
+.flow-canvas .react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--tg-destructive);
+}
+
+/* A buttons block's plain "next" arrow (used only when nothing else
+   applies — see bot_dispatcher.py) is deliberately muted/dashed so the
+   real decision — the per-button arrows — reads as the primary path. */
+.flow-canvas .react-flow__edge.flow-edge--muted .react-flow__edge-path {
+  stroke: var(--tg-hint);
+  stroke-dasharray: 4 4;
+}
+
+.flow-canvas .react-flow__connectionline path {
+  stroke: var(--tg-button);
+  stroke-width: 2;
+}
+
+.flow-canvas__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6);
+  pointer-events: none;
+  text-align: center;
+}
+
+.flow-canvas__empty p {
+  max-width: 320px;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.flow-canvas__composer {
+  position: static;
+}
+
+/* One block's card on the canvas */
+
+.flow-node {
+  position: relative;
+  width: 220px;
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--tg-bg);
+  border: 1.5px solid var(--tg-separator);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-base) var(--ease-smooth),
+    box-shadow var(--dur-base) var(--ease-smooth);
+}
+
+.flow-node:hover {
+  border-color: color-mix(in srgb, var(--tg-button) 40%, var(--tg-separator));
+}
+
+.flow-node--selected {
+  border-color: var(--tg-button);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tg-button) 18%, transparent);
+}
+
+.flow-node__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.flow-node__icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.flow-node__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-node__start-badge {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-success) 16%, transparent);
+  color: var(--accent-success);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.flow-node__delete {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.flow-node__delete:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--tg-destructive) 16%, transparent);
+  color: var(--tg-destructive);
+}
+
+.flow-node__preview {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.flow-node__preview--empty {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.flow-node__warning {
+  margin: 4px 0 0;
+  font-size: 10.5px;
+  color: var(--tg-destructive);
+}
+
+.flow-node__buttons {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flow-node__button-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: var(--tg-secondary-bg);
+}
+
+.flow-node__button-label {
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tg-link);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-node__default-out {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flow-node__default-out span {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.flow-node__handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: var(--tg-bg) !important;
+  border: 2px solid var(--tg-button) !important;
+}
+
+.flow-node__handle--button {
+  border-color: var(--accent-buttons) !important;
+}
+
+.flow-node__handle--default {
+  border-color: var(--tg-hint) !important;
+}
+
+/* The synthetic "▶ Старт" entry-point node */
+
+.flow-node--start {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  padding: 10px 16px;
+  border-radius: var(--radius-full);
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  box-shadow: var(--shadow-card);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: grab;
+}
+
+.flow-node--start__icon {
+  font-size: 12px;
+}
+
+/* Block edit panel — opens on the side (desktop) / as a bottom sheet
+   (mobile) when a node is clicked, replacing the old inline chat-bubble
+   editors (MediaEditor/PollEditor/ButtonsEditor moved here unchanged). */
+
+.edit-panel-backdrop {
+  z-index: 24;
+}
+
+.edit-panel {
+  position: fixed;
+  left: var(--sp-3);
+  right: var(--sp-3);
+  bottom: 0;
+  z-index: 25;
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--tg-bg);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: 0 -8px 32px color-mix(in srgb, black 24%, transparent);
+  animation: sheet-in var(--dur-slow) var(--ease-out);
+  overflow: hidden;
+}
+
+.edit-panel__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--tg-separator);
+}
+
+.edit-panel__icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.edit-panel__title {
+  flex: 1;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.edit-panel__delete,
+.edit-panel__close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: var(--tg-secondary-bg);
+  color: var(--text-tertiary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.edit-panel__delete:hover {
+  background: color-mix(in srgb, var(--tg-destructive) 16%, transparent);
+  color: var(--tg-destructive);
+}
+
+.edit-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4);
+}
+
+.edit-panel__textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-secondary-bg);
+  resize: vertical;
+}
+
+.edit-panel__delay {
+  justify-content: flex-start;
+}
+
+.edit-panel__buttons {
+  margin-top: var(--sp-4);
+}
+
+.edit-panel__section-label {
+  margin: 0 0 var(--sp-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.edit-panel__hint {
+  margin-top: var(--sp-2);
+}
+
+@media (min-width: 960px) {
+  .edit-panel {
+    left: auto;
+    right: var(--sp-6);
+    top: calc(var(--sp-6) + 64px);
+    bottom: var(--sp-6);
+    width: 360px;
+    max-height: none;
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* A branch's button, rendered as a real tappable pill instead of an inert
+   preview — used only in LivePreview, only on the block currently waiting
+   for a tap (see LivePreview's `interactive` prop). */
+.chat-buttons__pill--tappable {
+  border: none;
+  cursor: pointer;
+  transition:
+    background var(--dur-base) var(--ease-smooth),
+    transform var(--dur-fast) var(--ease-smooth);
+}
+
+.chat-buttons__pill--tappable:hover {
+  background: color-mix(in srgb, var(--tg-button) 12%, var(--tg-secondary-bg));
+}
+
+.chat-buttons__pill--tappable:active {
+  transform: scale(0.97);
+}
+
+.live-preview__hint {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
 }

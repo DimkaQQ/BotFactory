@@ -4,6 +4,9 @@ export interface ButtonAction {
   label: string;
   action_type: "text" | "url";
   action_value: string;
+  /** The block this button's arrow points to on the flow canvas — null/unset
+   * means the button is just shown, tap does nothing (Phase-1-style). */
+  target_block_id?: string | null;
 }
 
 export interface BlockContent {
@@ -23,6 +26,10 @@ export interface BotBlock {
   block_type: BlockType;
   order_index: number;
   content: BlockContent;
+  /** Default "what happens after this" edge — the plain arrow out of a node. */
+  next_block_id: string | null;
+  position_x: number;
+  position_y: number;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +43,8 @@ export interface Bot {
   created_at: string;
   published_at: string | null;
   block_count: number;
+  /** Entry point of the dialogue graph — where the "▶ Старт" node points. */
+  start_block_id: string | null;
 }
 
 export interface BotWithBlocks extends Bot {
@@ -136,6 +145,8 @@ export const builderApi = {
   deleteBot: (botId: string) => request<void>(`/bots/${botId}`, { method: "DELETE" }),
   renameBot: (botId: string, name: string) =>
     request<Bot>(`/bots/${botId}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  setStartBlock: (botId: string, startBlockId: string | null) =>
+    request<Bot>(`/bots/${botId}`, { method: "PATCH", body: JSON.stringify({ start_block_id: startBlockId }) }),
 
   publishBot: (botId: string, token: string) =>
     request<{ status: string; telegram_bot_username: string }>(`/bots/${botId}/publish`, {
@@ -145,13 +156,32 @@ export const builderApi = {
 
   listBlocks: (botId: string) => request<BotBlock[]>(`/bots/${botId}/blocks`),
 
-  createBlock: (botId: string, blockType: BlockType, content: BlockContent = {}) =>
+  createBlock: (
+    botId: string,
+    blockType: BlockType,
+    content: BlockContent = {},
+    position?: { x: number; y: number },
+  ) =>
     request<BotBlock>(`/bots/${botId}/blocks`, {
       method: "POST",
-      body: JSON.stringify({ block_type: blockType, content }),
+      body: JSON.stringify({
+        block_type: blockType,
+        content,
+        ...(position ? { position_x: position.x, position_y: position.y } : {}),
+      }),
     }),
 
-  updateBlock: (botId: string, blockId: string, patch: { content?: BlockContent; order_index?: number }) =>
+  updateBlock: (
+    botId: string,
+    blockId: string,
+    patch: {
+      content?: BlockContent;
+      order_index?: number;
+      next_block_id?: string | null;
+      position_x?: number;
+      position_y?: number;
+    },
+  ) =>
     request<BotBlock>(`/bots/${botId}/blocks/${blockId}`, {
       method: "PATCH",
       body: JSON.stringify(patch),

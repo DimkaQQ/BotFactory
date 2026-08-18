@@ -54,14 +54,14 @@ function ButtonRow({ button, index, onUpdate, onRemove }: RowProps) {
   const actionType = useRef(button.action_type);
   actionType.current = button.action_type;
 
-  // A native listener, not React's onBlur: the outside-tap that ends
-  // editing (ChatCanvas) has to listen on "pointerdown" rather than
-  // "click" (pointerdown-vs-click self-closing-activation tradeoff is
-  // its own story — see ChatCanvas), which fires *before* the browser
-  // resolves the resulting blur. A React synthetic onBlur here would
-  // lose that race and never fire; a native listener on the element
-  // itself doesn't, because it isn't routed through React's batched
-  // event dispatch at all.
+  // A native listener, not React's onBlur — a holdover from when this
+  // editor lived inline in a chat bubble, where the bubble's own
+  // pointerdown-based outside-tap handler fired *before* the browser
+  // resolved this field's blur, and React's synthetic onBlur lost that
+  // race. It now lives in BlockEditPanel instead (a plain click-outside
+  // backdrop, no such race), but the native listener is still correct —
+  // just no longer load-bearing — so it stays rather than being ripped
+  // out mid-migration.
   useEffect(() => {
     const el = valueRef.current;
     if (!el) return;

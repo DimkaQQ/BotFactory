@@ -86,6 +86,14 @@ async def update_bot(
     bot = await _get_owned_bot(bot_id, client, db)
     if payload.name is not None:
         bot.name = payload.name.strip() or None
+    if "start_block_id" in payload.model_fields_set:
+        if payload.start_block_id is not None:
+            result = await db.execute(
+                select(BotBlock.id).where(BotBlock.id == payload.start_block_id, BotBlock.bot_id == bot_id)
+            )
+            if result.scalar_one_or_none() is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Блок не принадлежит этому боту")
+        bot.start_block_id = payload.start_block_id
     await db.commit()
     await db.refresh(bot)
     return bot

@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type BlockType, type BotBlock, type BotWithBlocks, ApiError, builderApi } from "../api/builderApi";
 import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
 import { BLOCK_TYPE_BY_ID } from "../blockTypes";
-import { ChatCanvas } from "./ChatCanvas";
+import { FlowCanvas } from "./flow/FlowCanvas";
+import { LivePreview } from "./LivePreview";
 import { PublishButton } from "./PublishButton";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -25,6 +26,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const nameTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -83,9 +85,52 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const handleDelete = useCallback(
     async (blockId: string) => {
       if (!bot) return;
-      setBot((prev) => (prev ? { ...prev, blocks: prev.blocks.filter((b) => b.id !== blockId) } : prev));
+      // Removing a node can orphan two kinds of arrow pointing *at* it: the
+      // backend already nulls next_block_id/start_block_id on delete (real
+      // FKs, ON DELETE SET NULL) but a button's target_block_id lives inside
+      // JSONB content, so it's on us to clear it here — otherwise the arrow
+      // just silently stops resolving to anything on the canvas.
+      const affected = bot.blocks.filter(
+        (b) => b.block_type === "buttons" && (b.content.buttons ?? []).some((btn) => btn.target_block_id === blockId),
+      );
+
+      setBot((prev) =>
+        prev
+          ? {
+              ...prev,
+              start_block_id: prev.start_block_id === blockId ? null : prev.start_block_id,
+              blocks: prev.blocks
+                .filter((b) => b.id !== blockId)
+                .map((b) =>
+                  b.block_type === "buttons" && (b.content.buttons ?? []).some((btn) => btn.target_block_id === blockId)
+                    ? {
+                        ...b,
+                        content: {
+                          ...b.content,
+                          buttons: (b.content.buttons ?? []).map((btn) =>
+                            btn.target_block_id === blockId ? { ...btn, target_block_id: null } : btn,
+                          ),
+                        },
+                      }
+                    : b,
+                ),
+            }
+          : prev,
+      );
       try {
         await builderApi.deleteBlock(bot.id, blockId);
+        await Promise.all(
+          affected.map((b) =>
+            builderApi.updateBlock(bot.id, b.id, {
+              content: {
+                ...b.content,
+                buttons: (b.content.buttons ?? []).map((btn) =>
+                  btn.target_block_id === blockId ? { ...btn, target_block_id: null } : btn,
+                ),
+              },
+            }),
+          ),
+        );
       } catch {
         // block stays removed locally; a reload will resync if this failed
       }
@@ -94,35 +139,71 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   );
 
   const handleAdd = useCallback(
-    async (blockType: BlockType): Promise<string> => {
+    async (blockType: BlockType, position: { x: number; y: number }): Promise<string> => {
       if (!bot) throw new Error("Bot not loaded");
       const defaultContent = BLOCK_TYPE_BY_ID[blockType].defaultContent();
-      const created = await builderApi.createBlock(bot.id, blockType, defaultContent);
-      setBot((prev) => (prev ? { ...prev, blocks: [...prev.blocks, created] } : prev));
+      const created = await builderApi.createBlock(bot.id, blockType, defaultContent, position);
+      setBot((prev) =>
+        prev
+          ? {
+              ...prev,
+              blocks: [...prev.blocks, created],
+              start_block_id: prev.start_block_id ?? created.id,
+            }
+          : prev,
+      );
       return created.id;
     },
     [bot],
   );
 
-  const handleReorder = useCallback(
-    (orderedIds: string[]) => {
+  // Graph edges — a plain arrow (next_block_id), a per-button branch (lives
+  // in content, so it rides the same debounced content autosave), and the
+  // "▶ Старт" pseudo-edge (bot.start_block_id). All three are optimistic:
+  // the canvas already shows the new arrow before the PATCH lands.
+  const handleSetNext = useCallback(
+    (blockId: string, nextBlockId: string | null) => {
       if (!bot) return;
-      const byId = new Map(bot.blocks.map((b) => [b.id, b]));
-      const reordered = orderedIds.map((id, index) => ({ ...byId.get(id)!, order_index: index }));
-      setBot((prev) => (prev ? { ...prev, blocks: reordered } : prev));
-
-      markPending("reorder");
+      setBot((prev) =>
+        prev ? { ...prev, blocks: prev.blocks.map((b) => (b.id === blockId ? { ...b, next_block_id: nextBlockId } : b)) } : prev,
+      );
+      markPending(`${blockId}:next`);
       builderApi
-        .reorderBlocks(
-          bot.id,
-          orderedIds.map((id, index) => ({ id, order_index: index })),
-        )
+        .updateBlock(bot.id, blockId, { next_block_id: nextBlockId })
         .catch(() => {
           /* optimistic update already applied; ignore transient failures */
         })
-        .finally(() => markSettled("reorder"));
+        .finally(() => markSettled(`${blockId}:next`));
     },
     [bot, markPending, markSettled],
+  );
+
+  const handleSetStart = useCallback(
+    (blockId: string | null) => {
+      if (!bot) return;
+      setBot((prev) => (prev ? { ...prev, start_block_id: blockId } : prev));
+      markPending("start");
+      builderApi
+        .setStartBlock(bot.id, blockId)
+        .catch(() => {
+          /* optimistic update already applied; ignore transient failures */
+        })
+        .finally(() => markSettled("start"));
+    },
+    [bot, markPending, markSettled],
+  );
+
+  const handleSetPosition = useCallback(
+    (blockId: string, x: number, y: number) => {
+      if (!bot) return;
+      setBot((prev) =>
+        prev ? { ...prev, blocks: prev.blocks.map((b) => (b.id === blockId ? { ...b, position_x: x, position_y: y } : b)) } : prev,
+      );
+      builderApi.updateBlock(bot.id, blockId, { position_x: x, position_y: y }).catch(() => {
+        /* best-effort; the node just snaps back to its last saved spot on reload */
+      });
+    },
+    [bot],
   );
 
   const handleNameChange = useCallback(
@@ -262,17 +343,26 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         </div>
       ) : (
         !isMiniApp && (
-          <p className="app-hint">Так и будет выглядеть переписка. Нажми на сообщение, чтобы изменить, зажми — чтобы переставить.</p>
+          <p className="app-hint">
+            Нажми на блок, чтобы изменить его, потяни от кружка снизу или от кнопки — чтобы решить, что дальше.
+          </p>
         )
       )}
 
-      <ChatCanvas
-        blocks={bot.blocks}
-        botName={bot.name || bot.telegram_bot_username || undefined}
-        onReorder={handleReorder}
+      {bot.blocks.length > 0 && (
+        <button type="button" className="chat-canvas__preview-btn" onClick={() => setPreviewOpen(true)}>
+          ▶ Смотреть, как в реальности
+        </button>
+      )}
+
+      <FlowCanvas
+        bot={bot}
         onChangeContent={handleChangeContent}
         onDelete={handleDelete}
         onAdd={handleAdd}
+        onSetNext={handleSetNext}
+        onSetStart={handleSetStart}
+        onSetPosition={handleSetPosition}
         disabled={isMiniApp}
       />
 
@@ -294,6 +384,8 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           </a>
         </div>
       )}
+
+      {previewOpen && <LivePreview bot={bot} botName={bot.name || bot.telegram_bot_username || ""} onClose={() => setPreviewOpen(false)} />}
     </div>
   );
 }

@@ -38,10 +38,21 @@ class Bot(Base):
         SAEnum(BotStatus, name="bot_status", native_enum=False), default=BotStatus.draft, nullable=False
     )
 
+    # Entry point of the dialogue graph — the node the "▶ Старт" pseudo-node
+    # points at in the flow editor. ON DELETE SET NULL: if that block is
+    # removed the bot just has no entry point until one is picked again
+    # (dispatcher treats a bot with no start block as empty).
+    start_block_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("bot_blocks.id", ondelete="SET NULL", use_alter=True), nullable=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     client: Mapped["Client"] = relationship(back_populates="bots")
     blocks: Mapped[list["BotBlock"]] = relationship(
-        back_populates="bot", cascade="all, delete-orphan", order_by="BotBlock.order_index"
+        back_populates="bot",
+        cascade="all, delete-orphan",
+        order_by="BotBlock.order_index",
+        foreign_keys="BotBlock.bot_id",
     )

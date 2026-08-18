@@ -1,7 +1,11 @@
 /** A real, working preview — not a fake screenshot — built from the exact
  * same chat-bubble markup/CSS the constructor itself uses, so the promise
  * ("live chat preview") is demonstrated rather than just claimed. Bubbles
- * stagger in via the same --stagger/bubble-in mechanism as the real canvas. */
+ * stagger in via the same --stagger/bubble-in mechanism as the real canvas.
+ *
+ * The chat card sells "this is what your client sees"; the small branch
+ * strip underneath sells the other half of the pitch — "this is what you
+ * build it with" — without pulling in React Flow just for a decoration. */
 export function HeroMockup() {
   return (
     <div className="landing-mockup">
@@ -49,11 +53,22 @@ export function HeroMockup() {
             </div>
             <div className="chat-buttons">
               <div className="chat-buttons__preview">
-                <span className="chat-buttons__pill">Купить 🛒</span>
+                <span className="chat-buttons__pill">Да, интересно 🛒</span>
+                <span className="chat-buttons__pill">Пока нет</span>
               </div>
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="landing-mockup__branches" aria-hidden="true">
+        <span className="landing-mockup__branch-source">🔘 Готов начать?</span>
+        <span className="landing-mockup__branch">
+          <span className="landing-mockup__branch-arrow">↳</span> «Да» → Оплата
+        </span>
+        <span className="landing-mockup__branch">
+          <span className="landing-mockup__branch-arrow">↳</span> «Пока нет» → Напоминание через день
+        </span>
       </div>
     </div>
   );

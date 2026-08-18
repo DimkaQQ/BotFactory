@@ -50,8 +50,23 @@ async def create_block(
     else:
         order_index = payload.order_index
 
-    block = BotBlock(bot_id=bot_id, block_type=payload.block_type, content=payload.content, order_index=order_index)
+    block = BotBlock(
+        bot_id=bot_id,
+        block_type=payload.block_type,
+        content=payload.content,
+        order_index=order_index,
+        position_x=payload.position_x if payload.position_x is not None else 80.0,
+        position_y=payload.position_y if payload.position_y is not None else 80.0 + order_index * 160.0,
+    )
     db.add(block)
+
+    # The very first block a bot ever gets automatically becomes the entry
+    # point — otherwise a brand-new bot would have no start node at all
+    # until someone explicitly drags the "▶ Старт" arrow onto something.
+    if bot.start_block_id is None:
+        await db.flush()  # block.id needs to exist before we can point at it
+        bot.start_block_id = block.id
+
     await db.commit()
     await db.refresh(block)
     return block
@@ -89,10 +104,24 @@ async def update_block(
     db: AsyncSession = Depends(get_db),
 ) -> BotBlock:
     block = await _get_owned_block(bot_id, block_id, db)
+    fields = payload.model_fields_set
     if payload.content is not None:
         block.content = payload.content
     if payload.order_index is not None:
         block.order_index = payload.order_index
+    # These three use "was the field sent at all" rather than "is it not
+    # None" — dragging an arrow away or dropping a node back to (0, 0) are
+    # real edits that set the value to null/0, not omissions.
+    if "next_block_id" in fields:
+        if payload.next_block_id is not None:
+            target = await _get_owned_block(bot_id, payload.next_block_id, db)
+            if target.id == block.id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Блок не может вести сам в себя")
+        block.next_block_id = payload.next_block_id
+    if "position_x" in fields and payload.position_x is not None:
+        block.position_x = payload.position_x
+    if "position_y" in fields and payload.position_y is not None:
+        block.position_y = payload.position_y
 
     await db.commit()
     await db.refresh(block)

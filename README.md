@@ -4,8 +4,9 @@
 же React-фронтенд работает в двух режимах:
 
 - **Веб** (`https://your-domain.com/`, вход через Telegram Login Widget) —
-  основной, полноценный конструктор: шаблоны сценариев, live-превью чата,
-  редактирование сообщений прямо в пузырях, drag-and-drop порядок.
+  основной, полноценный конструктор: шаблоны сценариев, визуальный холст
+  (блоки + стрелки, ветвления по кнопкам — как в Human Resource Machine),
+  live-превью с реальными переходами по нажатой кнопке.
 - **Telegram Mini App** (открывается кнопкой у мета-бота) — лёгкий
   дашборд: список ботов, статус, публикация, просмотр содержимого. Сложное
   редактирование в Telegram WebView неудобно, поэтому там read-only превью
@@ -24,7 +25,7 @@
 - Мета-бот и клиентские боты: aiogram 3
 - Frontend: React + Vite, `window.Telegram.WebApp` (Mini App) +
   Telegram Login Widget (веб)
-- Drag-and-drop: `@dnd-kit/core` + `@dnd-kit/sortable`
+- Визуальный холст сценария: `@xyflow/react` (React Flow)
 - Деплой: Docker Compose (db + api + bot + frontend/nginx)
 
 ## Структура проекта

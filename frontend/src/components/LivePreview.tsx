@@ -1,14 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { BotBlock } from "../api/builderApi";
+import type { BotBlock, BotWithBlocks } from "../api/builderApi";
 
 interface Props {
-  blocks: BotBlock[];
+  bot: BotWithBlocks;
   botName: string;
   onClose: () => void;
 }
-
-type Step = { block: BotBlock; kind: "typing" | "pause"; waitMs: number };
 
 const CHARS_PER_SECOND = 45;
 const MIN_DELAY_MS = 500;
@@ -22,72 +20,101 @@ function typingDelayMs(text: string): number {
   return Math.max(MIN_DELAY_MS, Math.min(seconds * 1000, MAX_DELAY_MS));
 }
 
-function stepFor(block: BotBlock, isFirst: boolean): Step {
-  if (block.block_type === "delay") {
-    const seconds = Math.max(0, Math.min(Number(block.content.seconds ?? 2), 15));
-    return { block, kind: "pause", waitMs: seconds * 1000 };
-  }
-  if (isFirst) return { block, kind: "typing", waitMs: 0 };
-  const text = block.content.text || block.content.question || "";
-  return { block, kind: "typing", waitMs: typingDelayMs(text) };
+function hasBranches(block: BotBlock): boolean {
+  return block.block_type === "buttons" && (block.content.buttons ?? []).some((b) => (b.target_block_id || "").trim());
 }
 
-export function LivePreview({ blocks, botName, onClose }: Props) {
-  const steps = useRef<Step[]>(blocks.map((b, i) => stepFor(b, i === 0))).current;
+/** Walks the same graph the real bot walks (start_block_id → next_block_id,
+ * pausing at any buttons block with a configured branch) instead of just
+ * replaying the flat block list — tapping a button here actually picks the
+ * path, exactly like a real Telegram chat with this bot would. */
+export function LivePreview({ bot, botName, onClose }: Props) {
+  const blocksById = useMemo(() => new Map(bot.blocks.map((b) => [b.id, b])), [bot.blocks]);
+
   const [revealed, setRevealed] = useState<BotBlock[]>([]);
-  const [pending, setPending] = useState<Step | null>(steps[0] ?? null);
+  const [currentId, setCurrentId] = useState<string | null>(bot.start_block_id);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [done, setDone] = useState(blocks.length === 0);
+  const [showTyping, setShowTyping] = useState(false);
+  const [waitingForTap, setWaitingForTap] = useState(false);
+  const [done, setDone] = useState(!bot.start_block_id);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const skipRef = useRef(false);
+  // Same cycle guard as the backend (_walk_chain's `visited` set) — a demo
+  // shouldn't be able to spin forever on a loop with no branch point either.
+  const visitedRef = useRef<Set<string>>(new Set());
 
   function replay() {
     skipRef.current = false;
+    visitedRef.current = new Set();
     setRevealed([]);
-    setDone(blocks.length === 0);
-    setPending(steps[0] ?? null);
+    setWaitingForTap(false);
+    setDone(!bot.start_block_id);
+    setCurrentId(bot.start_block_id);
   }
 
   useEffect(() => {
-    if (!pending) return;
-    let cancelled = false;
+    if (!currentId) return;
+    if (visitedRef.current.has(currentId)) {
+      setDone(true);
+      return;
+    }
+    const block = blocksById.get(currentId);
+    if (!block) {
+      setDone(true);
+      return;
+    }
+    visitedRef.current.add(currentId);
 
-    async function run(step: Step) {
-      if (step.kind === "pause") {
-        const totalMs = step.waitMs;
+    let cancelled = false;
+    const isFirst = revealed.length === 0;
+
+    (async () => {
+      if (block.block_type === "delay") {
+        const seconds = Math.max(0, Math.min(Number(block.content.seconds ?? 2), 15));
+        const totalMs = seconds * 1000;
         const startedAt = Date.now();
         while (!cancelled && !skipRef.current && Date.now() - startedAt < totalMs) {
           setCountdown(Math.max(0, Math.ceil((totalMs - (Date.now() - startedAt)) / 1000)));
           await new Promise((r) => setTimeout(r, 200));
         }
         setCountdown(null);
-      } else if (step.waitMs > 0) {
-        await new Promise((r) => setTimeout(r, skipRef.current ? 0 : step.waitMs));
+        skipRef.current = false;
+      } else if (!isFirst) {
+        setShowTyping(true);
+        const text = block.content.text || block.content.question || "";
+        await new Promise((r) => setTimeout(r, text ? typingDelayMs(text) : MIN_DELAY_MS));
+        setShowTyping(false);
       }
       if (cancelled) return;
 
-      setRevealed((prev) => [...prev, step.block]);
-      const idx = steps.indexOf(step);
-      const next = steps[idx + 1];
-      skipRef.current = false;
-      setPending(next ?? null);
-      if (!next) setDone(true);
-    }
+      setRevealed((prev) => [...prev, block]);
 
-    run(pending);
+      if (hasBranches(block)) {
+        setWaitingForTap(true);
+      } else if (block.next_block_id) {
+        setCurrentId(block.next_block_id);
+      } else {
+        setDone(true);
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending]);
+  }, [currentId]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [revealed, countdown]);
 
-  const showTyping = pending && pending.kind === "typing" && (pending.waitMs > 0 || revealed.length > 0) && revealed.length < blocks.length && countdown === null;
-  // The avatar belongs on the last *message* — a trailing pause renders as
-  // a marker, not a bubble, so it shouldn't steal that spot.
+  function handlePick(block: BotBlock, index: number) {
+    const target = (block.content.buttons?.[index]?.target_block_id || "").trim();
+    if (!target) return; // this button isn't wired to anything — real bot just re-answers the tap and stays put
+    setWaitingForTap(false);
+    setCurrentId(target);
+  }
+
   const lastBubbleIndex = (() => {
     for (let i = revealed.length - 1; i >= 0; i--) {
       if (revealed[i].block_type !== "delay") return i;
@@ -108,7 +135,13 @@ export function LivePreview({ blocks, botName, onClose }: Props) {
 
         <div className="live-preview__body chat-canvas" ref={scrollRef}>
           {revealed.map((block, i) => (
-            <PreviewBlock key={block.id} block={block} isLast={i === lastBubbleIndex && !showTyping} />
+            <PreviewBlock
+              key={`${block.id}-${i}`}
+              block={block}
+              isLast={i === lastBubbleIndex && !showTyping}
+              interactive={i === revealed.length - 1 && waitingForTap}
+              onPick={(index) => handlePick(block, index)}
+            />
           ))}
 
           {countdown !== null && <div className="block-preview__caption live-preview__pause">⏱ Пауза — ещё {countdown} сек…</div>}
@@ -131,7 +164,9 @@ export function LivePreview({ blocks, botName, onClose }: Props) {
           )}
 
           {revealed.length === 0 && !showTyping && countdown === null && (
-            <p className="app-hint">Тут пока пусто — добавь первое сообщение, чтобы увидеть предпросмотр.</p>
+            <p className="app-hint">
+              {bot.start_block_id ? "Тут пока пусто…" : "У бота ещё нет стартового блока — потяни стрелку от «▶ Старт» к первому сообщению."}
+            </p>
           )}
         </div>
 
@@ -140,6 +175,8 @@ export function LivePreview({ blocks, botName, onClose }: Props) {
             <button type="button" className="publish-button" onClick={replay}>
               🔁 Смотреть заново
             </button>
+          ) : waitingForTap ? (
+            <p className="live-preview__hint">👆 Нажми на кнопку выше, чтобы продолжить</p>
           ) : (
             <button
               type="button"
@@ -157,7 +194,17 @@ export function LivePreview({ blocks, botName, onClose }: Props) {
   );
 }
 
-function PreviewBlock({ block, isLast }: { block: BotBlock; isLast: boolean }) {
+function PreviewBlock({
+  block,
+  isLast,
+  interactive,
+  onPick,
+}: {
+  block: BotBlock;
+  isLast: boolean;
+  interactive: boolean;
+  onPick: (index: number) => void;
+}) {
   const { content } = block;
 
   // No message of its own — mirrors how it renders in the editor canvas.
@@ -192,11 +239,17 @@ function PreviewBlock({ block, isLast }: { block: BotBlock; isLast: boolean }) {
             {(content.buttons ?? []).length > 0 && (
               <div className="chat-buttons">
                 <div className="chat-buttons__preview">
-                  {content.buttons!.map((btn, i) => (
-                    <span key={i} className="chat-buttons__pill">
-                      {btn.label || "…"}
-                    </span>
-                  ))}
+                  {content.buttons!.map((btn, i) =>
+                    interactive ? (
+                      <button key={i} type="button" className="chat-buttons__pill chat-buttons__pill--tappable" onClick={() => onPick(i)}>
+                        {btn.label || "…"}
+                      </button>
+                    ) : (
+                      <span key={i} className="chat-buttons__pill">
+                        {btn.label || "…"}
+                      </span>
+                    ),
+                  )}
                 </div>
               </div>
             )}
