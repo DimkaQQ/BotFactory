@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { type Bot, ApiError, builderApi } from "../api/builderApi";
 import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
 import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
-import { BOT_TEMPLATES } from "../templates";
+import { BOT_TEMPLATES, blocksLabel } from "../templates";
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
@@ -164,13 +164,56 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3, ease: EASE_OUT }}
               >
-                <div className="block-list__empty-icon">🏭</div>
-                <p className="block-list__empty-title">Ещё нет ни одного бота</p>
-                <p className="block-list__empty-hint">
-                  {isMiniApp
-                    ? "Собери первого на компьютере — там удобный конструктор"
-                    : "Начни с готового сценария — это займёт пару минут"}
-                </p>
+                {/* Points at the header's "+ Новый бот" — the one control on
+                    an otherwise empty screen, and the one thing a first-time
+                    visitor has to find. Desktop only: below 960px that button
+                    is hidden and the footer button takes over. */}
+                {!isMiniApp && (
+                  <div className="empty-arrow" aria-hidden="true">
+                    <span className="empty-arrow__label">или сюда</span>
+                    <svg viewBox="0 0 160 132" fill="none">
+                      <path
+                        d="M8 126C44 118 104 104 124 30"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeDasharray="7 9"
+                      />
+                      <path d="M109 49L124 26L139 50" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                )}
+
+                <div className="empty-state">
+                  <div className="empty-state__icon" aria-hidden="true">
+                    🏭
+                  </div>
+                  <p className="empty-state__title">Здесь появятся твои боты</p>
+                  <p className="empty-state__hint">
+                    {isMiniApp
+                      ? "Собери первого на компьютере — там визуальный холст с блоками и стрелками"
+                      : "Возьми готовый сценарий: блоки уже расставлены и связаны — останется вписать свой текст"}
+                  </p>
+
+                  {!isMiniApp && (
+                    <>
+                      <button type="button" className="empty-state__cta" onClick={handleCreateClick}>
+                        ✨ Собрать первого бота
+                      </button>
+                      <ol className="empty-state__steps">
+                        <li>
+                          <span>1</span> Выбери сценарий
+                        </li>
+                        <li>
+                          <span>2</span> Правь блоки на холсте
+                        </li>
+                        <li>
+                          <span>3</span> Вставь токен — готово
+                        </li>
+                      </ol>
+                    </>
+                  )}
+                </div>
               </motion.div>
             )}
             {bots.map((bot, index) => (
@@ -228,15 +271,31 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
       {pickerOpen && (
         <>
           <div className="sheet-backdrop" onClick={() => !creatingTemplateId && setPickerOpen(false)} />
-          <div className="sheet" ref={sheetRef}>
+          <div className="sheet sheet--picker" ref={sheetRef}>
             <div className="sheet__handle" {...handleProps} />
-            <p className="sheet__title">С чего начнём?</p>
+            <div className="sheet__head">
+              <div className="sheet__head-text">
+                <p className="sheet__title">С чего начнём?</p>
+                <p className="sheet__subtitle">
+                  Шаблон — это готовый сценарий: блоки уже расставлены и связаны стрелками. Любой можно
+                  переписать под себя.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="sheet__close"
+                aria-label="Закрыть"
+                onClick={() => !creatingTemplateId && setPickerOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
             <div className="template-list">
               {BOT_TEMPLATES.map((template) => (
                 <button
                   key={template.id}
                   type="button"
-                  className="template-card"
+                  className={`template-card template-card--${template.accent}`}
                   onClick={() => handlePickTemplate(template.id)}
                   disabled={creatingTemplateId !== null}
                 >
@@ -246,8 +305,17 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
                   <span className="template-card__text">
                     <span className="template-card__label">{template.label}</span>
                     <span className="template-card__pitch">{template.pitch}</span>
+                    <span className="template-card__badge">
+                      {template.blocks.length > 0 ? blocksLabel(template.blocks.length) : "чистый холст"}
+                    </span>
                   </span>
-                  {creatingTemplateId === template.id && <span className="template-card__spinner" aria-hidden="true" />}
+                  {creatingTemplateId === template.id ? (
+                    <span className="template-card__spinner" aria-hidden="true" />
+                  ) : (
+                    <span className="template-card__go" aria-hidden="true">
+                      →
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

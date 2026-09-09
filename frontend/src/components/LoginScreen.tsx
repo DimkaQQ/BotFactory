@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { type BlockType, type TelegramLoginPayload, ApiError, builderApi, configureSessionAuth } from "../api/builderApi";
 import { BLOCK_TYPES } from "../blockTypes";
-import { BOT_TEMPLATES } from "../templates";
+import { BOT_TEMPLATES, blocksLabel } from "../templates";
 import { HeroMockup } from "./HeroMockup";
+import { LandingDemo } from "./LandingDemo";
 
 interface Props {
   onLoggedIn: () => void;
@@ -197,14 +198,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
           </p>
         </div>
         <div className="landing-callout__demo">
-          <span className="block-preview__dots block-preview__dots--solo landing-callout__dots">
-            <span />
-            <span />
-            <span />
-          </span>
-          <div className="chat-bubble landing-callout__bubble">
-            <p className="chat-bubble__text">Отлично! Первый материал уже готовится 👀</p>
-          </div>
+          <LandingDemo />
         </div>
       </section>
 
@@ -213,16 +207,22 @@ export function LoginScreen({ onLoggedIn }: Props) {
         <div className="landing-section__head">
           <p className="landing-section__eyebrow">Готовые сценарии</p>
           <h2 className="landing-section__title">Не с чистого листа — с рабочей заготовки</h2>
+          <p className="landing-section__lead">
+            Выбираешь шаблон — блоки уже расставлены и связаны стрелками. Остаётся вписать свой текст и
+            опубликовать.
+          </p>
         </div>
         <div className="landing-templates">
           {BOT_TEMPLATES.filter((t) => t.id !== "blank").map((template) => (
-            <div key={template.id} className="landing-template-card">
+            <div key={template.id} className={`landing-template-card landing-template-card--${template.accent}`}>
               <span className="landing-template-card__icon" aria-hidden="true">
                 {template.icon}
               </span>
-              <span className="landing-template-card__text-group">
-                <p className="landing-template-card__title">{template.label}</p>
-                <p className="landing-template-card__text">{template.pitch}</p>
+              <p className="landing-template-card__title">{template.label}</p>
+              <p className="landing-template-card__text">{template.pitch}</p>
+              <span className="landing-template-card__meta">
+                <span className="landing-template-card__count">{blocksLabel(template.blocks.length)}</span>
+                готово к правкам
               </span>
             </div>
           ))}

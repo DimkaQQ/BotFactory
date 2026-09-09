@@ -5,13 +5,26 @@ export interface BotTemplate {
   icon: string;
   label: string;
   pitch: string;
+  /** Which --accent-* colour the card is tinted with (same palette as the
+   * block types — see index.css), so a template is recognisable by colour
+   * and not just by emoji. */
+  accent: string;
   suggestedName: string;
   blocks: { block_type: BlockType; content: BlockContent }[];
+}
+
+/** "5 блоков" / "1 блок" / "3 блока" — Russian plural agreement, used on
+ * both the landing's template cards and the in-app picker. */
+export function blocksLabel(count: number): string {
+  if (count % 10 === 1 && count % 100 !== 11) return `${count} блок`;
+  if ([2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)) return `${count} блока`;
+  return `${count} блоков`;
 }
 
 export const BOT_TEMPLATES: BotTemplate[] = [
   {
     id: "one-time-product",
+    accent: "delivery",
     icon: "📦",
     label: "Разовый продукт",
     pitch: "Гайд, курс, файл, путеводитель — купил один раз и получил",
@@ -35,6 +48,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
   },
   {
     id: "subscription",
+    accent: "buttons",
     icon: "🔔",
     label: "Платная подписка",
     pitch: "Новый видос/техника каждую неделю для подписчиков — тренер, коуч, канал",
@@ -54,6 +68,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
   },
   {
     id: "one-on-one",
+    accent: "poll",
     icon: "📅",
     label: "Запись на сессию",
     pitch: "Консультация, коучинг, разбор один-на-один",
@@ -72,6 +87,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
   },
   {
     id: "promo-broadcast",
+    accent: "image",
     icon: "🎉",
     label: "Акции и новости",
     pitch: "Кафе, магазин, шоурум — держи подписчиков в курсе скидок",
@@ -91,6 +107,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
   },
   {
     id: "blank",
+    accent: "delay",
     icon: "⬜",
     label: "С нуля",
     pitch: "Пустой бот — соберёшь сам из блоков",

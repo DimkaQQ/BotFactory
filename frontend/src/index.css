@@ -100,6 +100,43 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Scrollbars in the app's own palette — the OS default is a hard grey bar
+   that reads as a foreign object on these off-white surfaces.
+   Both syntaxes on purpose: current Chrome/Firefox honour the standard
+   scrollbar-width/-color pair (and ignore the ::-webkit-* rules once
+   scrollbar-width is set), older WebKit only understands the pseudo-
+   elements. The thumb there is drawn with a transparent border +
+   background-clip so it sits inset instead of glued to the edge. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--tg-text) 22%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--tg-text) 18%, transparent);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--tg-text) 32%, transparent);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 html {
   height: 100%;
   scroll-behavior: smooth;
