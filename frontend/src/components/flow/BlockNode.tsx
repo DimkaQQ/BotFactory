@@ -23,6 +23,10 @@ function preview(block: BotBlock): string {
       return c.text?.trim() || (c.media_file_id ? "Без подписи" : "Ссылка не добавлена");
     case "buttons":
       return c.text?.trim() || "Текст перед кнопками";
+    case "payment":
+      return c.price?.trim()
+        ? `💳 ${c.title?.trim() || "Оплата"} — ${c.price} ${c.currency || "KZT"}`
+        : "Цена не указана";
     default:
       return c.text?.trim() || "Пусто — нажми, чтобы написать";
   }
@@ -46,11 +50,14 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
   const hasBranch = buttons.some((b) => (b.target_block_id || "").trim());
   const isEmpty = isButtons
     ? !buttons.some((b) => b.label.trim() || b.action_value.trim()) && !block.content.text?.trim()
-    : block.block_type === "poll"
+    : block.block_type === "payment"
+      ? !block.content.price?.trim()
+      : block.block_type === "poll"
       ? !block.content.question?.trim() || (block.content.options ?? []).filter((o) => o.trim()).length < 2
       : block.block_type === "delay"
         ? false
         : !block.content.text?.trim() && !block.content.media_file_id;
+  const isPayment = block.block_type === "payment";
 
   return (
     <div className={`flow-node ${selected ? "flow-node--selected" : ""}`} onClick={() => onEdit(id)}>
@@ -135,10 +142,12 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
           title={
             isButtons && hasBranch
               ? "У кнопок есть ветки — бот остановится и будет ждать нажатия. Эта стрелка сработает, только если убрать все ветки."
-              : "Потяни отсюда к блоку, который придёт следующим"
+              : isPayment
+                ? "Сюда — то, что клиент получит после оплаты (обычно блок «Выдача»)"
+                : "Потяни отсюда к блоку, который придёт следующим"
           }
         >
-          {isButtons && hasBranch ? "ждёт нажатия" : "дальше"}
+          {isButtons && hasBranch ? "ждёт нажатия" : isPayment ? "после оплаты" : "дальше"}
         </span>
         <Handle type="source" position={Position.Bottom} id="default" className="flow-node__handle flow-node__handle--default" />
       </div>

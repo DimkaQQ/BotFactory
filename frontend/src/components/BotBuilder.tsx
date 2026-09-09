@@ -1,10 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { type BlockType, type BotBlock, type BotWithBlocks, ApiError, builderApi } from "../api/builderApi";
+import {
+  type BlockType,
+  type BotBlock,
+  type BotWithBlocks,
+  type PaymentProviderInfo,
+  type PaymentSettings,
+  type PublicationInfo,
+  ApiError,
+  builderApi,
+} from "../api/builderApi";
 import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
 import { BLOCK_TYPE_BY_ID } from "../blockTypes";
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { LivePreview } from "./LivePreview";
+import { PaymentSettingsPanel } from "./PaymentSettingsPanel";
+import { PublishPaywall } from "./PublishPaywall";
 import { PublishButton } from "./PublishButton";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -27,6 +38,10 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [paymentPanelOpen, setPaymentPanelOpen] = useState(false);
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
+  const [paymentProviders, setPaymentProviders] = useState<PaymentProviderInfo[]>([]);
+  const [publication, setPublication] = useState<PublicationInfo | null>(null);
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const nameTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -56,6 +71,24 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       } catch (err) {
         setLoadError(err instanceof ApiError ? err.message : "Не удалось загрузить бота");
         setLoadState("error");
+      }
+    })();
+
+    // Payment setup and the publication paywall are secondary — a failure
+    // here leaves the constructor perfectly usable, so it never touches
+    // loadState.
+    (async () => {
+      try {
+        const [providers, settings, publicationInfo] = await Promise.all([
+          builderApi.listPaymentProviders(),
+          builderApi.getPaymentSettings(botId),
+          builderApi.getPublicationInfo(botId),
+        ]);
+        setPaymentProviders(providers.providers);
+        setPaymentSettings(settings);
+        setPublication(publicationInfo);
+      } catch {
+        // leaves payments unconfigured in the UI; nothing else breaks
       }
     })();
   }, [botId]);
@@ -314,6 +347,16 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               )}
             </p>
           </div>
+          {!isMiniApp && (
+            <button
+              type="button"
+              className={`bot-payments-button ${paymentSettings?.provider ? "bot-payments-button--on" : ""}`}
+              onClick={() => setPaymentPanelOpen(true)}
+              title="Приём оплаты в этом боте"
+            >
+              💳 {paymentSettings?.provider ? "Оплата подключена" : "Оплата"}
+            </button>
+          )}
           <button type="button" className="bot-delete-button" onClick={handleDeleteBot} disabled={deleting} aria-label="Удалить бота">
             🗑
           </button>
@@ -363,12 +406,23 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         onSetNext={handleSetNext}
         onSetStart={handleSetStart}
         onSetPosition={handleSetPosition}
+        paymentProvider={paymentSettings?.provider ?? null}
+        paymentCurrencies={paymentProviders.find((p) => p.slug === paymentSettings?.provider)?.currencies ?? []}
+        onOpenPaymentSettings={() => setPaymentPanelOpen(true)}
         disabled={isMiniApp}
       />
 
       {bot.status === "draft" && (
         <div className="app-footer">
-          <PublishButton onPublish={handlePublish} disabled={bot.blocks.length === 0} />
+          {publication?.required && !publication.paid ? (
+            <PublishPaywall
+              botId={bot.id}
+              info={publication}
+              onPaid={() => setPublication((prev) => (prev ? { ...prev, paid: true } : prev))}
+            />
+          ) : (
+            <PublishButton onPublish={handlePublish} disabled={bot.blocks.length === 0} />
+          )}
         </div>
       )}
 
@@ -383,6 +437,14 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             Открыть @{bot.telegram_bot_username} →
           </a>
         </div>
+      )}
+
+      {paymentPanelOpen && (
+        <PaymentSettingsPanel
+          botId={bot.id}
+          onClose={() => setPaymentPanelOpen(false)}
+          onSaved={(settings) => setPaymentSettings(settings)}
+        />
       )}
 
       {previewOpen && <LivePreview bot={bot} botName={bot.name || bot.telegram_bot_username || ""} onClose={() => setPreviewOpen(false)} />}

@@ -19,6 +19,7 @@ class BlockType(str, enum.Enum):
     poll = "poll"
     delivery = "delivery"
     delay = "delay"
+    payment = "payment"
 
 
 class BotBlock(Base):

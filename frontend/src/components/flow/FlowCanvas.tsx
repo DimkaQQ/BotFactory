@@ -25,6 +25,9 @@ interface Props {
   onSetNext: (blockId: string, nextBlockId: string | null) => void;
   onSetStart: (blockId: string | null) => void;
   onSetPosition: (blockId: string, x: number, y: number) => void;
+  paymentProvider: string | null;
+  paymentCurrencies: string[];
+  onOpenPaymentSettings: () => void;
   disabled?: boolean;
 }
 
@@ -55,7 +58,19 @@ export function FlowCanvas(props: Props) {
   );
 }
 
-function Inner({ bot, onChangeContent, onDelete, onAdd, onSetNext, onSetStart, onSetPosition, disabled }: Props) {
+function Inner({
+  bot,
+  onChangeContent,
+  onDelete,
+  onAdd,
+  onSetNext,
+  onSetStart,
+  onSetPosition,
+  paymentProvider,
+  paymentCurrencies,
+  onOpenPaymentSettings,
+  disabled,
+}: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -300,6 +315,9 @@ function Inner({ bot, onChangeContent, onDelete, onAdd, onSetNext, onSetStart, o
           block={editingBlock}
           botId={bot.id}
           blocks={bot.blocks}
+          paymentProvider={paymentProvider}
+          paymentCurrencies={paymentCurrencies}
+          onOpenPaymentSettings={onOpenPaymentSettings}
           onChange={(content) => onChangeContent(editingBlock.id, content)}
           onDelete={() => handleDelete(editingBlock.id)}
           onClose={() => setEditingId(null)}

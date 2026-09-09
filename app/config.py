@@ -46,6 +46,20 @@ class Settings(BaseSettings):
     # (still on every media block) is for.
     media_max_upload_mb: int = 20
 
+    # ---- Платформа: платная публикация бота ----
+    # Which provider *we* charge through (see app/services/payments).
+    platform_payment_provider: str = "test"
+    # That provider's credentials as JSON, e.g.
+    # {"secret_key": "sk_live_…", "webhook_secret": "whsec_…"} — one variable
+    # instead of a field per provider, since each wants a different set.
+    platform_payment_credentials: str = ""
+    platform_payment_is_test: bool = True
+    # Price of publishing one bot, in minor units (kopeks/tiyn/cents).
+    # 0 disables the paywall entirely — publishing stays free until a price
+    # is actually configured, so a fresh deployment is never locked.
+    publication_price_minor: int = 0
+    publication_currency: str = "KZT"
+
     @property
     def webapp_url(self) -> str:
         # Same app the web version lives at — the Mini App just opens it and

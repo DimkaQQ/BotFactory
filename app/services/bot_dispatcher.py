@@ -13,6 +13,10 @@ with no branches configured behaves exactly like every other block (sent,
 then straight through to next_block_id) — that's what makes this backward
 compatible with every bot built before branching existed (see migration
 0003, which backfills next_block_id from the old order_index sequence).
+
+A "payment" block halts the walk the same way: it sends a checkout link
+and stops, and the chain resumes from its next_block_id only once the
+payment provider confirms the money (payment_service.resume_after_payment).
 """
 
 from __future__ import annotations
@@ -100,6 +104,44 @@ def _build_keyboard(block_id: uuid.UUID, content: dict) -> InlineKeyboardMarkup 
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
 
 
+async def _send_payment_block(
+    bot: Bot, chat_id: int, block: BotBlock, bot_id: uuid.UUID, db: AsyncSession, telegram_user_id: int | None
+) -> bool:
+    """Send the invoice message for a payment block.
+
+    Returns True if the chain should halt here — which it does whenever a
+    payment was actually offered, because what comes next is the delivery,
+    and that is owed only once the money lands (payment_service resumes the
+    walk from the provider's callback).
+    """
+    from app.services import payment_service  # local import: avoids a cycle
+
+    content = block.content or {}
+    result = await db.execute(select(BotModel).where(BotModel.id == bot_id))
+    bot_row = result.scalar_one_or_none()
+    if bot_row is None:
+        return False
+
+    text = (content.get("text") or content.get("title") or "").strip()
+    try:
+        payment, url = await payment_service.create_order_payment(
+            db, bot=bot_row, block=block, chat_id=chat_id, telegram_user_id=telegram_user_id
+        )
+    except Exception:
+        # A misconfigured payment block must not swallow the rest of the
+        # dialogue: say the message it carries and walk on, rather than
+        # leaving the customer staring at silence.
+        logger.exception("Could not create a payment for block %s (bot %s)", block.id, bot_id)
+        if text:
+            await bot.send_message(chat_id, text)
+        return False
+
+    label = (content.get("button_label") or "").strip() or f"Оплатить {payment.amount_minor // 100} {payment.currency}"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=label[:64], url=url)]])
+    await bot.send_message(chat_id, text or "Оплата", reply_markup=keyboard)
+    return True
+
+
 async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
     content = block.content or {}
 
@@ -131,7 +173,14 @@ async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
         await bot.send_message(chat_id, text or "…", reply_markup=keyboard)
 
 
-async def _walk_chain(bot: Bot, chat_id: int, start_block_id: uuid.UUID, bot_id: uuid.UUID, db: AsyncSession) -> None:
+async def _walk_chain(
+    bot: Bot,
+    chat_id: int,
+    start_block_id: uuid.UUID,
+    bot_id: uuid.UUID,
+    db: AsyncSession,
+    telegram_user_id: int | None = None,
+) -> None:
     """Send `start_block_id` and keep following next_block_id, pausing for
     typing/delay between steps, until the chain ends or hits a branch
     point (a buttons block with at least one connected button)."""
@@ -163,7 +212,15 @@ async def _walk_chain(bot: Bot, chat_id: int, start_block_id: uuid.UUID, bot_id:
             return  # dangling/removed target — nothing left to do
 
         try:
-            if block.block_type == BlockType.delay:
+            if block.block_type == BlockType.payment:
+                if not first:
+                    await bot.send_chat_action(chat_id, "typing")
+                    await asyncio.sleep(_TYPING_DELAY_MIN)
+                if await _send_payment_block(bot, chat_id, block, bot_id, db, telegram_user_id):
+                    # Paid delivery waits for the provider's callback — see
+                    # payment_service.resume_after_payment.
+                    return
+            elif block.block_type == BlockType.delay:
                 # A bare pause — no message of its own, just stretches the
                 # gap before the next block. Clamped defensively: the
                 # webhook request stays open for this long, and both
@@ -234,7 +291,8 @@ async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UU
     except ValueError:
         return
 
-    await _walk_chain(bot, chat_id, target_id, bot_id, db)
+    tapped_by = (callback_query.get("from") or {}).get("id")
+    await _walk_chain(bot, chat_id, target_id, bot_id, db, telegram_user_id=tapped_by)
 
 
 async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
@@ -249,6 +307,7 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
 
     chat_id = message.get("chat", {}).get("id")
     text = message.get("text", "") or ""
+    sender_id = (message.get("from") or {}).get("id")
     if chat_id is None:
         return
 
@@ -262,4 +321,4 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
         await bot.send_message(chat_id, "Этот бот пока пуст 🤷")
         return
 
-    await _walk_chain(bot, chat_id, start_block_id, bot_id, db)
+    await _walk_chain(bot, chat_id, start_block_id, bot_id, db, telegram_user_id=sender_id)

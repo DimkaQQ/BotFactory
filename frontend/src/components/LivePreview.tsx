@@ -207,6 +207,26 @@ function PreviewBlock({
 }) {
   const { content } = block;
 
+  if (block.block_type === "payment") {
+    const label = content.button_label?.trim() || `Оплатить ${content.price || "…"} ${content.currency || ""}`.trim();
+    return (
+      <div className="chat-row">
+        <div className="chat-row__avatar">{isLast && <span className="chat-avatar">🤖</span>}</div>
+        <div className="chat-row__content">
+          <div className="chat-bubble">
+            {content.text && <p className="chat-bubble__text">{content.text}</p>}
+            <div className="chat-buttons">
+              <div className="chat-buttons__preview">
+                <span className="chat-buttons__pill">💳 {label}</span>
+              </div>
+            </div>
+          </div>
+          <p className="live-preview__pause-marker">в боте здесь откроется страница оплаты</p>
+        </div>
+      </div>
+    );
+  }
+
   // No message of its own — mirrors how it renders in the editor canvas.
   if (block.block_type === "delay") {
     return <p className="live-preview__pause-marker">⏱ пауза {content.seconds ?? 2} сек — бот немного помолчал</p>;

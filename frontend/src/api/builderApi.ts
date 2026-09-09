@@ -1,4 +1,13 @@
-export type BlockType = "welcome" | "description" | "image" | "video" | "buttons" | "poll" | "delivery" | "delay";
+export type BlockType =
+  | "welcome"
+  | "description"
+  | "image"
+  | "video"
+  | "buttons"
+  | "poll"
+  | "delivery"
+  | "payment"
+  | "delay";
 
 export interface ButtonAction {
   label: string;
@@ -18,6 +27,13 @@ export interface BlockContent {
   options?: string[];
   anonymous?: boolean;
   seconds?: number;
+  /** Payment block: what is being sold, for how much, and what the pay
+   * button says. `price` is kept as typed ("990", "990.50") — the backend
+   * parses it into minor units. */
+  title?: string;
+  price?: string;
+  currency?: string;
+  button_label?: string;
 }
 
 export interface BotBlock {
@@ -226,6 +242,71 @@ export const builderApi = {
       method: "PATCH",
       body: JSON.stringify({ items }),
     }),
+
+  // ---- Payments ----
+  listPaymentProviders: () => request<{ providers: PaymentProviderInfo[] }>("/payments/providers"),
+  getPaymentSettings: (botId: string) => request<PaymentSettings>(`/bots/${botId}/payment-settings`),
+  savePaymentSettings: (botId: string, payload: { provider: string | null; is_test: boolean; credentials?: Record<string, string> }) =>
+    request<PaymentSettings>(`/bots/${botId}/payment-settings`, { method: "PUT", body: JSON.stringify(payload) }),
+
+  getPublicationInfo: (botId: string) => request<PublicationInfo>(`/bots/${botId}/publication`),
+  startPublicationCheckout: (botId: string) =>
+    request<PaymentInfo>(`/bots/${botId}/publication-checkout`, { method: "POST" }),
+  getPayment: (paymentId: string) => request<PaymentInfo>(`/payments/${paymentId}`),
+  listOrders: (botId: string) =>
+    request<{ orders: Order[]; paid_count: number; paid_total_minor: number }>(`/bots/${botId}/orders`),
 };
+
+export interface PaymentProviderInfo {
+  slug: string;
+  title: string;
+  hint: string;
+  currencies: string[];
+  fields: { key: string; label: string; hint: string; secret: boolean }[];
+}
+
+export interface PaymentSettings {
+  provider: string | null;
+  is_test: boolean;
+  /** Which credential fields already have a stored value — the values
+   * themselves never leave the server. */
+  filled_fields: string[];
+  callback_url: string | null;
+}
+
+export interface PaymentInfo {
+  id: string;
+  status: "pending" | "paid" | "failed" | "refunded";
+  amount_minor: number;
+  currency: string;
+  checkout_url: string | null;
+}
+
+export interface PublicationInfo {
+  required: boolean;
+  paid: boolean;
+  price_minor: number;
+  currency: string;
+}
+
+export interface Order {
+  id: string;
+  invoice_no: number;
+  status: "pending" | "paid" | "failed" | "refunded";
+  amount_minor: number;
+  currency: string;
+  description: string;
+  telegram_user_id: number | null;
+  created_at: string;
+  paid_at: string | null;
+}
+
+/** 99000 -> "990" / 99050 -> "990.50" — prices are shown the way they were
+ * entered, without a trailing ".00" nobody typed. */
+export function formatAmount(amountMinor: number): string {
+  const whole = Math.floor(amountMinor / 100);
+  const frac = amountMinor % 100;
+  return frac === 0 ? String(whole) : `${whole}.${String(frac).padStart(2, "0")}`;
+}
 
 export { ApiError };

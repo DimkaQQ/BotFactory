@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import get_settings
 from app.database import get_db
 from app.deps import get_current_client
 from app.models.bot import Bot, BotStatus
@@ -127,6 +128,16 @@ async def publish_bot(
 
     if bot.status != BotStatus.draft:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Бот уже опубликован")
+
+    # Building a bot is free; putting it on the air is what's paid for.
+    # A price of 0 (the default) leaves publishing open — the paywall only
+    # exists once one is configured.
+    settings = get_settings()
+    if settings.publication_price_minor > 0 and bot.publication_paid_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Публикация бота не оплачена",
+        )
 
     try:
         me = await validate_bot_token(payload.token)

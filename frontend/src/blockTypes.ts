@@ -70,6 +70,14 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     defaultContent: () => ({ text: "" }),
   },
   {
+    type: "payment",
+    label: "Оплата",
+    icon: "💳",
+    accent: "success",
+    hint: "Кнопка оплаты — выдача после платежа",
+    defaultContent: () => ({ text: "", title: "", price: "", currency: "KZT", button_label: "" }),
+  },
+  {
     type: "delay",
     label: "Пауза",
     icon: "⏱",

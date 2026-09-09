@@ -3941,3 +3941,232 @@
   font-size: 13px;
   color: var(--text-secondary);
 }
+
+/* =========================================================================
+   Payments — the payment block's editor, the per-bot provider settings,
+   and the publication paywall.
+   ========================================================================= */
+
+.payment-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.payment-editor__warning {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1.5px solid color-mix(in srgb, var(--accent-buttons) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-buttons) 10%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.payment-editor__input {
+  width: 100%;
+  padding: 8px var(--sp-2);
+  border-radius: 8px;
+  border: 1.5px solid var(--tg-separator);
+  /* 16px — below that iOS Safari auto-zooms the page on focus. */
+  font-size: 16px;
+  background: var(--tg-secondary-bg);
+  color: var(--text-primary);
+}
+
+.payment-editor__input:focus {
+  outline: none;
+  border-color: var(--tg-button);
+}
+
+.payment-editor__row {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.payment-editor__price {
+  flex: 1 1 auto;
+}
+
+.payment-editor__currency {
+  flex: 0 0 110px;
+}
+
+.payment-editor__note {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--tg-secondary-bg);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+/* ---- Provider settings ---- */
+
+.payment-settings__lead {
+  margin: 0 0 var(--sp-3);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+
+.payment-settings__providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.payment-settings__provider {
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--tg-separator);
+  background: var(--tg-bg);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-smooth), background var(--dur-fast) var(--ease-smooth);
+}
+
+.payment-settings__provider--active {
+  border-color: var(--tg-button);
+  background: color-mix(in srgb, var(--tg-button) 10%, var(--tg-bg));
+  color: var(--tg-link);
+}
+
+.payment-settings__hint {
+  margin: var(--sp-3) 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+
+.payment-settings__filled {
+  color: var(--accent-success);
+  font-weight: 700;
+}
+
+.payment-settings__test {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: var(--sp-3) 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.payment-settings__test input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+/* The address that has to be pasted into the provider's dashboard —
+   selectable, wrapping, and visually a value rather than prose. */
+.payment-settings__callback {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: var(--sp-3);
+}
+
+.payment-settings__callback code {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--tg-secondary-bg);
+  font-size: 11.5px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.payment-settings__save {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.payment-settings__save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ---- Header button ---- */
+
+.bot-payments-button {
+  flex-shrink: 0;
+  padding: 9px 14px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--tg-separator);
+  background: var(--tg-bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bot-payments-button--on {
+  border-color: color-mix(in srgb, var(--accent-success) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-success) 10%, transparent);
+  color: var(--accent-success);
+}
+
+/* ---- Publication paywall ---- */
+
+.paywall {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-radius: var(--radius-lg);
+  border: 1.5px dashed color-mix(in srgb, var(--tg-button) 30%, var(--tg-separator));
+  background: var(--tg-bg);
+}
+
+.paywall__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+
+.paywall__icon {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.paywall__title {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.paywall__hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+
+.paywall__waiting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--tg-secondary-bg);
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+}

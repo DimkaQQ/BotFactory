@@ -2,6 +2,7 @@ import type { BotBlock } from "../../api/builderApi";
 import { BLOCK_TYPE_BY_ID } from "../../blockTypes";
 import { ButtonsEditor } from "../ButtonsEditor";
 import { MediaEditor } from "../MediaEditor";
+import { PaymentEditor } from "../PaymentEditor";
 import { PollEditor } from "../PollEditor";
 
 const PLACEHOLDER: Record<BotBlock["block_type"], string> = {
@@ -12,6 +13,7 @@ const PLACEHOLDER: Record<BotBlock["block_type"], string> = {
   buttons: "Текст перед кнопками (необязательно)",
   poll: "О чём спросим?",
   delivery: "Вот твой файл / ссылка / инструкция",
+  payment: "",
   delay: "",
 };
 
@@ -26,18 +28,33 @@ interface Props {
   onChange: (content: BotBlock["content"]) => void;
   onDelete: () => void;
   onClose: () => void;
+  /** Payment blocks need to know whether the bot can actually take money. */
+  paymentProvider: string | null;
+  paymentCurrencies: string[];
+  onOpenPaymentSettings: () => void;
 }
 
 /** The block's full editor, opened on the side (desktop) / as a bottom sheet
  * (mobile) when its node is clicked on the flow canvas — this is where
  * MediaEditor/PollEditor/ButtonsEditor now live, having moved out of the old
  * inline chat-bubble editor they were built for. */
-export function BlockEditPanel({ block, botId, blocks, onChange, onDelete, onClose }: Props) {
+export function BlockEditPanel({
+  block,
+  botId,
+  blocks,
+  onChange,
+  onDelete,
+  onClose,
+  paymentProvider,
+  paymentCurrencies,
+  onOpenPaymentSettings,
+}: Props) {
   const def = BLOCK_TYPE_BY_ID[block.block_type];
   const isMediaBlock = block.block_type === "image" || block.block_type === "video";
   const isPollBlock = block.block_type === "poll";
   const isButtonsBlock = block.block_type === "buttons";
   const isDelayBlock = block.block_type === "delay";
+  const isPaymentBlock = block.block_type === "payment";
   const seconds = Math.max(0, Math.min(Number(block.content.seconds ?? 2), 15));
 
   return (
@@ -71,6 +88,14 @@ export function BlockEditPanel({ block, botId, blocks, onChange, onDelete, onClo
                 </button>
               ))}
             </div>
+          ) : isPaymentBlock ? (
+            <PaymentEditor
+              content={block.content}
+              provider={paymentProvider}
+              currencies={paymentCurrencies}
+              onChange={onChange}
+              onOpenSettings={onOpenPaymentSettings}
+            />
           ) : isMediaBlock ? (
             <MediaEditor kind={block.block_type as "image" | "video"} botId={botId} content={block.content} onChange={onChange} />
           ) : isPollBlock ? (
