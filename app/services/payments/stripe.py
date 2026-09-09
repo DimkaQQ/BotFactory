@@ -18,6 +18,7 @@ import httpx
 
 from app.models.payment import PaymentStatus
 from app.services.payments.base import (
+    Checkout,
     CheckoutRequest,
     CredentialField,
     PaymentRef,
@@ -44,7 +45,7 @@ class StripeProvider:
         CredentialField("webhook_secret", "Webhook signing secret", "whsec_… из настроек вебхука"),
     )
 
-    async def create_checkout(self, request: CheckoutRequest) -> str:
+    async def create_checkout(self, request: CheckoutRequest) -> Checkout:
         secret_key = (request.credentials.get("secret_key") or "").strip()
         if not secret_key:
             raise ProviderError("Stripe: не заполнен secret key")
@@ -71,10 +72,11 @@ class StripeProvider:
             detail = response.json().get("error", {}).get("message", response.text[:200])
             raise ProviderError(f"Stripe: {detail}")
 
-        url = response.json().get("url")
+        payload = response.json()
+        url = payload.get("url")
         if not url:
             raise ProviderError("Stripe: ответ без ссылки на оплату")
-        return url
+        return Checkout(url=url, provider_payment_id=payload.get("id"))
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
         # Parsed unverified, purely to find the row — the signature is checked
@@ -99,6 +101,8 @@ class StripeProvider:
         credentials: dict[str, str],
         amount_minor: int,
         invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
     ) -> WebhookResult:
         secret = (credentials.get("webhook_secret") or "").strip()
         if not secret:

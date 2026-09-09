@@ -49,6 +49,20 @@ class PaymentRef:
 
     payment_id: uuid.UUID | None = None
     invoice_no: int | None = None
+    # For providers that carry no order id of their own (LIFE PAY), the only
+    # handle is the id they gave us when the invoice was created.
+    provider_payment_id: str | None = None
+
+
+@dataclass(frozen=True)
+class Checkout:
+    """Where to send the payer, plus whatever the provider called this
+    payment — several of them mint an id at creation time and then use it,
+    not our order id, as the only reference in the callback."""
+
+    url: str
+    provider_payment_id: str | None = None
+    meta: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -77,8 +91,9 @@ class PaymentProvider(Protocol):
     currencies: tuple[str, ...]
     credential_fields: tuple[CredentialField, ...]
 
-    async def create_checkout(self, request: CheckoutRequest) -> str:
-        """Return a URL to send the payer to."""
+    async def create_checkout(self, request: CheckoutRequest) -> Checkout:
+        """Create the payment on the provider's side and return where to
+        send the payer."""
         ...
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
@@ -97,8 +112,15 @@ class PaymentProvider(Protocol):
         credentials: dict[str, str],
         amount_minor: int,
         invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
     ) -> WebhookResult:
-        """Check the callback's authenticity and say what it means."""
+        """Check the callback's authenticity and say what it means.
+
+        Where the provider signs its callbacks (Prodamus), that signature is
+        the proof. Where it doesn't (ЮKassa, PayMaster, LIFE PAY), the
+        callback is only a hint: the adapter calls the provider's API back
+        and believes the answer, not the request body."""
         ...
 
 

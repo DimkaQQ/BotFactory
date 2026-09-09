@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 
 from app.models.payment import PaymentStatus
 from app.services.payments.base import (
+    Checkout,
     CheckoutRequest,
     CredentialField,
     PaymentRef,
@@ -36,7 +37,7 @@ class RobokassaProvider:
         CredentialField("password2", "Пароль #2", "Используется для проверки уведомления об оплате"),
     )
 
-    async def create_checkout(self, request: CheckoutRequest) -> str:
+    async def create_checkout(self, request: CheckoutRequest) -> Checkout:
         login = (request.credentials.get("merchant_login") or "").strip()
         password1 = (request.credentials.get("password1") or "").strip()
         if not login or not password1:
@@ -61,7 +62,7 @@ class RobokassaProvider:
         if request.is_test:
             params["IsTest"] = "1"
 
-        return f"{_CHECKOUT_URL}?{urlencode(params)}"
+        return Checkout(url=f"{_CHECKOUT_URL}?{urlencode(params)}", provider_payment_id=str(request.invoice_no))
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
         raw = (form.get("InvId") or form.get("inv_id") or "").strip()
@@ -79,6 +80,8 @@ class RobokassaProvider:
         credentials: dict[str, str],
         amount_minor: int,
         invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
     ) -> WebhookResult:
         password2 = (credentials.get("password2") or "").strip()
         if not password2:
@@ -100,10 +103,3 @@ class RobokassaProvider:
             provider_payment_id=str(invoice_no),
             response_body=f"OK{invoice_no}",
         )
-
-
-def payment_id_from(value: str) -> uuid.UUID | None:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, AttributeError):
-        return None

@@ -1,15 +1,17 @@
 """Payment provider registry.
 
-Adding one of the providers still on the list (ЮKassa, Prodamus, Lava,
-LifePay, CKassa, PayMaster …) means writing one module against
-`base.PaymentProvider` and registering it here — the settings form, the
-webhook route and the constructor's payment block all read this registry
-and need no changes of their own.
+Adding a provider (Lava.top and CKassa are the ones still missing) means
+writing one module against `base.PaymentProvider` and registering it here —
+the settings form, the webhook route and the constructor's payment block all
+read this registry and need no changes of their own.
+
+Order matters: it is the order the shop owner sees in the settings form.
 """
 
 from __future__ import annotations
 
 from app.services.payments.base import (
+    Checkout,
     CheckoutRequest,
     CredentialField,
     PaymentProvider,
@@ -18,13 +20,25 @@ from app.services.payments.base import (
     WebhookResult,
     minor_to_major,
 )
+from app.services.payments.lifepay import LifePayProvider
+from app.services.payments.paymaster import PayMasterProvider
+from app.services.payments.prodamus import ProdamusProvider
 from app.services.payments.robokassa import RobokassaProvider
 from app.services.payments.stripe import StripeProvider
 from app.services.payments.test_provider import TestProvider
+from app.services.payments.yookassa import YooKassaProvider
 
 PROVIDERS: dict[str, PaymentProvider] = {
     provider.slug: provider
-    for provider in (RobokassaProvider(), StripeProvider(), TestProvider())
+    for provider in (
+        YooKassaProvider(),
+        ProdamusProvider(),
+        RobokassaProvider(),
+        PayMasterProvider(),
+        LifePayProvider(),
+        StripeProvider(),
+        TestProvider(),
+    )
 }
 
 
@@ -54,6 +68,7 @@ def describe_providers() -> list[dict]:
 
 
 __all__ = [
+    "Checkout",
     "CheckoutRequest",
     "CredentialField",
     "PaymentProvider",

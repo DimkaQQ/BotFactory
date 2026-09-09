@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from app.config import get_settings
 from app.models.payment import PaymentStatus
-from app.services.payments.base import CheckoutRequest, PaymentRef, ProviderError, WebhookResult
+from app.services.payments.base import Checkout, CheckoutRequest, PaymentRef, ProviderError, WebhookResult
 
 
 class TestProvider:
@@ -20,11 +20,11 @@ class TestProvider:
     currencies = ("RUB", "KZT", "USD", "EUR")
     credential_fields = ()
 
-    async def create_checkout(self, request: CheckoutRequest) -> str:
+    async def create_checkout(self, request: CheckoutRequest) -> Checkout:
         if not request.is_test:
             raise ProviderError("Тестовая оплата доступна только в тестовом режиме")
         base = get_settings().public_base_url.rstrip("/")
-        return f"{base}/webhook/pay/test/{request.payment_id}"
+        return Checkout(url=f"{base}/webhook/pay/test/{request.payment_id}")
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
         return PaymentRef()
@@ -38,5 +38,7 @@ class TestProvider:
         credentials: dict[str, str],
         amount_minor: int,
         invoice_no: int,
+        payment_id=None,
+        provider_payment_id: str | None = None,
     ) -> WebhookResult:
         return WebhookResult(status=PaymentStatus.paid, provider_payment_id=f"test-{invoice_no}")

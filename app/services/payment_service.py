@@ -111,7 +111,7 @@ async def _create(
     # checkout link can't be signed without it.
     await db.flush()
 
-    url = await provider.create_checkout(
+    checkout = await provider.create_checkout(
         CheckoutRequest(
             payment_id=payment.id,
             invoice_no=payment.invoice_no,
@@ -123,10 +123,13 @@ async def _create(
             credentials=credentials,
         )
     )
-    payment.meta = {"checkout_url": url}
+    # Several providers mint their own id at creation and then use only
+    # that in the callback, so it is stored now, not when the money lands.
+    payment.provider_payment_id = checkout.provider_payment_id
+    payment.meta = {"checkout_url": checkout.url, **checkout.meta}
     await db.commit()
     await db.refresh(payment)
-    return payment, url
+    return payment, checkout.url
 
 
 async def create_order_payment(
@@ -202,6 +205,11 @@ async def find_payment(db: AsyncSession, ref) -> Payment | None:
         return result.scalar_one_or_none()
     if ref.invoice_no is not None:
         result = await db.execute(select(Payment).where(Payment.invoice_no == ref.invoice_no))
+        return result.scalar_one_or_none()
+    if ref.provider_payment_id is not None:
+        result = await db.execute(
+            select(Payment).where(Payment.provider_payment_id == ref.provider_payment_id)
+        )
         return result.scalar_one_or_none()
     return None
 

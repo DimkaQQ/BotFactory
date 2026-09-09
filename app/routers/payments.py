@@ -83,6 +83,8 @@ async def payment_callback(provider_slug: str, request: Request, db: AsyncSessio
             credentials=credentials,
             amount_minor=payment.amount_minor,
             invoice_no=payment.invoice_no,
+            payment_id=payment.id,
+            provider_payment_id=payment.provider_payment_id,
         )
     except ProviderError as exc:
         logger.warning("Rejected %s callback for payment %s: %s", provider_slug, payment.id, exc)
@@ -107,7 +109,14 @@ async def test_payment_page(payment_id: uuid.UUID, db: AsyncSession = Depends(ge
 
     provider = payment_providers.get_provider("test")
     verified = await provider.verify_webhook(
-        headers={}, raw_body=b"", form={}, credentials={}, amount_minor=payment.amount_minor, invoice_no=payment.invoice_no
+        headers={},
+        raw_body=b"",
+        form={},
+        credentials={},
+        amount_minor=payment.amount_minor,
+        invoice_no=payment.invoice_no,
+        payment_id=payment.id,
+        provider_payment_id=payment.provider_payment_id,
     )
     await _apply(db, payment, verified)
 
