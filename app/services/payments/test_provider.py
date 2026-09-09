@@ -10,15 +10,16 @@ from __future__ import annotations
 
 from app.config import get_settings
 from app.models.payment import PaymentStatus
-from app.services.payments.base import Checkout, CheckoutRequest, PaymentRef, ProviderError, WebhookResult
+from app.services.payments.base import Checkout, CheckoutRequest, PaymentRef, ProviderDefaults, ProviderError, WebhookResult
 
 
-class TestProvider:
+class TestProvider(ProviderDefaults):
     slug = "test"
     title = "Тестовая оплата (без денег)"
     hint = "Ничего не подключает: страница оплаты сразу отмечает заказ оплаченным. Нужна, чтобы проверить сценарий целиком — блок оплаты, выдачу после неё — до подключения настоящего провайдера."
     currencies = ("RUB", "KZT", "USD", "EUR")
     credential_fields = ()
+    uses_callback = False
 
     async def create_checkout(self, request: CheckoutRequest) -> Checkout:
         if not request.is_test:

@@ -1,4 +1,4 @@
-import type { BotBlock } from "../../api/builderApi";
+import type { BotBlock, PaymentProviderInfo } from "../../api/builderApi";
 import { BLOCK_TYPE_BY_ID } from "../../blockTypes";
 import { ButtonsEditor } from "../ButtonsEditor";
 import { MediaEditor } from "../MediaEditor";
@@ -31,6 +31,9 @@ interface Props {
   /** Payment blocks need to know whether the bot can actually take money. */
   paymentProvider: string | null;
   paymentCurrencies: string[];
+  /** The chosen provider's catalogue entry — drives the per-product fields
+   * the payment block asks for. */
+  paymentProviderInfo?: PaymentProviderInfo | null;
   onOpenPaymentSettings: () => void;
 }
 
@@ -47,6 +50,7 @@ export function BlockEditPanel({
   onClose,
   paymentProvider,
   paymentCurrencies,
+  paymentProviderInfo,
   onOpenPaymentSettings,
 }: Props) {
   const def = BLOCK_TYPE_BY_ID[block.block_type];
@@ -93,6 +97,7 @@ export function BlockEditPanel({
               content={block.content}
               provider={paymentProvider}
               currencies={paymentCurrencies}
+              providerInfo={paymentProviderInfo}
               onChange={onChange}
               onOpenSettings={onOpenPaymentSettings}
             />

@@ -25,6 +25,7 @@ from app.services.payments.base import (
     CheckoutRequest,
     CredentialField,
     PaymentRef,
+    ProviderDefaults,
     ProviderError,
     WebhookResult,
     minor_to_major,
@@ -108,7 +109,7 @@ def _flatten(data: dict) -> list[tuple[str, str]]:
     return pairs
 
 
-class ProdamusProvider:
+class ProdamusProvider(ProviderDefaults):
     slug = "prodamus"
     title = "Prodamus"
     hint = (

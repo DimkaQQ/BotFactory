@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Background, Controls, type Edge, type Node, ReactFlow, ReactFlowProvider, useNodesState } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import type { BlockType, BotBlock, BotWithBlocks } from "../../api/builderApi";
+import type { BlockType, BotBlock, BotWithBlocks, PaymentProviderInfo } from "../../api/builderApi";
 import { BLOCK_TYPES } from "../../blockTypes";
 import { BlockEditPanel } from "./BlockEditPanel";
 import { BlockNode, type BlockNodeData } from "./BlockNode";
@@ -27,6 +27,7 @@ interface Props {
   onSetPosition: (blockId: string, x: number, y: number) => void;
   paymentProvider: string | null;
   paymentCurrencies: string[];
+  paymentProviderInfo: PaymentProviderInfo | null;
   onOpenPaymentSettings: () => void;
   disabled?: boolean;
 }
@@ -68,6 +69,7 @@ function Inner({
   onSetPosition,
   paymentProvider,
   paymentCurrencies,
+  paymentProviderInfo,
   onOpenPaymentSettings,
   disabled,
 }: Props) {
@@ -317,6 +319,7 @@ function Inner({
           blocks={bot.blocks}
           paymentProvider={paymentProvider}
           paymentCurrencies={paymentCurrencies}
+          paymentProviderInfo={paymentProviderInfo}
           onOpenPaymentSettings={onOpenPaymentSettings}
           onChange={(content) => onChangeContent(editingBlock.id, content)}
           onDelete={() => handleDelete(editingBlock.id)}

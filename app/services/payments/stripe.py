@@ -22,6 +22,7 @@ from app.services.payments.base import (
     CheckoutRequest,
     CredentialField,
     PaymentRef,
+    ProviderDefaults,
     ProviderError,
     WebhookResult,
 )
@@ -35,7 +36,7 @@ _SIGNATURE_TOLERANCE_S = 300
 _ZERO_DECIMAL = {"BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"}
 
 
-class StripeProvider:
+class StripeProvider(ProviderDefaults):
     slug = "stripe"
     title = "Stripe"
     hint = "Secret key (sk_live_… или sk_test_…) — в Stripe Dashboard → Developers → API keys. Webhook secret (whsec_…) появится, когда добавишь наш URL в Developers → Webhooks на событие checkout.session.completed."

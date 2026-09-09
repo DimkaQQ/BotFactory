@@ -41,6 +41,15 @@ class CheckoutRequest:
     return_url: str
     is_test: bool
     credentials: dict[str, str]
+    # Per-block settings, straight from the payment block's content: what
+    # varies per product rather than per shop (Lava's offer id, the link a
+    # "pay by link" block points at). Credentials are the shop; this is the
+    # thing being sold.
+    extra: dict = field(default_factory=dict)
+    # Only Telegram Stars needs this: its "checkout" is an invoice minted by
+    # the selling bot itself, so the adapter has to speak as that bot.
+    bot_token: str | None = None
+    telegram_user_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +99,16 @@ class PaymentProvider(Protocol):
     #: Currencies the adapter is known to handle, uppercase ISO codes.
     currencies: tuple[str, ...]
     credential_fields: tuple[CredentialField, ...]
+    #: True when `check_status` can ask the provider outright whether a
+    #: payment went through. Drives the "Я оплатил" button in the bot: with a
+    #: status check it re-reads the payment; without one there is nothing to
+    #: read, and the buyer's claim goes to the shop owner to confirm.
+    supports_status_check: bool
+    #: Per-block fields the constructor asks for on the payment block itself
+    #: (as opposed to once per shop in the settings form).
+    block_fields: tuple[CredentialField, ...]
+    #: Whether this provider notifies us over `/webhook/pay/{slug}` at all.
+    uses_callback: bool
 
     async def create_checkout(self, request: CheckoutRequest) -> Checkout:
         """Create the payment on the provider's side and return where to
@@ -122,6 +141,53 @@ class PaymentProvider(Protocol):
         callback is only a hint: the adapter calls the provider's API back
         and believes the answer, not the request body."""
         ...
+
+    async def check_status(
+        self,
+        *,
+        credentials: dict[str, str],
+        amount_minor: int,
+        invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
+        meta: dict,
+    ) -> WebhookResult:
+        """Ask the provider where this payment stands, with no callback
+        involved — what the buyer's "Я оплатил" tap runs.
+
+        Only meaningful when `supports_status_check` is True; a webhook can
+        be lost or delayed, and a buyer who has already paid should not have
+        to wait for a retry schedule to get what they bought."""
+        ...
+
+
+class ProviderDefaults:
+    """What most providers don't have to think about.
+
+    Adapters inherit this and override only where they differ, so the two
+    optional halves of the protocol — an on-demand status check and per-block
+    fields — cost nothing to the providers that have neither.
+    """
+
+    supports_status_check = False
+    #: False for the providers that never call `/webhook/pay/...` — Stars
+    #: (Telegram delivers on the bot's own webhook), pay-by-link and the test
+    #: provider. Drives whether the settings form shows a callback address to
+    #: paste into a merchant dashboard.
+    uses_callback = True
+    block_fields: tuple[CredentialField, ...] = ()
+
+    async def check_status(
+        self,
+        *,
+        credentials: dict[str, str],
+        amount_minor: int,
+        invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
+        meta: dict,
+    ) -> WebhookResult:
+        raise ProviderError(f"{getattr(self, 'title', 'Провайдер')}: статус платежа так не проверяется")
 
 
 def minor_to_major(amount_minor: int) -> str:

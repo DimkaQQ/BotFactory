@@ -255,6 +255,10 @@ export const builderApi = {
   getPayment: (paymentId: string) => request<PaymentInfo>(`/payments/${paymentId}`),
   listOrders: (botId: string) =>
     request<{ orders: Order[]; paid_count: number; paid_total_minor: number }>(`/bots/${botId}/orders`),
+  confirmOrder: (botId: string, paymentId: string) =>
+    request<{ status: string; delivered: boolean }>(`/bots/${botId}/orders/${paymentId}/confirm`, { method: "POST" }),
+  rejectOrder: (botId: string, paymentId: string) =>
+    request<{ status: string }>(`/bots/${botId}/orders/${paymentId}/reject`, { method: "POST" }),
 };
 
 export interface PaymentProviderInfo {
@@ -262,7 +266,24 @@ export interface PaymentProviderInfo {
   title: string;
   hint: string;
   currencies: string[];
-  fields: { key: string; label: string; hint: string; secret: boolean }[];
+  /** Asked once per shop, in the settings panel. */
+  fields: PaymentField[];
+  /** Asked per product, on the payment block itself — Lava's offerId, the
+   * link a "pay by link" block points at. */
+  block_fields: PaymentField[];
+  /** False when the bot can't ask the provider whether a payment went
+   * through, so «Я оплатил» goes to the owner to confirm instead. */
+  supports_status_check: boolean;
+  /** Whether this provider posts to our callback URL at all — Stars and
+   * pay-by-link don't, so there is no address to paste anywhere. */
+  uses_callback: boolean;
+}
+
+export interface PaymentField {
+  key: string;
+  label: string;
+  hint: string;
+  secret: boolean;
 }
 
 export interface PaymentSettings {
@@ -299,6 +320,10 @@ export interface Order {
   telegram_user_id: number | null;
   created_at: string;
   paid_at: string | null;
+  /** When the buyer tapped «Я оплатил» on a provider we can't verify. */
+  claimed_at: string | null;
+  /** Waiting on the owner to say whether the money arrived. */
+  needs_confirmation: boolean;
 }
 
 /** 99000 -> "990" / 99050 -> "990.50" — prices are shown the way they were

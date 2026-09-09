@@ -54,7 +54,13 @@ async def register_webhook(bot_id: uuid.UUID, token: str) -> None:
     settings = get_settings()
     instance = Bot(token=token, session=build_bot_session())
     try:
-        await instance.set_webhook(settings.webhook_url(str(bot_id)))
+        await instance.set_webhook(
+            settings.webhook_url(str(bot_id)),
+            # Named rather than left to Telegram's default: pre_checkout_query
+            # is what makes Stars work, and spelling the list out means a bot
+            # stops being delivered update types nothing here reads.
+            allowed_updates=["message", "callback_query", "pre_checkout_query"],
+        )
     except Exception:
         logger.exception("Failed to set webhook for bot %s", bot_id)
         await instance.session.close()

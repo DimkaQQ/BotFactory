@@ -41,15 +41,7 @@ router = APIRouter(tags=["payments"])
 
 
 async def _apply(db: AsyncSession, payment: Payment, result) -> None:
-    if result.status != PaymentStatus.paid:
-        if result.status == PaymentStatus.failed and payment.status == PaymentStatus.pending:
-            payment.status = PaymentStatus.failed
-            await db.commit()
-        return
-
-    newly_paid = await payment_service.mark_paid(db, payment, result.provider_payment_id)
-    if newly_paid:
-        await payment_service.resume_after_payment(db, payment)
+    await payment_service.apply_result(db, payment, result)
 
 
 @router.post("/webhook/pay/{provider_slug}")
@@ -300,9 +292,51 @@ async def list_orders(
                 "telegram_user_id": o.telegram_user_id,
                 "created_at": o.created_at,
                 "paid_at": o.paid_at,
+                # Set when the buyer tapped «Я оплатил» on a provider we
+                # can't ask — these are the ones waiting on the owner.
+                "claimed_at": (o.meta or {}).get("claimed_at"),
+                "needs_confirmation": o.status == PaymentStatus.pending and bool((o.meta or {}).get("claimed_at")),
             }
             for o in orders
         ],
         "paid_count": len(paid),
         "paid_total_minor": sum(o.amount_minor for o in paid),
     }
+
+
+async def _owned_order(bot_id: uuid.UUID, payment_id: uuid.UUID, db: AsyncSession) -> Payment:
+    result = await db.execute(
+        select(Payment).where(
+            Payment.id == payment_id, Payment.bot_id == bot_id, Payment.kind == PaymentKind.order
+        )
+    )
+    payment = result.scalar_one_or_none()
+    if payment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заказ не найден")
+    return payment
+
+
+@router.post("/api/bots/{bot_id}/orders/{payment_id}/confirm")
+async def confirm_order(
+    bot_id: uuid.UUID,
+    payment_id: uuid.UUID,
+    _bot: BotModel = Depends(get_owned_bot),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """The owner confirms a payment nobody's API can vouch for — and the bot
+    delivers on the spot, exactly as it would on a provider's callback."""
+    payment = await _owned_order(bot_id, payment_id, db)
+    delivered = await payment_service.confirm_by_owner(db, payment)
+    return {"status": payment.status, "delivered": delivered}
+
+
+@router.post("/api/bots/{bot_id}/orders/{payment_id}/reject")
+async def reject_order(
+    bot_id: uuid.UUID,
+    payment_id: uuid.UUID,
+    _bot: BotModel = Depends(get_owned_bot),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    payment = await _owned_order(bot_id, payment_id, db)
+    await payment_service.reject_by_owner(db, payment)
+    return {"status": payment.status}

@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 
-import { type PaymentProviderInfo, type PaymentSettings, ApiError, builderApi } from "../api/builderApi";
+import {
+  type Order,
+  type PaymentProviderInfo,
+  type PaymentSettings,
+  ApiError,
+  builderApi,
+  formatAmount,
+} from "../api/builderApi";
 
 interface Props {
   botId: string;
@@ -20,18 +27,24 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [busyOrder, setBusyOrder] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const [list, current] = await Promise.all([
+        const [list, current, sales] = await Promise.all([
           builderApi.listPaymentProviders(),
           builderApi.getPaymentSettings(botId),
+          // A bot with no sales yet is the normal case, so a failure here
+          // must not take the settings form down with it.
+          builderApi.listOrders(botId).catch(() => ({ orders: [] as Order[] })),
         ]);
         setProviders(list.providers);
         setSettings(current);
         setSlug(current.provider ?? "");
         setIsTest(current.is_test);
+        setOrders(sales.orders);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Не удалось загрузить настройки оплаты");
       }
@@ -39,6 +52,27 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
   }, [botId]);
 
   const active = providers?.find((p) => p.slug === slug) ?? null;
+  // Orders where the buyer says they paid on a provider nothing can verify —
+  // these are stuck until the owner says yes or no, so they go on top.
+  const awaiting = orders.filter((o) => o.needs_confirmation);
+
+  async function decide(order: Order, confirmed: boolean) {
+    setBusyOrder(order.id);
+    setError(null);
+    try {
+      if (confirmed) {
+        await builderApi.confirmOrder(botId, order.id);
+      } else {
+        await builderApi.rejectOrder(botId, order.id);
+      }
+      const sales = await builderApi.listOrders(botId);
+      setOrders(sales.orders);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось обновить заказ");
+    } finally {
+      setBusyOrder(null);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -140,7 +174,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                     </span>
                   </label>
 
-                  {settings?.callback_url && settings.provider === active.slug && active.slug !== "test" && (
+                  {settings?.callback_url && settings.provider === active.slug && active.uses_callback && (
                     <div className="payment-settings__callback">
                       <span className="buttons-editor__field-label">
                         Этот адрес нужно указать в кабинете платёжной системы как уведомление об оплате
@@ -156,6 +190,46 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
               <button type="button" className="payment-settings__save" onClick={handleSave} disabled={saving}>
                 {saving ? "Сохраняем…" : saved ? "✓ Сохранено" : "Сохранить"}
               </button>
+
+              {awaiting.length > 0 && (
+                <div className="orders">
+                  <span className="buttons-editor__field-label">Ждут подтверждения</span>
+                  <p className="orders__lead">
+                    Покупатель нажал «Я оплатил». Проверь, пришли ли деньги — после подтверждения бот сразу
+                    выдаст товар.
+                  </p>
+                  {awaiting.map((order) => (
+                    <div className="orders__item" key={order.id}>
+                      <div className="orders__info">
+                        <span className="orders__title">
+                          №{order.invoice_no} · {order.description}
+                        </span>
+                        <span className="orders__amount">
+                          {formatAmount(order.amount_minor)} {order.currency === "XTR" ? "⭐" : order.currency}
+                        </span>
+                      </div>
+                      <div className="orders__actions">
+                        <button
+                          type="button"
+                          className="orders__confirm"
+                          disabled={busyOrder === order.id}
+                          onClick={() => decide(order, true)}
+                        >
+                          ✅ Оплачен
+                        </button>
+                        <button
+                          type="button"
+                          className="orders__reject"
+                          disabled={busyOrder === order.id}
+                          onClick={() => decide(order, false)}
+                        >
+                          ✖️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>

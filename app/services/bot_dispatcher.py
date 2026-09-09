@@ -17,6 +17,17 @@ compatible with every bot built before branching existed (see migration
 A "payment" block halts the walk the same way: it sends a checkout link
 and stops, and the chain resumes from its next_block_id only once the
 payment provider confirms the money (payment_service.resume_after_payment).
+
+Three kinds of update besides /start and a button tap end up here, all of
+them about money:
+
+* «Я оплатил» — the buyer nudging a payment along. Where the provider has an
+  API, that re-reads the payment; where it hasn't, the claim goes to the shop
+  owner, who confirms or rejects it from a message of their own.
+* `pre_checkout_query` / `successful_payment` — Telegram Stars. Stars never
+  touch our payment webhook: Telegram delivers the outcome as ordinary
+  updates on the selling bot's own webhook, which is also what vouches for
+  them.
 """
 
 from __future__ import annotations
@@ -51,6 +62,11 @@ _CHARS_PER_SECOND = 45
 _MAX_CHAIN_STEPS = 50
 
 _CALLBACK_PREFIX = "b"
+# Money-related taps, kept apart from the graph's own "b:<block>:<index>".
+_PAY_CHECK = "paychk"  # buyer: "я оплатил"
+_PAY_OK = "payok"  # owner: confirm a claimed payment
+_PAY_NO = "payno"  # owner: reject it
+_SELF_SETTLING = {"stars", "test"}
 
 
 def _typing_delay(text: str) -> float:
@@ -136,10 +152,95 @@ async def _send_payment_block(
             await bot.send_message(chat_id, text)
         return False
 
-    label = (content.get("button_label") or "").strip() or f"Оплатить {payment.amount_minor // 100} {payment.currency}"
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=label[:64], url=url)]])
-    await bot.send_message(chat_id, text or "Оплата", reply_markup=keyboard)
+    unit = "⭐" if payment.currency == "XTR" else payment.currency
+    label = (content.get("button_label") or "").strip() or f"Оплатить {payment.amount_minor // 100} {unit}"
+    rows = [[InlineKeyboardButton(text=label[:64], url=url)]]
+
+    # For most providers the buyer may need to nudge a payment along, but not
+    # these two: the Stars sheet reports its own outcome the moment it closes,
+    # and the test provider's checkout page settles on open. Offering "Я
+    # оплатил" there would only invite a tap that can do nothing.
+    if payment.provider not in _SELF_SETTLING:
+        rows.append([InlineKeyboardButton(text="Я оплатил", callback_data=f"{_PAY_CHECK}:{payment.id.hex}")])
+
+    await bot.send_message(chat_id, text or "Оплата", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
     return True
+
+
+async def _handle_payment_callback(
+    bot: Bot, callback_query: dict, bot_id: uuid.UUID, db: AsyncSession, action: str, payment_hex: str
+) -> None:
+    """«Я оплатил» from a buyer, or «Подтвердить»/«Отклонить» from the owner."""
+    from app.models.payment import Payment, PaymentKind, PaymentStatus
+    from app.services import payment_service
+    from app.services.payments import ProviderError, get_provider
+
+    chat_id = ((callback_query.get("message") or {}).get("chat") or {}).get("id")
+    try:
+        payment_id = uuid.UUID(hex=payment_hex)
+    except ValueError:
+        return
+
+    result = await db.execute(
+        select(Payment).where(
+            Payment.id == payment_id, Payment.bot_id == bot_id, Payment.kind == PaymentKind.order
+        )
+    )
+    payment = result.scalar_one_or_none()
+    if payment is None or chat_id is None:
+        return
+
+    if action in (_PAY_OK, _PAY_NO):
+        # Owner-only: these buttons are sent to the owner's private chat, and
+        # this check is what stops the callback_data being replayed from the
+        # buyer's side.
+        if not await _is_owner(db, bot_id, (callback_query.get("from") or {}).get("id")):
+            return
+        if action == _PAY_OK:
+            await payment_service.confirm_by_owner(db, payment)
+            await bot.send_message(chat_id, f"Заказ №{payment.invoice_no} подтверждён — товар отправлен покупателю.")
+        else:
+            await payment_service.reject_by_owner(db, payment)
+            await bot.send_message(chat_id, f"Заказ №{payment.invoice_no} отклонён.")
+        return
+
+    if payment.status == PaymentStatus.paid:
+        await bot.send_message(chat_id, "Эта покупка уже оплачена ✅")
+        return
+
+    provider = get_provider(payment.provider)
+    if not provider.supports_status_check:
+        # Nothing to ask: the shop owner is the only one who can see whether
+        # the money arrived.
+        await payment_service.claim_payment(db, payment)
+        await bot.send_message(chat_id, "Спасибо! Передали продавцу — как только он подтвердит оплату, всё придёт сюда.")
+        return
+
+    try:
+        status_now = await payment_service.check_and_settle(db, payment)
+    except ProviderError as exc:
+        logger.warning("Status check failed for payment %s: %s", payment.id, exc)
+        await bot.send_message(chat_id, "Не получилось проверить оплату прямо сейчас. Попробуй ещё раз через минуту.")
+        return
+
+    if status_now == PaymentStatus.paid:
+        return  # resume_after_payment already said everything and delivered
+    if status_now == PaymentStatus.failed:
+        await bot.send_message(chat_id, "Платёж не прошёл. Попробуй оплатить ещё раз.")
+    else:
+        await bot.send_message(chat_id, "Оплата пока не дошла. Если ты только что заплатил — подожди минуту и нажми ещё раз.")
+
+
+async def _is_owner(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None) -> bool:
+    from app.models.client import Client
+
+    if telegram_user_id is None:
+        return False
+    result = await db.execute(
+        select(Client.telegram_user_id).join(BotModel, BotModel.client_id == Client.id).where(BotModel.id == bot_id)
+    )
+    owner_id = result.scalar_one_or_none()
+    return owner_id is not None and int(owner_id) == int(telegram_user_id)
 
 
 async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
@@ -261,6 +362,14 @@ async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UU
 
     data = callback_query.get("data") or ""
     parts = data.split(":")
+
+    if len(parts) == 2 and parts[0] in (_PAY_CHECK, _PAY_OK, _PAY_NO):
+        try:
+            await _handle_payment_callback(bot, callback_query, bot_id, db, parts[0], parts[1])
+        except Exception:
+            logger.exception("Payment callback %s failed for bot %s", data, bot_id)
+        return
+
     if len(parts) != 3 or parts[0] != _CALLBACK_PREFIX:
         return
     _, block_hex, index_str = parts
@@ -295,14 +404,99 @@ async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UU
     await _walk_chain(bot, chat_id, target_id, bot_id, db, telegram_user_id=tapped_by)
 
 
+async def _handle_pre_checkout(bot: Bot, query: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
+    """Telegram's last check before charging Stars: answer within 10 seconds
+    or the payment is cancelled. We approve only an order that is ours, still
+    unpaid, and for the amount we asked — this is the last point at which a
+    stale invoice link can be turned away rather than refunded."""
+    from app.models.payment import Payment, PaymentKind, PaymentStatus
+
+    query_id = query.get("id")
+    if not query_id:
+        return
+
+    ok, message = False, "Этот счёт больше не действителен"
+    try:
+        payment_id = uuid.UUID(str(query.get("invoice_payload") or ""))
+        result = await db.execute(
+            select(Payment).where(
+                Payment.id == payment_id, Payment.bot_id == bot_id, Payment.kind == PaymentKind.order
+            )
+        )
+        payment = result.scalar_one_or_none()
+        if payment is None:
+            message = "Заказ не найден"
+        elif payment.status == PaymentStatus.paid:
+            message = "Этот заказ уже оплачен"
+        elif int(query.get("total_amount") or 0) != payment.amount_minor // 100:
+            message = "Цена изменилась — открой оплату заново"
+        else:
+            ok = True
+    except (ValueError, TypeError):
+        message = "Заказ не найден"
+
+    try:
+        await bot.answer_pre_checkout_query(query_id, ok=ok, error_message=None if ok else message)
+    except Exception:
+        logger.exception("Failed to answer pre_checkout_query for bot %s", bot_id)
+
+
+async def _handle_successful_payment(bot: Bot, message: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
+    """Stars have landed. Telegram delivered this on the bot's own webhook,
+    which is what vouches for it — there is no signature and no API to
+    re-read, so the check that remains is that the order is ours and the
+    amount matches."""
+    from app.models.payment import Payment, PaymentKind
+    from app.services import payment_service
+    from app.services.payments import ProviderError
+    from app.services.payments.telegram_stars import settled
+
+    payload = message["successful_payment"]
+    try:
+        payment_id = uuid.UUID(str(payload.get("invoice_payload") or ""))
+    except (ValueError, TypeError):
+        return
+
+    result = await db.execute(
+        select(Payment).where(
+            Payment.id == payment_id, Payment.bot_id == bot_id, Payment.kind == PaymentKind.order
+        )
+    )
+    payment = result.scalar_one_or_none()
+    if payment is None:
+        logger.warning("Bot %s: successful_payment for unknown order %s", bot_id, payment_id)
+        return
+
+    try:
+        verdict = settled(
+            charge_id=str(payload.get("telegram_payment_charge_id") or ""),
+            total_amount=int(payload.get("total_amount") or 0),
+            amount_minor=payment.amount_minor,
+        )
+    except ProviderError as exc:
+        logger.error("Bot %s: refusing Stars payment %s — %s", bot_id, payment_id, exc)
+        return
+
+    await payment_service.apply_result(db, payment, verdict)
+
+
 async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
     callback_query = update.get("callback_query")
     if callback_query:
         await _handle_callback_query(bot, callback_query, bot_id, db)
         return
 
+    pre_checkout = update.get("pre_checkout_query")
+    if pre_checkout:
+        await _handle_pre_checkout(bot, pre_checkout, bot_id, db)
+        return
+
     message = update.get("message")
     if not message:
+        return
+
+    if message.get("successful_payment"):
+        await _handle_successful_payment(bot, message, bot_id, db)
         return
 
     chat_id = message.get("chat", {}).get("id")

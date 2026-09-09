@@ -19,6 +19,7 @@ from app.services.payments.base import (
     CheckoutRequest,
     CredentialField,
     PaymentRef,
+    ProviderDefaults,
     ProviderError,
     WebhookResult,
     minor_to_major,
@@ -27,7 +28,7 @@ from app.services.payments.base import (
 _BASE = "https://api.yookassa.ru/v3"
 
 
-class YooKassaProvider:
+class YooKassaProvider(ProviderDefaults):
     slug = "yookassa"
     title = "ЮKassa"
     hint = (
@@ -36,6 +37,7 @@ class YooKassaProvider:
         "укажи в кабинете («Интеграция → HTTP-уведомления», событие payment.succeeded)."
     )
     currencies = ("RUB",)
+    supports_status_check = True
     credential_fields = (
         CredentialField("shop_id", "shopId", "идентификатор магазина", secret=False),
         CredentialField("secret_key", "Секретный ключ", "live_… или test_…"),
@@ -101,8 +103,6 @@ class YooKassaProvider:
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
     ) -> WebhookResult:
-        auth = self._auth(credentials)
-
         try:
             event = json.loads(raw_body or b"{}")
         except json.JSONDecodeError:
@@ -110,7 +110,27 @@ class YooKassaProvider:
         remote_id = provider_payment_id or (event.get("object") or {}).get("id")
         if not remote_id:
             raise ProviderError("ЮKassa: не удалось определить платёж")
+        return await self._read(credentials, str(remote_id), amount_minor)
 
+    async def check_status(
+        self,
+        *,
+        credentials: dict[str, str],
+        amount_minor: int,
+        invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
+        meta: dict,
+    ) -> WebhookResult:
+        if not provider_payment_id:
+            raise ProviderError("ЮKassa: платёж ещё не создан")
+        return await self._read(credentials, provider_payment_id, amount_minor)
+
+    async def _read(self, credentials: dict[str, str], remote_id: str, amount_minor: int) -> WebhookResult:
+        """The single source of truth for this provider: what the shop's own
+        API says about the payment. Both the callback and the buyer's "Я
+        оплатил" tap end up here."""
+        auth = self._auth(credentials)
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(f"{_BASE}/payments/{remote_id}", auth=auth)
         if response.status_code >= 400:

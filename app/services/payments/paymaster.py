@@ -18,6 +18,7 @@ from app.services.payments.base import (
     CheckoutRequest,
     CredentialField,
     PaymentRef,
+    ProviderDefaults,
     ProviderError,
     WebhookResult,
 )
@@ -27,7 +28,7 @@ _SETTLED = {"settled"}
 _FAILED = {"cancelled", "rejected"}
 
 
-class PayMasterProvider:
+class PayMasterProvider(ProviderDefaults):
     slug = "paymaster"
     title = "PayMaster"
     hint = (
@@ -35,6 +36,7 @@ class PayMasterProvider:
         "сайтов. Адрес уведомления мы передаём в самом счёте, отдельно настраивать не нужно."
     )
     currencies = ("RUB",)
+    supports_status_check = True
     credential_fields = (
         CredentialField("merchant_id", "merchantId", "UUID сайта в PayMaster", secret=False),
         CredentialField("token", "Токен доступа", "из раздела «Токены доступа»"),
@@ -107,8 +109,6 @@ class PayMasterProvider:
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
     ) -> WebhookResult:
-        api_headers = self._headers(credentials)
-
         try:
             event = json.loads(raw_body or b"{}")
         except json.JSONDecodeError:
@@ -116,7 +116,26 @@ class PayMasterProvider:
         remote_id = provider_payment_id or event.get("id")
         if not remote_id:
             raise ProviderError("PayMaster: не удалось определить платёж")
+        return await self._read(credentials, str(remote_id), amount_minor)
 
+    async def check_status(
+        self,
+        *,
+        credentials: dict[str, str],
+        amount_minor: int,
+        invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
+        meta: dict,
+    ) -> WebhookResult:
+        if not provider_payment_id:
+            raise ProviderError("PayMaster: платёж ещё не создан")
+        return await self._read(credentials, provider_payment_id, amount_minor)
+
+    async def _read(self, credentials: dict[str, str], remote_id: str, amount_minor: int) -> WebhookResult:
+        """What PayMaster itself says about the payment — the only thing
+        believed here, whether prompted by a callback or by the buyer."""
+        api_headers = self._headers(credentials)
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(f"{_BASE}/payments/{remote_id}", headers=api_headers)
         if response.status_code >= 400:

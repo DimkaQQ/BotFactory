@@ -1,4 +1,4 @@
-import type { BlockContent } from "../api/builderApi";
+import type { BlockContent, PaymentProviderInfo } from "../api/builderApi";
 
 interface Props {
   content: BlockContent;
@@ -6,6 +6,9 @@ interface Props {
    * inert, and saying so here beats letting a customer hit a dead button. */
   provider: string | null;
   currencies: string[];
+  /** The chosen provider's catalogue entry, when it has been loaded: what it
+   * needs per product, and whether it can confirm a payment by itself. */
+  providerInfo?: PaymentProviderInfo | null;
   onChange: (content: BlockContent) => void;
   onOpenSettings: () => void;
 }
@@ -15,9 +18,11 @@ const FALLBACK_CURRENCIES = ["KZT", "RUB", "USD", "EUR"];
 /** Editor for a payment block: what's being sold, for how much, and what
  * the button says. What happens *after* the money lands is the block's
  * plain arrow on the canvas — usually a delivery block. */
-export function PaymentEditor({ content, provider, currencies, onChange, onOpenSettings }: Props) {
+export function PaymentEditor({ content, provider, currencies, providerInfo, onChange, onOpenSettings }: Props) {
   const options = currencies.length > 0 ? currencies : FALLBACK_CURRENCIES;
   const currency = content.currency || options[0];
+  const isStars = currency === "XTR";
+  const blockFields = providerInfo?.block_fields ?? [];
 
   return (
     <div className="payment-editor">
@@ -50,13 +55,20 @@ export function PaymentEditor({ content, provider, currencies, onChange, onOpenS
 
       <div className="payment-editor__row">
         <label className="buttons-editor__field payment-editor__price">
-          <span className="buttons-editor__field-label">Цена</span>
+          <span className="buttons-editor__field-label">{isStars ? "Цена в звёздах" : "Цена"}</span>
           <input
             className="payment-editor__input"
             inputMode="decimal"
-            placeholder="990"
+            placeholder={isStars ? "250" : "990"}
             value={content.price ?? ""}
-            onChange={(e) => onChange({ ...content, price: e.target.value.replace(/[^\d.,]/g, "") })}
+            onChange={(e) =>
+              onChange({
+                ...content,
+                // Stars come only in whole units — letting a "990.50" be
+                // typed here would just fail later, at the checkout.
+                price: e.target.value.replace(isStars ? /[^\d]/g : /[^\d.,]/g, ""),
+              })
+            }
           />
         </label>
         <label className="buttons-editor__field payment-editor__currency">
@@ -75,6 +87,19 @@ export function PaymentEditor({ content, provider, currencies, onChange, onOpenS
         </label>
       </div>
 
+      {blockFields.map((field) => (
+        <label className="buttons-editor__field" key={field.key}>
+          <span className="buttons-editor__field-label">{field.label}</span>
+          <input
+            className="payment-editor__input"
+            placeholder={field.hint}
+            value={(content as Record<string, unknown>)[field.key] as string ?? ""}
+            onChange={(e) => onChange({ ...content, [field.key]: e.target.value })}
+          />
+          {field.hint && <span className="payment-editor__field-hint">{field.hint}</span>}
+        </label>
+      ))}
+
       <label className="buttons-editor__field">
         <span className="buttons-editor__field-label">Надпись на кнопке</span>
         <input
@@ -89,6 +114,14 @@ export function PaymentEditor({ content, provider, currencies, onChange, onOpenS
         После оплаты бот сам продолжит сценарий по стрелке «дальше» — поставь туда блок «Выдача» с файлом или
         ссылкой.
       </p>
+
+      {providerInfo && !providerInfo.supports_status_check && providerInfo.slug !== "stars" && (
+        <p className="payment-editor__note payment-editor__note--manual">
+          {providerInfo.slug === "link"
+            ? "Такую оплату бот проверить не может: покупатель нажмёт «Я оплатил», а ты подтвердишь заказ — придёт сообщение в бот и появится в списке заказов. После подтверждения бот сразу выдаёт товар."
+            : "Оплата подтвердится сама, когда провайдер пришлёт уведомление."}
+        </p>
+      )}
     </div>
   );
 }

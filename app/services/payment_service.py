@@ -89,6 +89,8 @@ async def _create(
     block_id: uuid.UUID | None = None,
     telegram_user_id: int | None = None,
     chat_id: int | None = None,
+    extra: dict | None = None,
+    bot_token: str | None = None,
 ) -> tuple[Payment, str]:
     provider = payment_providers.get_provider(provider_slug)
 
@@ -121,6 +123,9 @@ async def _create(
             return_url=return_url,
             is_test=is_test,
             credentials=credentials,
+            extra=extra or {},
+            bot_token=bot_token,
+            telegram_user_id=telegram_user_id,
         )
     )
     # Several providers mint their own id at creation and then use only
@@ -158,6 +163,12 @@ async def create_order_payment(
         else f"{settings.public_base_url.rstrip('/')}/api/pay/done"
     )
 
+    # Telegram Stars invoices are minted by the selling bot itself, so that
+    # one provider — and only it — is handed the bot's token.
+    bot_token = None
+    if bot.payment_provider == "stars" and bot.bot_token_encrypted:
+        bot_token = decrypt_token(bot.bot_token_encrypted)
+
     return await _create(
         db,
         kind=PaymentKind.order,
@@ -172,6 +183,11 @@ async def create_order_payment(
         block_id=block.id,
         telegram_user_id=telegram_user_id,
         chat_id=chat_id,
+        # The block is the product: whatever the chosen provider needs per
+        # item (Lava's offerId, the link a "pay by link" block points at)
+        # lives in its content.
+        extra=content,
+        bot_token=bot_token,
     )
 
 
@@ -259,6 +275,137 @@ async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
             )
     except Exception:
         logger.exception("Payment %s: paid but delivery failed", payment.id)
+
+
+async def apply_result(db: AsyncSession, payment: Payment, result) -> bool:
+    """Turn a provider's verdict into what actually happens to the order.
+
+    The single place a payment becomes paid, whatever prompted the news — a
+    callback, the buyer's "Я оплатил", a Stars update, or the shop owner
+    confirming by hand. Returns True if this call is what settled it.
+    """
+    if result.status == PaymentStatus.paid:
+        if await mark_paid(db, payment, result.provider_payment_id):
+            await resume_after_payment(db, payment)
+            return True
+        return False
+
+    if result.status in (PaymentStatus.failed, PaymentStatus.refunded) and payment.status == PaymentStatus.pending:
+        payment.status = result.status
+        await db.commit()
+    return False
+
+
+async def check_and_settle(db: AsyncSession, payment: Payment) -> PaymentStatus:
+    """Ask the provider where a payment stands right now, and deliver if it
+    turns out to be paid. What the buyer's "Я оплатил" runs for a provider
+    that has an API to ask — a webhook can be late, lost, or misconfigured in
+    the shop's dashboard, and the buyer shouldn't pay for that."""
+    provider = payment_providers.get_provider(payment.provider)
+    if not provider.supports_status_check:
+        raise ProviderError(f"{provider.title}: статус платежа так не проверяется")
+    if payment.status == PaymentStatus.paid:
+        return PaymentStatus.paid
+
+    credentials, _is_test = await credentials_for(db, payment)
+    result = await provider.check_status(
+        credentials=credentials,
+        amount_minor=payment.amount_minor,
+        invoice_no=payment.invoice_no,
+        payment_id=payment.id,
+        provider_payment_id=payment.provider_payment_id,
+        meta=payment.meta or {},
+    )
+    await apply_result(db, payment, result)
+    return result.status
+
+
+async def claim_payment(db: AsyncSession, payment: Payment) -> None:
+    """The buyer says they paid, on a provider with nothing to ask.
+
+    Recorded rather than believed: the order shows up as claimed in the
+    owner's list and — if the owner has ever opened their own bot — as a
+    message with confirm/reject buttons. Only the owner's confirmation
+    releases the goods.
+    """
+    payment.meta = {**(payment.meta or {}), "claimed_at": datetime.now(timezone.utc).isoformat()}
+    await db.commit()
+    await _notify_owner_of_claim(db, payment)
+
+
+async def _notify_owner_of_claim(db: AsyncSession, payment: Payment) -> None:
+    """Best-effort ping to the shop owner. A bot may only message people who
+    have written to it first, so this quietly does nothing when the owner has
+    never opened their own bot — the claim is in the constructor's order list
+    either way, which is why nothing here is allowed to raise."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    from app.models.client import Client
+    from app.services import bot_registry
+
+    try:
+        result = await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))
+        bot_row = result.scalar_one_or_none()
+        if bot_row is None or bot_row.client_id is None:
+            return
+        result = await db.execute(select(Client).where(Client.id == bot_row.client_id))
+        owner = result.scalar_one_or_none()
+        if owner is None or not owner.telegram_user_id:
+            return
+
+        instance = await bot_registry.get_or_create(payment.bot_id, db)
+        if instance is None:
+            return
+
+        amount = payment_providers.minor_to_major(payment.amount_minor)
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"payok:{payment.id.hex}"),
+                    InlineKeyboardButton(text="✖️ Отклонить", callback_data=f"payno:{payment.id.hex}"),
+                ]
+            ]
+        )
+        await instance.send_message(
+            owner.telegram_user_id,
+            f"💰 Заказ №{payment.invoice_no}: «{payment.description}» на {amount} {payment.currency}.\n"
+            f"Покупатель говорит, что оплатил. Деньги пришли?",
+            reply_markup=keyboard,
+        )
+    except Exception:
+        logger.info("Could not notify the owner about claimed payment %s", payment.id, exc_info=True)
+
+
+async def confirm_by_owner(db: AsyncSession, payment: Payment) -> bool:
+    """The shop owner vouches for a payment we cannot verify ourselves."""
+    from app.services.payments import WebhookResult
+
+    return await apply_result(
+        db,
+        payment,
+        WebhookResult(status=PaymentStatus.paid, provider_payment_id=payment.provider_payment_id),
+    )
+
+
+async def reject_by_owner(db: AsyncSession, payment: Payment) -> None:
+    if payment.status != PaymentStatus.pending:
+        return
+    payment.status = PaymentStatus.failed
+    await db.commit()
+
+    from app.services import bot_registry
+
+    if payment.chat_id is None:
+        return
+    try:
+        instance = await bot_registry.get_or_create(payment.bot_id, db)
+        if instance is not None:
+            await instance.send_message(
+                payment.chat_id,
+                "Пока не видим оплату по этому заказу. Если платёж прошёл — напиши продавцу, разберёмся.",
+            )
+    except Exception:
+        logger.info("Could not tell the buyer that payment %s was rejected", payment.id, exc_info=True)
 
 
 async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str | None) -> bool:

@@ -18,6 +18,7 @@ from app.services.payments.base import (
     CheckoutRequest,
     CredentialField,
     PaymentRef,
+    ProviderDefaults,
     ProviderError,
     WebhookResult,
     minor_to_major,
@@ -26,7 +27,7 @@ from app.services.payments.base import (
 _CHECKOUT_URL = "https://auth.robokassa.ru/Merchant/Index.aspx"
 
 
-class RobokassaProvider:
+class RobokassaProvider(ProviderDefaults):
     slug = "robokassa"
     title = "Robokassa"
     hint = "Логин магазина и оба пароля — в личном кабинете Robokassa, раздел «Технические настройки». Там же укажи Result URL, который мы покажем ниже, и метод отправки POST."

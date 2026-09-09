@@ -408,6 +408,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         onSetPosition={handleSetPosition}
         paymentProvider={paymentSettings?.provider ?? null}
         paymentCurrencies={paymentProviders.find((p) => p.slug === paymentSettings?.provider)?.currencies ?? []}
+        paymentProviderInfo={paymentProviders.find((p) => p.slug === paymentSettings?.provider) ?? null}
         onOpenPaymentSettings={() => setPaymentPanelOpen(true)}
         disabled={isMiniApp}
       />

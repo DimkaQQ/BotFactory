@@ -18,6 +18,7 @@ from app.services.payments.base import (
     CheckoutRequest,
     CredentialField,
     PaymentRef,
+    ProviderDefaults,
     ProviderError,
     WebhookResult,
     minor_to_major,
@@ -29,7 +30,7 @@ _SUCCESS = {10, "10", "success"}
 _FAILED = {20, 30, "20", "30", "fail"}
 
 
-class LifePayProvider:
+class LifePayProvider(ProviderDefaults):
     slug = "lifepay"
     title = "LIFE PAY"
     hint = (
@@ -38,6 +39,7 @@ class LifePayProvider:
         "По умолчанию оплата идёт через СБП."
     )
     currencies = ("RUB",)
+    supports_status_check = True
     credential_fields = (
         CredentialField("login", "Логин (телефон администратора)", "7XXXXXXXXXX", secret=False),
         CredentialField("apikey", "API-ключ", "из раздела для разработчиков"),
@@ -106,10 +108,27 @@ class LifePayProvider:
         payment_id,
         provider_payment_id: str | None,
     ) -> WebhookResult:
+        return await self._read(credentials, provider_payment_id, amount_minor)
+
+    async def check_status(
+        self,
+        *,
+        credentials: dict[str, str],
+        amount_minor: int,
+        invoice_no: int,
+        payment_id,
+        provider_payment_id: str | None,
+        meta: dict,
+    ) -> WebhookResult:
+        return await self._read(credentials, provider_payment_id, amount_minor)
+
+    async def _read(self, credentials: dict[str, str], number: str | None, amount_minor: int) -> WebhookResult:
+        """The bill as LIFE PAY has it — the callback only says which bill to
+        look at, and the buyer's "Я оплатил" asks the same question."""
         params = self._auth(credentials)
-        if not provider_payment_id:
+        if not number:
             raise ProviderError("LIFE PAY: у платежа нет номера счёта")
-        params["number"] = provider_payment_id
+        params["number"] = number
 
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(f"{_BASE}/bill/status", params=params)
@@ -124,7 +143,7 @@ class LifePayProvider:
             amount = data.get("amount")
             if amount is not None and abs(float(str(amount).replace(",", ".")) - amount_minor / 100) > 0.009:
                 raise ProviderError(f"LIFE PAY: сумма не совпадает (в кассе {amount})")
-            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=provider_payment_id)
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=number)
         if status in _FAILED:
-            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=provider_payment_id)
-        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=provider_payment_id)
+            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=number)
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=number)
