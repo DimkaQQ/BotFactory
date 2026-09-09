@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Background, Controls, type Edge, type Node, ReactFlow, ReactFlowProvider, useNodesState } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -6,6 +6,7 @@ import type { BlockType, BotBlock, BotWithBlocks } from "../../api/builderApi";
 import { BLOCK_TYPES } from "../../blockTypes";
 import { BlockEditPanel } from "./BlockEditPanel";
 import { BlockNode, type BlockNodeData } from "./BlockNode";
+import { FlowActionsContext, type FlowActions } from "./flowActions";
 import { StartNode } from "./StartNode";
 
 const START_ID = "__start__";
@@ -40,7 +41,7 @@ function blockNode(block: BotBlock, isStart: boolean): FlowNode {
     id: block.id,
     type: "block",
     position: { x: block.position_x, y: block.position_y },
-    data: { block, isStart, onEdit: () => {}, onDelete: () => {} } satisfies BlockNodeData,
+    data: { block, isStart } satisfies BlockNodeData,
   };
 }
 
@@ -70,20 +71,34 @@ function Inner({ bot, onChangeContent, onDelete, onAdd, onSetNext, onSetStart, o
   // value, seeded from block.position_x/y only at creation time. Overwriting
   // it on every keystroke-triggered re-render would fight drags and the
   // async round trip after a drop.
+  //
+  // Untouched blocks keep their exact node object. BotBuilder replaces only
+  // the block being edited (the rest keep reference identity), so typing in
+  // one block leaves every other node byte-identical and React Flow skips
+  // re-rendering it — the difference between a canvas that keeps up with
+  // typing and one that redraws itself on every keystroke.
   useEffect(() => {
     setNodes((current) => {
       const byId = new Map(current.map((n) => [n.id, n]));
-      const next: FlowNode[] = [byId.get(START_ID) ?? { id: START_ID, type: "start", position: START_POSITION, data: {} }];
+      const startNode = byId.get(START_ID) ?? { id: START_ID, type: "start", position: START_POSITION, data: {} };
+      const next: FlowNode[] = [startNode];
+      let changed = current.length !== bot.blocks.length + 1 || current[0] !== startNode;
+
       for (const block of bot.blocks) {
         const existing = byId.get(block.id);
         const isStart = block.id === bot.start_block_id;
-        if (existing) {
-          next.push({ ...existing, data: { ...existing.data, block, isStart } });
+        if (existing && existing.data.block === block && existing.data.isStart === isStart) {
+          next.push(existing);
+        } else if (existing) {
+          next.push({ ...existing, data: { block, isStart } satisfies BlockNodeData });
+          changed = true;
         } else {
           next.push(blockNode(block, isStart));
+          changed = true;
         }
       }
-      return next;
+
+      return changed ? next : current;
     });
   }, [bot.blocks, bot.start_block_id, setNodes]);
 
@@ -138,16 +153,21 @@ function Inner({ bot, onChangeContent, onDelete, onAdd, onSetNext, onSetStart, o
     [onDelete],
   );
 
-  // BlockNode's onEdit/onDelete are placeholders at node-creation time (see
-  // blockNode() / the reconcile effect above) — patched in here at render
-  // time instead of threaded through every node update, so their identity
-  // can stay fixed regardless of what triggered this render.
-  const renderNodes = useMemo(
-    () =>
-      nodes.map((n) =>
-        n.type === "block" ? { ...n, data: { ...n.data, onEdit: disabled ? () => {} : handleEdit, onDelete: handleDelete } } : n,
-      ),
-    [nodes, handleEdit, handleDelete, disabled],
+  // The node callbacks reach BlockNode through context, not through node
+  // data, and this object never changes identity — the latest handlers are
+  // read off a ref at call time. That keeps `data` stable across renders
+  // (see the reconcile effect) instead of invalidating every node whenever
+  // a handler was recreated.
+  const latest = useRef({ handleEdit, handleDelete, disabled });
+  latest.current = { handleEdit, handleDelete, disabled };
+  const actions = useMemo<FlowActions>(
+    () => ({
+      onEdit: (blockId) => {
+        if (!latest.current.disabled) latest.current.handleEdit(blockId);
+      },
+      onDelete: (blockId) => latest.current.handleDelete(blockId),
+    }),
+    [],
   );
 
   function handleConnect(connection: { source: string | null; sourceHandle: string | null; target: string | null }) {
@@ -215,25 +235,27 @@ function Inner({ bot, onChangeContent, onDelete, onAdd, onSetNext, onSetStart, o
       )}
 
       <div className="flow-canvas">
-        <ReactFlow
-          nodes={renderNodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onConnect={disabled ? undefined : handleConnect}
-          onEdgesDelete={disabled ? undefined : handleEdgesDelete}
-          onNodeDragStop={disabled ? undefined : handleNodeDragStop}
-          nodeTypes={nodeTypes}
-          nodesDraggable={!disabled}
-          nodesConnectable={!disabled}
-          elementsSelectable={!disabled}
-          deleteKeyCode={disabled ? null : ["Backspace", "Delete"]}
-          fitView
-          fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background gap={24} size={1.5} />
-          <Controls showInteractive={false} />
-        </ReactFlow>
+        <FlowActionsContext.Provider value={actions}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onConnect={disabled ? undefined : handleConnect}
+            onEdgesDelete={disabled ? undefined : handleEdgesDelete}
+            onNodeDragStop={disabled ? undefined : handleNodeDragStop}
+            nodeTypes={nodeTypes}
+            nodesDraggable={!disabled}
+            nodesConnectable={!disabled}
+            elementsSelectable={!disabled}
+            deleteKeyCode={disabled ? null : ["Backspace", "Delete"]}
+            fitView
+            fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background gap={24} size={1.5} />
+            <Controls showInteractive={false} />
+          </ReactFlow>
+        </FlowActionsContext.Provider>
 
         {!disabled && bot.blocks.length === 0 && (
           <div className="flow-canvas__empty">
@@ -277,6 +299,7 @@ function Inner({ bot, onChangeContent, onDelete, onAdd, onSetNext, onSetStart, o
         <BlockEditPanel
           block={editingBlock}
           botId={bot.id}
+          blocks={bot.blocks}
           onChange={(content) => onChangeContent(editingBlock.id, content)}
           onDelete={() => handleDelete(editingBlock.id)}
           onClose={() => setEditingId(null)}

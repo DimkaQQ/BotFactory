@@ -69,8 +69,39 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
       }
       // Sequential on purpose — order_index falls back to "append", so
       // blocks must land in template order, not race each other.
-      for (const block of template.blocks) {
-        await builderApi.createBlock(bot.id, block.block_type, block.content);
+      // Laid out as a column, stepping right after a buttons block so its
+      // branch arrow reads as a branch instead of looping back on itself.
+      const created = [];
+      let x = 80;
+      // Clear of the "▶ Старт" pseudo-node, which sits at (40, 40).
+      let y = 170;
+      for (const [index, block] of template.blocks.entries()) {
+        if (template.blocks[index - 1]?.block_type === "buttons") x += 280;
+        created.push(await builderApi.createBlock(bot.id, block.block_type, block.content, { x, y }));
+        y += 190;
+      }
+
+      // Then wire them into an actual chain. A template arriving as a pile
+      // of disconnected blocks would send nothing but its first message —
+      // and it's also how someone learns what the arrows are for: the first
+      // bot they open already shows a working one.
+      for (let i = 0; i < created.length - 1; i++) {
+        const current = created[i];
+        const next = created[i + 1];
+        const buttons = current.content.buttons ?? [];
+        // A buttons block stops and waits for a tap, so its "next" is the
+        // button's own branch, not the plain arrow (see bot_dispatcher.py).
+        const branchIndex = buttons.findIndex((b) => b.action_type !== "url");
+        if (current.block_type === "buttons" && branchIndex !== -1) {
+          await builderApi.updateBlock(bot.id, current.id, {
+            content: {
+              ...current.content,
+              buttons: buttons.map((b, index) => (index === branchIndex ? { ...b, target_block_id: next.id } : b)),
+            },
+          });
+        } else {
+          await builderApi.updateBlock(bot.id, current.id, { next_block_id: next.id });
+        }
       }
       setPickerOpen(false);
       onOpen(bot.id);

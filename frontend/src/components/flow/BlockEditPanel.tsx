@@ -20,6 +20,9 @@ const DELAY_PRESETS = [1, 2, 3, 5, 8, 10];
 interface Props {
   block: BotBlock;
   botId: string;
+  /** The bot's other blocks — ButtonsEditor names the block each button
+   * leads to, instead of leaving "куда ведёт" an unanswered question. */
+  blocks: BotBlock[];
   onChange: (content: BotBlock["content"]) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -29,7 +32,7 @@ interface Props {
  * (mobile) when its node is clicked on the flow canvas — this is where
  * MediaEditor/PollEditor/ButtonsEditor now live, having moved out of the old
  * inline chat-bubble editor they were built for. */
-export function BlockEditPanel({ block, botId, onChange, onDelete, onClose }: Props) {
+export function BlockEditPanel({ block, botId, blocks, onChange, onDelete, onClose }: Props) {
   const def = BLOCK_TYPE_BY_ID[block.block_type];
   const isMediaBlock = block.block_type === "image" || block.block_type === "video";
   const isPollBlock = block.block_type === "poll";
@@ -86,10 +89,7 @@ export function BlockEditPanel({ block, botId, onChange, onDelete, onClose }: Pr
           {isButtonsBlock && (
             <div className="edit-panel__buttons">
               <p className="edit-panel__section-label">Кнопки</p>
-              <ButtonsEditor content={block.content} onChange={onChange} />
-              <p className="app-hint edit-panel__hint">
-                Потяни стрелку от кнопки на канвасе, чтобы решить, куда она ведёт.
-              </p>
+              <ButtonsEditor content={block.content} onChange={onChange} blocks={blocks} />
             </div>
           )}
         </div>

@@ -38,7 +38,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       { block_type: "image", content: { media_type: "photo", media_file_id: "", text: "Как это выглядит" } },
       {
         block_type: "buttons",
-        content: { buttons: [{ label: "Купить", action_type: "text", action_value: "Хочу купить" }] },
+        content: { buttons: [{ label: "Купить", action_type: "text", action_value: "" }] },
       },
       {
         block_type: "delivery",
@@ -61,7 +61,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       },
       {
         block_type: "buttons",
-        content: { buttons: [{ label: "Оформить подписку", action_type: "text", action_value: "Хочу подписку" }] },
+        content: { buttons: [{ label: "Оформить подписку", action_type: "text", action_value: "" }] },
       },
       { block_type: "delivery", content: { text: "Отлично! Первый материал уже готовится — жди на этой неделе 👀" } },
     ],

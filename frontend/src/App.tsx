@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import {
@@ -10,10 +10,14 @@ import {
   getStoredSessionToken,
 } from "./api/builderApi";
 import "./App.css";
-import { BotBuilder } from "./components/BotBuilder";
 import { BotList } from "./components/BotList";
 import { LoginScreen } from "./components/LoginScreen";
 import { useTelegramWebApp } from "./hooks/useTelegramWebApp";
+
+/** The builder drags in React Flow — by far the heaviest dependency here,
+ * and one nobody needs until they actually open a bot. Split out, so the
+ * landing and the bot list load without it. */
+const BotBuilder = lazy(() => import("./components/BotBuilder").then((m) => ({ default: m.BotBuilder })));
 
 type BootState = "loading" | "need-login" | "ready" | "error";
 type Screen = { name: "list" } | { name: "builder"; botId: string };
@@ -114,12 +118,21 @@ export default function App() {
         transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
       >
         {screen.name === "builder" ? (
-          <BotBuilder
-            botId={screen.botId}
-            isMiniApp={isMiniApp}
-            onBack={() => setScreen({ name: "list" })}
-            onDeleted={() => setScreen({ name: "list" })}
-          />
+          <Suspense
+            fallback={
+              <div className="screen screen--center">
+                <div className="state-icon">🛠</div>
+                <p>Открываем холст…</p>
+              </div>
+            }
+          >
+            <BotBuilder
+              botId={screen.botId}
+              isMiniApp={isMiniApp}
+              onBack={() => setScreen({ name: "list" })}
+              onDeleted={() => setScreen({ name: "list" })}
+            />
+          </Suspense>
         ) : (
           <BotList
             greetingName={clientName}

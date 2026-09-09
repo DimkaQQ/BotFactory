@@ -56,7 +56,9 @@ async def create_block(
         content=payload.content,
         order_index=order_index,
         position_x=payload.position_x if payload.position_x is not None else 80.0,
-        position_y=payload.position_y if payload.position_y is not None else 80.0 + order_index * 160.0,
+        # 170 down, not 80: the canvas's "▶ Старт" pseudo-node sits at
+        # (40, 40), and a first block at y=80 lands under it.
+        position_y=payload.position_y if payload.position_y is not None else 170.0 + order_index * 170.0,
     )
     db.add(block)
 
