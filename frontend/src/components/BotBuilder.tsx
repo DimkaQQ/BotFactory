@@ -306,8 +306,14 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     );
   }
 
+  const showsPaywall = bot.status === "draft" && Boolean(publication?.required) && !publication?.paid;
+
   return (
-    <div className="screen screen--builder">
+    // The paywall card is roughly twice the height of the publish button, and
+    // the footer is fixed — so the space reserved for it at the bottom of the
+    // screen has to know which one is showing, or the card lands on top of the
+    // "+ Добавить блок" bar and no block can be added on a phone.
+    <div className={`screen screen--builder${showsPaywall ? " screen--builder-paywall" : ""}`}>
       <header className="app-header">
         <button type="button" className="back-link" onClick={onBack}>
           ← Мои боты

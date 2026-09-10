@@ -84,6 +84,50 @@
   --dur-slow: 0.45s;
 }
 
+/* Dark theme for the web constructor.
+   `color-scheme: light dark` above already tells the browser to draw native
+   widgets — selects, scrollbars, autofill — dark for a viewer who prefers
+   it, so without this block those widgets appeared dark on a page that
+   stayed stubbornly light.
+
+   Only the six source tokens are redefined; everything else in the palette
+   is derived from them, so the whole app follows. These are *fallbacks*
+   inside `var(--tg-theme-*, …)`, which means the Mini App is untouched:
+   when Telegram injects its own theme, its values win here exactly as they
+   do in light mode. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tg-bg: var(--tg-theme-bg-color, #0f0e16);
+    --tg-text: var(--tg-theme-text-color, #f2f0fa);
+    --tg-hint: var(--tg-theme-hint-color, #9997ad);
+    --tg-link: var(--tg-theme-link-color, #a5b4fc);
+    --tg-button: var(--tg-theme-button-color, #6366f1);
+    --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
+    --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #1a1826);
+    --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
+    --tg-separator: var(--tg-theme-section-separator-color, rgba(242, 240, 250, 0.12));
+    --tg-destructive: var(--tg-theme-destructive-text-color, #f87171);
+
+    /* Shadows are mixed from --tg-text, which is now nearly white — left
+       alone they would light the cards up instead of lifting them. On a
+       dark ground depth comes from a darker shadow, not a softer one. */
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.36);
+    --shadow-elevated: 0 2px 4px rgba(0, 0, 0, 0.45), 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+
+    /* The jewel tones are chosen to sit on off-white; at these depths they
+       disappear into a dark background. Same hues, lifted. */
+    --accent-welcome: #818cf8;
+    --accent-description: #a78bfa;
+    --accent-image: #e879f9;
+    --accent-video: #fb7185;
+    --accent-buttons: #fbbf24;
+    --accent-poll: #22d3ee;
+    --accent-delivery: #34d399;
+    --accent-delay: #94a3b8;
+    --accent-success: #34d399;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

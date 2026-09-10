@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Background, Controls, type Edge, type Node, ReactFlow, ReactFlowProvider, useNodesState } from "@xyflow/react";
+import {
+  Background,
+  Controls,
+  type Edge,
+  type Node,
+  ReactFlow,
+  ReactFlowProvider,
+  useNodesState,
+  useReactFlow,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import type { BlockType, BotBlock, BotWithBlocks, PaymentProviderInfo } from "../../api/builderApi";
@@ -11,6 +20,15 @@ import { StartNode } from "./StartNode";
 
 const START_ID = "__start__";
 const START_POSITION = { x: 40, y: 40 };
+
+// Roughly a node's footprint, for centring the viewport on one.
+const NODE_WIDTH = 220;
+const NODE_HEIGHT = 110;
+
+// `minZoom` matters as much as `maxZoom`: fitting a six-block graph into a
+// phone-sized canvas produced a 50% zoom where the node text was ~6px and
+// unreadable. Better to show part of the graph legibly and let the user pan.
+const FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 1, minZoom: 0.7 };
 
 /** Which model field a dropped/deleted arrow maps back to — carried on the
  * edge itself so onConnect/onEdgesDelete don't need to re-derive it from
@@ -118,6 +136,21 @@ function Inner({
       return changed ? next : current;
     });
   }, [bot.blocks, bot.start_block_id, setNodes]);
+
+  // `fitView` as a prop runs once, on mount — which is before the blocks
+  // have been fetched. On a phone that left the viewport fitted to an empty
+  // canvas and the nodes half off-screen, showing slivers of white cards
+  // with no text. Fit again the first time there is something to fit to.
+  const { fitView, setCenter } = useReactFlow();
+  const hasFitted = useRef(false);
+  useEffect(() => {
+    if (hasFitted.current || bot.blocks.length === 0) return;
+    hasFitted.current = true;
+    // One frame later: React Flow measures nodes after they render, and
+    // fitting before that measures zero-sized boxes.
+    const frame = requestAnimationFrame(() => fitView(FIT_VIEW_OPTIONS));
+    return () => cancelAnimationFrame(frame);
+  }, [bot.blocks.length, fitView]);
 
   const edges = useMemo<Edge[]>(() => {
     const out: Edge[] = [];
@@ -230,6 +263,12 @@ function Inner({
     const position = { x: 360 + (count % 3) * 260, y: 40 + Math.floor(count / 3) * 220 };
     const newId = await onAdd(type, position);
     setEditingId(newId);
+    // Bring it into view: the cascade puts new nodes to the right of the
+    // graph, which on a phone (and on a panned canvas) is off-screen — so
+    // clicking a block type read as "nothing happened".
+    requestAnimationFrame(() => {
+      setCenter(position.x + NODE_WIDTH / 2, position.y + NODE_HEIGHT / 2, { zoom: 1, duration: 300 });
+    });
   }
 
   return (
@@ -266,7 +305,7 @@ function Inner({
             elementsSelectable={!disabled}
             deleteKeyCode={disabled ? null : ["Backspace", "Delete"]}
             fitView
-            fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
+            fitViewOptions={FIT_VIEW_OPTIONS}
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={24} size={1.5} />

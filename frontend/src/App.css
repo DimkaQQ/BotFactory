@@ -1,6 +1,16 @@
 .screen {
   min-height: 100vh;
-  padding: var(--sp-4) var(--sp-4) calc(110px + env(safe-area-inset-bottom));
+  /* --footer-h is how tall the fixed footer actually is on this screen. Both
+     the space reserved here and anything that has to sit above the footer
+     (the canvas composer) are measured from it, so one number keeps them in
+     agreement instead of two guesses drifting apart. */
+  --footer-h: 110px;
+  padding: var(--sp-4) var(--sp-4) calc(var(--footer-h) + 64px + env(safe-area-inset-bottom));
+}
+
+/* The paywall card is about twice the height of the publish button. */
+.screen--builder-paywall {
+  --footer-h: 200px;
 }
 
 .screen--center {
@@ -1942,6 +1952,7 @@
 
 .app-footer {
   position: fixed;
+  z-index: 5;
   left: 0;
   right: 0;
   bottom: 0;
@@ -2401,6 +2412,7 @@
   }
 
   .screen--builder .flow-canvas__composer {
+    position: static;
     display: none;
   }
 
@@ -2700,7 +2712,8 @@
 .landing-section--tint {
   background: var(--tg-secondary-bg);
   border-radius: var(--radius-xl);
-  margin: var(--sp-5) var(--sp-3);
+  margin: var(--sp-5) auto;
+  width: calc(100% - 2 * var(--sp-3));
 }
 
 .landing-section__head {
@@ -2843,7 +2856,8 @@
   gap: var(--sp-5);
   text-align: center;
   max-width: 1100px;
-  margin: var(--sp-5) var(--sp-3);
+  margin: var(--sp-5) auto;
+  width: calc(100% - 2 * var(--sp-3));
   padding: var(--sp-6) var(--sp-4);
   border-radius: var(--radius-xl);
   background: radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--tg-button) 10%, transparent), transparent 60%),
@@ -3182,7 +3196,8 @@
 .landing-cta {
   text-align: center;
   max-width: 1100px;
-  margin: var(--sp-5) var(--sp-3) var(--sp-7);
+  margin: var(--sp-5) auto var(--sp-7);
+  width: calc(100% - 2 * var(--sp-3));
   padding: var(--sp-7) var(--sp-4);
   border-radius: var(--radius-xl);
   background: linear-gradient(135deg, var(--tg-button), color-mix(in srgb, var(--accent-description) 75%, var(--tg-button)));
@@ -3553,8 +3568,17 @@
   font-size: 14px;
 }
 
+/* "+ Добавить блок" is the only way to add a block on a phone — the block
+   library sidebar is desktop-only. In normal flow it ended up underneath the
+   fixed footer, and with the taller paywall card showing it was completely
+   covered: on a phone the bot could be opened but not built. Pinned above
+   the footer instead, measured from the same --footer-h. */
 .flow-canvas__composer {
-  position: static;
+  position: fixed;
+  left: var(--sp-4);
+  right: var(--sp-4);
+  bottom: calc(var(--footer-h) + env(safe-area-inset-bottom));
+  z-index: 4;
 }
 
 /* One block's card on the canvas */
