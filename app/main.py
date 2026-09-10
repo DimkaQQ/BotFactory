@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.routers import auth, bots, builder, media, payments, webhook
-from app.services import background, bot_registry
+from app.services import background, bot_registry, payment_service
 
 logging.basicConfig(level=logging.INFO)
 
@@ -18,11 +18,18 @@ async def lifespan(app: FastAPI):
     # Brings bots published before webhook secrets existed up to date, so the
     # webhook route can refuse anything that arrives without one.
     background.spawn(bot_registry.refresh_all_webhooks(), name="refresh-all-webhooks")
+    # Anything a previous run was paid for but never handed over — the
+    # provider was already acknowledged, so nothing else would ever retry.
+    background.spawn(payment_service.redeliver_undelivered(), name="redeliver-undelivered")
     yield
     # Dialogues and deliveries scheduled off a request are still in flight;
     # give them a moment to finish rather than dropping a buyer's goods
-    # halfway through a deploy.
+    # halfway through a deploy. Whatever is still going after that is
+    # cancelled *before* the bot sessions close, so it fails cleanly instead
+    # of tripping over a connection pulled out from under it — and anything
+    # undelivered is picked up on the next boot.
     await background.wait_for_all()
+    await background.cancel_all()
     await bot_registry.close_all()
 
 

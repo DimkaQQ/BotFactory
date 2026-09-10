@@ -62,5 +62,23 @@ async def handle_update(
         logger.warning("Rejected an update for bot %s: bad or missing secret token", bot_id)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bad secret token")
 
-    background.spawn(_dispatch(bot_id, update), name=f"update:{bot_id}")
+    # Keyed on the chat, so one conversation's updates keep their order even
+    # though the request no longer waits for them.
+    chat = _chat_of(update)
+    background.spawn(
+        _dispatch(bot_id, update),
+        name=f"update:{bot_id}",
+        key=f"{bot_id}:{chat}" if chat is not None else None,
+    )
     return {"ok": True}
+
+
+def _chat_of(update: dict) -> int | None:
+    for field in ("message", "edited_message", "callback_query"):
+        payload = update.get(field) or {}
+        message = payload.get("message") if field == "callback_query" else payload
+        chat = ((message or {}).get("chat") or {}).get("id")
+        if chat is not None:
+            return chat
+    pre_checkout = update.get("pre_checkout_query") or {}
+    return (pre_checkout.get("from") or {}).get("id")

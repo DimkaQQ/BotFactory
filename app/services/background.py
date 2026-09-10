@@ -24,8 +24,24 @@ logger = logging.getLogger(__name__)
 _running: set[asyncio.Task] = set()
 
 
-def spawn(coro: Coroutine, *, name: str) -> None:
-    """Run `coro` detached from the current request."""
+# One conversation at a time. Telegram used to give us ordering for free by
+# waiting for each update to be answered before sending the next; answering
+# immediately gave that up, and two quick taps could then have their replies
+# interleave in the same chat. Work tagged with the same key runs in the
+# order it was scheduled.
+_queues: dict[str, asyncio.Task] = {}
+
+
+def spawn(coro: Coroutine, *, name: str, key: str | None = None) -> None:
+    """Run `coro` detached from the current request.
+
+    With `key`, it is chained after any work already queued under that key —
+    used to keep one chat's updates in order.
+    """
+    if key is not None:
+        _spawn_chained(coro, name=name, key=key)
+        return
+
     task = asyncio.create_task(coro, name=name)
     _running.add(task)
 
@@ -37,6 +53,35 @@ def spawn(coro: Coroutine, *, name: str) -> None:
         if error is not None:
             # Nothing is waiting on this task, so an unlogged exception here
             # would simply vanish.
+            logger.error("Background task %s failed: %s", finished.get_name(), error, exc_info=error)
+
+    task.add_done_callback(_finished)
+
+
+def _spawn_chained(coro: Coroutine, *, name: str, key: str) -> None:
+    previous = _queues.get(key)
+
+    async def run() -> None:
+        if previous is not None:
+            # Wait for the chat's previous update, however it ended — a
+            # failure there must not strand everything queued behind it.
+            await asyncio.wait([previous])
+        await coro
+
+    task = asyncio.create_task(run(), name=name)
+    _queues[key] = task
+    _running.add(task)
+
+    def _finished(finished: asyncio.Task) -> None:
+        _running.discard(finished)
+        # Only clear the slot if nothing newer took it, or the next update
+        # for this chat would lose its predecessor and run out of order.
+        if _queues.get(key) is finished:
+            _queues.pop(key, None)
+        if finished.cancelled():
+            return
+        error = finished.exception()
+        if error is not None:
             logger.error("Background task %s failed: %s", finished.get_name(), error, exc_info=error)
 
     task.add_done_callback(_finished)

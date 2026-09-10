@@ -70,6 +70,26 @@ _PAY_NO = "payno"  # owner: reject it
 _SELF_SETTLING = {"stars", "test"}
 
 
+async def _pause(db: AsyncSession, seconds: float) -> None:
+    """Wait, without sitting on a database connection while doing it.
+
+    A dialogue is paced deliberately — typing delays between blocks, and a
+    "Пауза" block that can hold for fifteen seconds — and the session keeps
+    its connection checked out for as long as a transaction is open. Twelve
+    simultaneous conversations therefore held twelve of the fifteen
+    connections the deployment has, doing nothing, and the constructor's own
+    API queued behind them. Ending the transaction first hands the
+    connection back; the next query takes a fresh one.
+
+    Committed rather than rolled back: the sessionmaker sets
+    `expire_on_commit=False`, so the blocks the walk is holding stay usable,
+    while a rollback would expire them and the very next `block.content`
+    read would be lazy IO outside a greenlet.
+    """
+    await db.commit()
+    await asyncio.sleep(seconds)
+
+
 def _typing_delay(text: str) -> float:
     seconds = len(text) / _CHARS_PER_SECOND
     return max(_TYPING_DELAY_MIN, min(seconds, _TYPING_DELAY_MAX))
@@ -361,7 +381,7 @@ async def _walk_chain(
             if block.block_type == BlockType.payment:
                 if not first:
                     await bot.send_chat_action(chat_id, "typing")
-                    await asyncio.sleep(_TYPING_DELAY_MIN)
+                    await _pause(db, _TYPING_DELAY_MIN)
                 if await _send_payment_block(bot, chat_id, block, bot_id, db, telegram_user_id):
                     # Paid delivery waits for the provider's callback — see
                     # payment_service.resume_after_payment.
@@ -373,12 +393,12 @@ async def _walk_chain(
                 # Telegram and a reverse proxy in front of us have their
                 # own patience limits.
                 seconds = (block.content or {}).get("seconds", 2)
-                await asyncio.sleep(max(0.0, min(float(seconds), 15.0)))
+                await _pause(db, max(0.0, min(float(seconds), 15.0)))
             else:
                 if not first:
                     text = (block.content or {}).get("text") or ""
                     await bot.send_chat_action(chat_id, "typing")
-                    await asyncio.sleep(_typing_delay(text))
+                    await _pause(db, _typing_delay(text))
                 await _send_block(bot, chat_id, block)
         except Exception:
             logger.exception("Failed to send block %s for bot %s", block.id, bot_id)

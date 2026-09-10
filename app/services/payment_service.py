@@ -215,6 +215,7 @@ async def _create(
     chat_id: int | None = None,
     extra: dict | None = None,
     bot_token: str | None = None,
+    meta: dict | None = None,
 ) -> tuple[Payment, str]:
     provider = payment_providers.get_provider(provider_slug)
 
@@ -255,7 +256,7 @@ async def _create(
     # Several providers mint their own id at creation and then use only
     # that in the callback, so it is stored now, not when the money lands.
     payment.provider_payment_id = checkout.provider_payment_id
-    payment.meta = {"checkout_url": checkout.url, **checkout.meta}
+    payment.meta = {"checkout_url": checkout.url, **checkout.meta, **(meta or {})}
     await db.commit()
     await db.refresh(payment)
     return payment, checkout.url
@@ -323,6 +324,10 @@ async def create_order_payment(
         # lives in its content.
         extra=content,
         bot_token=bot_token,
+        # Pinned now, not looked up at delivery time: the shop can edit the
+        # canvas while an order is open ("правки применяются сразу"), and a
+        # deleted block must not turn into money taken with nothing sent.
+        meta={"deliver_from": str(block.next_block_id) if block.next_block_id else None},
     )
 
 
@@ -388,16 +393,38 @@ async def credentials_for(db: AsyncSession, payment: Payment) -> tuple[dict[str,
 
 async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
     """Deliver what was bought: pick the dialogue back up at the payment
-    block's next block. Best-effort — the money is already taken, so a
-    Telegram hiccup here is logged, never raised back at the provider (which
-    would make it retry and re-deliver)."""
+    block's next block.
+
+    Failures are logged, never raised back at the provider — the money is
+    already taken and an error here would only make it retry and re-deliver.
+    But the attempt is recorded either way: `meta.delivered_at` is stamped
+    only once the goods have actually gone out, which is what lets
+    `redeliver_undelivered` pick up anything a restart cut in half.
+    """
     from app.services import bot_dispatcher, bot_registry
 
     if payment.kind != PaymentKind.order or not payment.bot_id or payment.chat_id is None:
         return
 
-    result = await db.execute(select(BotBlock).where(BotBlock.id == payment.block_id))
-    block = result.scalar_one_or_none()
+    # Where delivery goes was captured when the order was created. Looking it
+    # up through the block now would find nothing if the shop has since
+    # edited the canvas — and "the block was deleted" must not silently mean
+    # "money taken, nothing sent".
+    target = (payment.meta or {}).get("deliver_from")
+    if target is None:
+        result = await db.execute(select(BotBlock).where(BotBlock.id == payment.block_id))
+        block = result.scalar_one_or_none()
+        target = str(block.next_block_id) if block is not None and block.next_block_id else None
+
+    # The pinned target can itself have been deleted since — pinning survives
+    # the payment block going away, not the delivery block. Either way the
+    # answer is the same: do not quietly send a receipt and nothing else.
+    if target is not None:
+        exists = await db.execute(
+            select(BotBlock.id).where(BotBlock.id == uuid.UUID(str(target)), BotBlock.bot_id == payment.bot_id)
+        )
+        if exists.scalar_one_or_none() is None:
+            target = None
 
     try:
         bot_instance = await bot_registry.get_or_create(payment.bot_id, db)
@@ -406,17 +433,93 @@ async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
             return
 
         await bot_instance.send_message(payment.chat_id, "✅ Оплата получена, спасибо!")
-        if block is not None and block.next_block_id is not None:
+        if target:
             await bot_dispatcher._walk_chain(
                 bot_instance,
                 payment.chat_id,
-                block.next_block_id,
+                uuid.UUID(str(target)),
                 payment.bot_id,
                 db,
                 telegram_user_id=payment.telegram_user_id,
             )
+        else:
+            # Paid, but the scenario no longer says what to hand over. Tell
+            # the buyer someone is coming rather than leaving them with a
+            # receipt and nothing else, and make it loud in the log.
+            logger.error("Payment %s: paid but there is nothing to deliver — the block is gone", payment.id)
+            await bot_instance.send_message(
+                payment.chat_id,
+                "Оплата получена, но товар пока не пришёл — продавец уже знает и свяжется с тобой.",
+            )
+            await _notify_owner_of_stuck_delivery(db, payment)
+
+        await _stamp_delivered(db, payment)
     except Exception:
         logger.exception("Payment %s: paid but delivery failed", payment.id)
+
+
+async def _stamp_delivered(db: AsyncSession, payment: Payment) -> None:
+    payment.meta = {**(payment.meta or {}), "delivered_at": datetime.now(timezone.utc).isoformat()}
+    await db.commit()
+
+
+async def _notify_owner_of_stuck_delivery(db: AsyncSession, payment: Payment) -> None:
+    from app.models.client import Client
+    from app.services import bot_registry
+
+    try:
+        result = await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))
+        bot_row = result.scalar_one_or_none()
+        if bot_row is None or bot_row.client_id is None:
+            return
+        result = await db.execute(select(Client).where(Client.id == bot_row.client_id))
+        owner = result.scalar_one_or_none()
+        instance = await bot_registry.get_or_create(payment.bot_id, db)
+        if owner is None or not owner.telegram_user_id or instance is None:
+            return
+        await instance.send_message(
+            owner.telegram_user_id,
+            f"⚠️ Заказ №{payment.invoice_no} оплачен, но выдавать нечего — блок после оплаты удалён. "
+            f"Свяжись с покупателем и восстанови блок «Выдача».",
+        )
+    except Exception:
+        logger.info("Could not warn the owner about stuck payment %s", payment.id, exc_info=True)
+
+
+async def redeliver_undelivered(limit: int = 100) -> None:
+    """Hand over anything that was paid for but never delivered.
+
+    Delivery happens in a background task now, and the provider was already
+    told "received" — so a restart in between used to lose the goods for
+    good, with no retry from anywhere and nothing in the database to say so.
+    Run at startup, this closes that window.
+    """
+    from app.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Payment)
+            .where(
+                Payment.kind == PaymentKind.order,
+                Payment.status == PaymentStatus.paid,
+                # Anything settled a while ago and still unmarked was cut off
+                # mid-flight; a payment from the last minute may simply be
+                # in progress right now.
+                Payment.paid_at < datetime.now(timezone.utc) - timedelta(minutes=1),
+            )
+            .order_by(Payment.paid_at.desc())
+            .limit(limit)
+        )
+        pending = [p for p in result.scalars().all() if not (p.meta or {}).get("delivered_at")]
+
+    if not pending:
+        return
+    logger.warning("Re-delivering %d payment(s) that were paid but never handed over", len(pending))
+    for payment in pending:
+        async with AsyncSessionLocal() as db:
+            fresh = (await db.execute(select(Payment).where(Payment.id == payment.id))).scalar_one_or_none()
+            if fresh is not None and not (fresh.meta or {}).get("delivered_at"):
+                await resume_after_payment(db, fresh)
 
 
 async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: bool = True) -> bool:
