@@ -142,14 +142,14 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                       {provider.title}
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    className={`payment-settings__provider ${slug === "" ? "payment-settings__provider--active" : ""}`}
-                    onClick={() => setSlug("")}
-                  >
-                    Без оплаты
-                  </button>
                 </div>
+                <button
+                  type="button"
+                  className={`payment-settings__none ${slug === "" ? "payment-settings__none--active" : ""}`}
+                  onClick={() => setSlug("")}
+                >
+                  Без оплаты — бот ничего не продаёт
+                </button>
               </div>
 
               {active && (

@@ -160,8 +160,8 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
         </div>
         {isMiniApp && (
           <p className="app-hint" style={{ marginTop: "var(--sp-3)" }}>
-            📱 Здесь можно посмотреть статус и опубликовать бота. Собирать сообщения удобнее на компьютере —
-            открой {window.location.host} в браузере.
+            📱 Здесь виден статус и кнопка публикации. Собирать бота — в браузере: открой {window.location.host},
+            с телефона это тоже работает.
           </p>
         )}
       </header>
@@ -222,7 +222,7 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
                   <p className="empty-state__title">Здесь появятся твои боты</p>
                   <p className="empty-state__hint">
                     {isMiniApp
-                      ? "Собери первого на компьютере — там визуальный холст с блоками и стрелками"
+                      ? "Собери первого в браузере — там визуальный холст с блоками и стрелками"
                       : "Возьми готовый сценарий: блоки уже расставлены и связаны — останется вписать свой текст"}
                   </p>
 
@@ -295,7 +295,7 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
 
       <div className="app-footer">
         <button type="button" className="publish-button" onClick={handleCreateClick}>
-          {isMiniApp ? "Открыть на компьютере →" : "+ Новый бот"}
+          {isMiniApp ? "Открыть в браузере →" : "+ Новый бот"}
         </button>
       </div>
 

@@ -41,7 +41,10 @@ export function PaymentEditor({ content, provider, currencies, providerInfo, onC
     <div className="payment-editor">
       {!provider && (
         <button type="button" className="payment-editor__warning" onClick={onOpenSettings}>
-          ⚠️ Платёжный провайдер не подключён — кнопка оплаты не появится. Настроить →
+          <span>
+            ⚠️ Платёжная система не подключена — бот не сможет принять деньги, и этот блок остановит сценарий.
+          </span>
+          <span className="payment-editor__warning-cta">Подключить кассу →</span>
         </button>
       )}
 

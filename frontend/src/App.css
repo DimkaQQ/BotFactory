@@ -5,12 +5,44 @@
      (the canvas composer) are measured from it, so one number keeps them in
      agreement instead of two guesses drifting apart. */
   --footer-h: 110px;
-  padding: var(--sp-4) var(--sp-4) calc(var(--footer-h) + 64px + env(safe-area-inset-bottom));
+  padding: var(--sp-4) var(--sp-4) calc(var(--footer-h) + env(safe-area-inset-bottom));
 }
 
 /* The paywall card is about twice the height of the publish button. */
 .screen--builder-paywall {
   --footer-h: 200px;
+}
+
+/* The builder is the one screen that must not scroll as a whole: the canvas
+   pans and zooms on its own, and a page that scrolls underneath it makes
+   both feel broken. Laying it out as a column exactly one viewport tall lets
+   the canvas take whatever is left after the header, the hint and the
+   composer — so the "+ Добавить блок" bar and the publish footer each have
+   their own space instead of landing on top of the canvas controls. */
+@media (max-width: 959px) {
+  .screen--builder {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .screen--builder .flow-canvas {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 180px;
+    margin-bottom: 0;
+  }
+
+  /* Everything above the canvas keeps its natural height. */
+  .screen--builder > .app-header,
+  .screen--builder > .app-hint,
+  .screen--builder > .miniapp-banner,
+  .screen--builder > .published-banner,
+  .screen--builder > .chat-canvas__preview-btn {
+    flex: 0 0 auto;
+  }
 }
 
 .screen--center {
@@ -3573,16 +3605,14 @@
 }
 
 /* "+ Добавить блок" is the only way to add a block on a phone — the block
-   library sidebar is desktop-only. In normal flow it ended up underneath the
-   fixed footer, and with the taller paywall card showing it was completely
-   covered: on a phone the bot could be opened but not built. Pinned above
-   the footer instead, measured from the same --footer-h. */
+   library sidebar is desktop-only. It stays in normal flow, directly under
+   the canvas; the builder screen below is a flex column sized to the
+   viewport, so the canvas gives up exactly the room this needs instead of
+   the two fighting over the same pixels. */
 .flow-canvas__composer {
-  position: fixed;
-  left: var(--sp-4);
-  right: var(--sp-4);
-  bottom: calc(var(--footer-h) + env(safe-area-inset-bottom));
-  z-index: 4;
+  position: static;
+  flex: 0 0 auto;
+  padding-top: var(--sp-2);
 }
 
 /* One block's card on the canvas */
@@ -3891,6 +3921,14 @@
   flex-shrink: 0;
   width: 32px;
   height: 32px;
+  /* Centred properly: an emoji and a ✕ have different intrinsic baselines,
+     so left to inline layout they sat at visibly different heights inside
+     identical circles. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
   border-radius: 999px;
   border: none;
   background: var(--tg-secondary-bg);
@@ -3899,9 +3937,15 @@
   cursor: pointer;
 }
 
-.edit-panel__delete:hover {
-  background: color-mix(in srgb, var(--tg-destructive) 16%, transparent);
+/* Delete is destructive and sits next to "close"; it should not look like
+   its neighbour until you happen to hover it. */
+.edit-panel__delete {
+  background: color-mix(in srgb, var(--tg-destructive) 10%, transparent);
   color: var(--tg-destructive);
+}
+
+.edit-panel__delete:hover {
+  background: color-mix(in srgb, var(--tg-destructive) 20%, transparent);
 }
 
 .edit-panel__body {
@@ -4000,15 +4044,35 @@
 
 .payment-editor__warning {
   width: 100%;
-  padding: 9px 11px;
-  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: 12px;
   border: 1.5px solid color-mix(in srgb, var(--accent-buttons) 35%, transparent);
   background: color-mix(in srgb, var(--accent-buttons) 10%, transparent);
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 12.5px;
+  line-height: 1.4;
   text-align: left;
   cursor: pointer;
+}
+
+.payment-editor__warning-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.payment-editor__warning:hover .payment-editor__warning-cta {
+  background: color-mix(in srgb, var(--tg-button) 88%, black);
 }
 
 .payment-editor__input {
@@ -4072,22 +4136,52 @@
   color: var(--text-tertiary);
 }
 
+/* A grid of equal cells rather than wrapped pills: ten providers with names
+   of very different lengths wrapped into a ragged shape where nothing lined
+   up, the rows had different heights, and "Без оплаты" ended up marooned
+   beside "Тестовая оплата" as if it were another provider. */
 .payment-settings__providers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-2);
 }
 
 .payment-settings__provider {
-  padding: 7px 12px;
-  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 12px;
   border: 1.5px solid var(--tg-separator);
   background: var(--tg-bg);
   font-size: 12.5px;
   font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
   color: var(--text-secondary);
   cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-smooth), background var(--dur-fast) var(--ease-smooth);
+}
+
+.payment-settings__none {
+  width: 100%;
+  margin-top: var(--sp-2);
+  padding: 10px;
+  border-radius: 12px;
+  border: 1.5px dashed var(--tg-separator);
+  background: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.payment-settings__none--active {
+  border-style: solid;
+  border-color: var(--tg-button);
+  color: var(--tg-button);
+  background: color-mix(in srgb, var(--tg-button) 8%, transparent);
 }
 
 .payment-settings__provider--active {
