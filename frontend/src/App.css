@@ -20,6 +20,18 @@
    composer — so the "+ Добавить блок" bar and the publish footer each have
    their own space instead of landing on top of the canvas controls. */
 @media (max-width: 959px) {
+  /* The name is what tells you which bot you are editing, so on a narrow
+     screen it gets the row to itself and the actions wrap under it, rather
+     than the name being clipped to "Раз…". */
+  .app-header__top {
+    flex-wrap: wrap;
+  }
+
+  .app-header__actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .screen--builder {
     display: flex;
     flex-direction: column;
@@ -28,6 +40,7 @@
     overflow: hidden;
   }
 
+  /* The canvas takes whatever the header, hint and composer leave. */
   .screen--builder .flow-canvas {
     flex: 1 1 auto;
     height: auto;
@@ -2454,7 +2467,12 @@
      narrow chat-shaped strip. */
 
   .screen--builder .flow-canvas {
-    height: 74vh;
+    /* Sized against the viewport rather than a flat 74vh: the header, hint
+       and preview button above it take ~270px, so a fixed fraction ran the
+       builder past the fold — the zoom controls were cut in half and the
+       last node sat below it. */
+    height: calc(100dvh - 350px - var(--footer-h));
+    min-height: 340px;
     box-shadow: var(--shadow-elevated);
   }
 
@@ -2631,12 +2649,23 @@
 .login-card {
   position: relative;
   z-index: 1;
-  background: var(--tg-bg);
+  /* The single entry point to the product, sitting on the hero's dark
+     gradient. In dark mode --tg-bg is nearly black, which made the most
+     important element on the page the least visible one — so it gets a
+     surface of its own plus a rim, in both themes. */
+  background: var(--tg-secondary-bg);
+  border: 1px solid color-mix(in srgb, var(--tg-text) 12%, transparent);
   border-radius: var(--radius-lg);
   padding: var(--sp-5);
   box-shadow: var(--shadow-elevated);
   text-align: center;
   animation: login-card-in var(--dur-slow) var(--ease-out) 0.1s backwards;
+}
+
+.login-card__fallback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
 }
 
 @keyframes login-card-in {
@@ -3559,6 +3588,12 @@
   box-shadow: var(--shadow-card);
   border-radius: var(--radius-md);
   overflow: hidden;
+  /* Off the bottom-left corner, where they landed on top of whichever node
+     the graph happened to put there — on a phone they covered a block's
+     title and half its button. */
+  inset: auto var(--sp-3) var(--sp-3) auto !important;
+  /* Slightly translucent so a node underneath is still readable. */
+  background: color-mix(in srgb, var(--tg-bg) 88%, transparent);
 }
 
 .flow-canvas .react-flow__controls-button {
@@ -4163,8 +4198,10 @@
 
 .payment-settings__provider {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   min-height: 44px;
   padding: 8px 10px;
   border-radius: 12px;
@@ -4177,6 +4214,32 @@
   color: var(--text-secondary);
   cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-smooth), background var(--dur-fast) var(--ease-smooth);
+}
+
+.app-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 0 0 auto;
+}
+
+.payment-settings__provider-title {
+  font-weight: 600;
+}
+
+.payment-settings__provider-note {
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text-tertiary);
+}
+
+/* The test provider hands goods over without money. It should not look like
+   one more way to get paid. */
+.payment-settings__provider--test {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent-buttons) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-buttons) 7%, transparent);
 }
 
 .payment-settings__none {
@@ -4433,7 +4496,8 @@
 
 .orders__reject {
   background: var(--tg-secondary-bg);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .orders__confirm:disabled,

@@ -17,6 +17,22 @@ interface Props {
   onSaved: (settings: PaymentSettings) => void;
 }
 
+/** One line per provider, so choosing does not require having integrated one
+ * before. The full `hint` only appears after the tile is clicked. */
+const SHORT: Record<string, string> = {
+  stars: "цифровые товары в Telegram",
+  yookassa: "карты РФ · нужно ИП/ООО",
+  prodamus: "карты РФ · для самозанятых",
+  robokassa: "карты РФ и KZT",
+  paymaster: "карты РФ",
+  lifepay: "СБП и карты РФ · онлайн-касса",
+  lavatop: "карты РФ, покупатель платит из-за рубежа",
+  stripe: "зарубежные карты · нужна компания вне РФ и РК",
+  cryptobot: "USDT, TON · без юрлица",
+  link: "любая своя ссылка · подтверждаешь вручную",
+  test: "только для проверки сценария",
+};
+
 const STATUS_LABEL: Record<Order["status"], string> = {
   paid: "оплачен",
   // Unpaid orders matter as much as paid ones: "ten people opened checkout
@@ -155,10 +171,15 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                     <button
                       key={provider.slug}
                       type="button"
-                      className={`payment-settings__provider ${slug === provider.slug ? "payment-settings__provider--active" : ""}`}
+                      className={`payment-settings__provider ${slug === provider.slug ? "payment-settings__provider--active" : ""}${
+                        provider.slug === "test" ? " payment-settings__provider--test" : ""
+                      }`}
                       onClick={() => setSlug(provider.slug)}
                     >
-                      {provider.title}
+                      <span className="payment-settings__provider-title">{provider.title}</span>
+                      {SHORT[provider.slug] && (
+                        <span className="payment-settings__provider-note">{SHORT[provider.slug]}</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -295,9 +316,13 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                           type="button"
                           className="orders__reject"
                           disabled={busyOrder === order.id}
-                          onClick={() => decide(order, false)}
+                          onClick={() => {
+                            if (window.confirm(`Отклонить заказ №${order.invoice_no}? Покупателю придёт сообщение, что оплату не видно.`)) {
+                              decide(order, false);
+                            }
+                          }}
                         >
-                          ✖️
+                          Не пришло
                         </button>
                       </div>
                     </div>

@@ -390,6 +390,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               )}
             </p>
           </div>
+          <div className="app-header__actions">
           {!isMiniApp && (
             <button
               type="button"
@@ -403,6 +404,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           <button type="button" className="bot-delete-button" onClick={handleDeleteBot} disabled={deleting} aria-label="Удалить бота">
             🗑
           </button>
+          </div>
         </div>
       </header>
 

@@ -58,6 +58,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
   const heroRef = useRef<HTMLDivElement | null>(null);
   const [botUsername, setBotUsername] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [widgetFailed, setWidgetFailed] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -91,10 +92,20 @@ export function LoginScreen({ onLoggedIn }: Props) {
     script.setAttribute("data-radius", "12");
     script.setAttribute("data-onauth", "onTelegramAuth(user)");
     script.setAttribute("data-request-access", "write");
+    script.onerror = () => setWidgetFailed(true);
     widgetRef.current.innerHTML = "";
     widgetRef.current.appendChild(script);
 
+    // The widget is the only way into the product, and it is a third-party
+    // script: an ad blocker, a corporate proxy or a bad day at telegram.org
+    // left the card showing a heading and nothing else, with no error and no
+    // way forward. If nothing has rendered by now, offer the bot directly.
+    const timer = setTimeout(() => {
+      if (!widgetRef.current?.querySelector("iframe")) setWidgetFailed(true);
+    }, 4000);
+
     return () => {
+      clearTimeout(timer);
       delete window.onTelegramAuth;
     };
   }, [botUsername, onLoggedIn]);
@@ -109,7 +120,25 @@ export function LoginScreen({ onLoggedIn }: Props) {
       {loading ? (
         <p className="app-hint">Входим…</p>
       ) : botUsername ? (
-        <div ref={widgetRef} className="login-widget" />
+        <>
+          <div ref={widgetRef} className="login-widget" hidden={widgetFailed} />
+          {widgetFailed && (
+            <div className="login-card__fallback">
+              <p className="app-hint">
+                Кнопка входа Telegram не загрузилась — её мог заблокировать браузер или расширение.
+                Открой бота, он пришлёт ссылку для входа.
+              </p>
+              <a
+                className="publish-button"
+                href={`https://t.me/${botUsername}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Открыть @{botUsername}
+              </a>
+            </div>
+          )}
+        </>
       ) : !error ? (
         <p className="app-hint">Загрузка…</p>
       ) : null}
