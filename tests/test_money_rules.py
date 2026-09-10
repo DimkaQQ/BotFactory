@@ -259,3 +259,73 @@ async def test_confirming_an_already_paid_order_does_not_error(api, auth, owner,
 
     assert response.status_code == 200, response.text
     assert response.json()["delivered"] is False, "второй раз товар отправлять нельзя"
+
+
+# ------------------------------------------------------------------- refunds
+
+
+async def test_a_refund_after_payment_is_recorded(db, owner, make_bot, as_bot):
+    """A refund arrives *after* the payment succeeded, so a check for "still
+    pending" meant every refund notification did nothing and the order went
+    on counting as a sale."""
+    from app.services.payments.base import WebhookResult
+
+    bot, _ = await paid_bot(make_bot, owner)
+    await bot_dispatcher.process_update(
+        as_bot, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+    payment = (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalar_one()
+    await payment_service.mark_paid(db, payment, "x")
+
+    await payment_service.apply_result(
+        db, payment, WebhookResult(status=PaymentStatus.refunded, provider_payment_id="x"), deliver=False
+    )
+
+    await db.refresh(payment)
+    assert payment.status == PaymentStatus.refunded
+    assert (payment.meta or {}).get("refunded_at")
+
+
+async def test_changing_the_link_starts_a_new_order(db, owner, make_bot, telegram):
+    """An open order is offered again only while it is still an order for the
+    same thing — a "pay by link" block whose URL has changed now leads
+    somewhere else entirely."""
+    bot, blocks = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд", "title": "Гайд", "price": "990",
+                                 "currency": "RUB", "link_url": "https://boosty.to/a"}),
+            (BlockType.delivery, {"text": "ВОТ ТОВАР"}),
+        ],
+        provider="link",
+    )
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+
+    blocks[0].content = {**blocks[0].content, "link_url": "https://boosty.to/b"}
+    await db.commit()
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+
+    orders = (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalars().all()
+    assert len(orders) == 2
+    urls = {(o.meta or {}).get("checkout_url") for o in orders}
+    assert urls == {"https://boosty.to/a", "https://boosty.to/b"}
+
+
+async def test_a_published_bot_cannot_be_switched_to_the_test_provider(api, auth, owner, make_bot):
+    """Publishing refuses the test provider — but that alone is a door with a
+    window beside it: publish with a real one, then switch."""
+    from app.models.bot import BotStatus
+
+    bot, _ = await make_bot(owner, [(BlockType.welcome, {"text": "Hi"})], status=BotStatus.active)
+
+    response = await api.put(
+        f"/api/bots/{bot.id}/payment-settings", headers=auth(owner),
+        json={"provider": "test", "is_test": True},
+    )
+
+    assert response.status_code == 400
+    assert "Тестовая оплата" in response.json()["detail"]

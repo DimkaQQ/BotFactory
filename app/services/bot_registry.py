@@ -8,6 +8,7 @@ only an already-constructed `Bot` instance.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 
@@ -46,7 +47,20 @@ async def get_or_create(bot_id: uuid.UUID, db: AsyncSession) -> Bot | None:
 
 
 def put(bot_id: uuid.UUID, instance: Bot) -> None:
+    previous = _registry.get(bot_id)
     _registry[bot_id] = instance
+    if previous is not None and previous is not instance:
+        # Replacing a cached bot without closing it leaked an aiohttp session
+        # on every webhook refresh — and refresh now runs for every live bot
+        # at startup.
+        asyncio.get_event_loop().create_task(_close_quietly(previous))
+
+
+async def _close_quietly(instance: Bot) -> None:
+    try:
+        await instance.session.close()
+    except Exception:
+        logger.debug("Could not close a replaced bot session", exc_info=True)
 
 
 async def register_webhook(bot_id: uuid.UUID, token: str) -> None:

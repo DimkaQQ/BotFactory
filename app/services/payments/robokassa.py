@@ -96,7 +96,14 @@ class RobokassaProvider(ProviderDefaults):
 
         # The signature proves the callback is Robokassa's; this proves it is
         # about the amount we actually asked for, not a smaller one.
-        if out_sum != minor_to_major(amount_minor):
+        # Compared as a number, not as text: Robokassa may send "990.0" or
+        # "990.000" for the same amount, and a string mismatch would reject a
+        # legitimate callback forever — it retries until acknowledged.
+        try:
+            mismatch = abs(float(out_sum.replace(",", ".")) - amount_minor / 100) > 0.009
+        except ValueError:
+            mismatch = True
+        if mismatch:
             raise ProviderError(f"Robokassa: сумма не совпадает (пришло {out_sum})")
 
         return WebhookResult(

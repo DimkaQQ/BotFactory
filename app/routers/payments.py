@@ -20,6 +20,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.deps import get_current_client, get_owned_bot
 from app.models.bot import Bot as BotModel
+from app.models.bot import BotStatus
 from app.models.client import Client
 from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.schemas.payment import (
@@ -50,8 +51,11 @@ async def _apply(db: AsyncSession, payment: Payment, result) -> None:
     request (which is what makes the retry harmless) and the goods go out
     from a background task.
     """
+    # Only orders have something to hand over; a publication payment just
+    # unlocks the publish button.
     if await payment_service.apply_result(db, payment, result, deliver=False):
-        payment_service.deliver_later(payment.id)
+        if payment.kind == PaymentKind.order:
+            payment_service.deliver_later(payment.id)
 
 
 @router.post("/webhook/pay/{provider_slug}")
@@ -202,6 +206,19 @@ async def set_payment_settings(
             payment_providers.get_provider(payload.provider)
         except ProviderError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    # Publishing refuses the test provider, but that check alone is a door
+    # with a window beside it: publish with a real one, then switch. Its
+    # checkout page marks an order paid the moment it is opened, so a live
+    # bot carrying it hands goods to anyone who taps the button.
+    if payload.provider == "test" and bot.status != BotStatus.draft:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "«Тестовая оплата» отдаёт товар без денег, поэтому её нельзя включить "
+                "на опубликованном боте."
+            ),
+        )
 
     switching = (payload.provider or None) != bot.payment_provider
     bot.payment_provider = payload.provider or None

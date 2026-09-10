@@ -165,6 +165,18 @@ def currency_for(provider_slug: str, requested: str | None) -> str:
 _REUSE_WINDOW = timedelta(minutes=30)
 
 
+def block_fingerprint(content: dict) -> str:
+    """What the buyer would be sent to, boiled down.
+
+    An open order is offered again rather than re-created, but only while it
+    is still an order for the same thing: if the shop has since edited the
+    link a "pay by link" block points at, or swapped the Lava offer, the
+    stored checkout URL now leads somewhere else entirely.
+    """
+    watched = {k: content.get(k) for k in ("title", "link_url", "offer_id", "button_label")}
+    return json.dumps(watched, ensure_ascii=False, sort_keys=True)
+
+
 async def _open_payment(
     db: AsyncSession,
     *,
@@ -173,6 +185,7 @@ async def _open_payment(
     chat_id: int,
     amount_minor: int,
     currency: str,
+    fingerprint: str,
 ) -> Payment | None:
     """This buyer's still-open order for this exact product, if there is one."""
     result = await db.execute(
@@ -193,6 +206,8 @@ async def _open_payment(
     payment = result.scalar_one_or_none()
     # Without a stored link there is nothing to offer again.
     if payment is None or not (payment.meta or {}).get("checkout_url"):
+        return None
+    if (payment.meta or {}).get("fingerprint") != fingerprint:
         return None
     return payment
 
@@ -286,8 +301,10 @@ async def create_order_payment(
     # three orders. Reusing the open one keeps the shop's order list honest
     # and, for pay-by-link, stops every tap of «Я оплатил» from pinging the
     # owner about a different row.
+    fingerprint = block_fingerprint(content)
     existing = await _open_payment(
-        db, bot_id=bot.id, block_id=block.id, chat_id=chat_id, amount_minor=amount_minor, currency=currency
+        db, bot_id=bot.id, block_id=block.id, chat_id=chat_id, amount_minor=amount_minor,
+        currency=currency, fingerprint=fingerprint,
     )
     if existing is not None:
         return existing, (existing.meta or {})["checkout_url"]
@@ -327,7 +344,10 @@ async def create_order_payment(
         # Pinned now, not looked up at delivery time: the shop can edit the
         # canvas while an order is open ("правки применяются сразу"), and a
         # deleted block must not turn into money taken with nothing sent.
-        meta={"deliver_from": str(block.next_block_id) if block.next_block_id else None},
+        meta={
+            "deliver_from": str(block.next_block_id) if block.next_block_id else None,
+            "fingerprint": fingerprint,
+        },
     )
 
 
@@ -540,8 +560,19 @@ async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: b
             return True
         return False
 
-    if result.status in (PaymentStatus.failed, PaymentStatus.refunded) and payment.status == PaymentStatus.pending:
-        payment.status = result.status
+    if result.status == PaymentStatus.refunded:
+        # A refund arrives *after* the payment succeeded, so testing for
+        # "still pending" meant every refund notification did nothing at all
+        # and the order kept counting as a sale.
+        if payment.status != PaymentStatus.refunded:
+            payment.status = PaymentStatus.refunded
+            payment.meta = {**(payment.meta or {}), "refunded_at": datetime.now(timezone.utc).isoformat()}
+            await db.commit()
+            logger.info("Payment %s refunded", payment.id)
+        return False
+
+    if result.status == PaymentStatus.failed and payment.status == PaymentStatus.pending:
+        payment.status = PaymentStatus.failed
         await db.commit()
     return False
 

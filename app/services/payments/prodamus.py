@@ -7,7 +7,7 @@ spaces, then HMAC-SHA256 with the shop's secret. Both directions use it —
 the outgoing link carries `signature`, the callback carries `Sign` — so the
 same serialiser has to produce byte-identical output from a dict we built
 ourselves and from a form body Prodamus posted at us. That round trip is
-the part worth testing, and it is (see test_prodamus_signature.py).
+the part worth testing, and it is (see tests/test_providers.py).
 """
 
 from __future__ import annotations
@@ -109,6 +109,11 @@ def _flatten(data: dict) -> list[tuple[str, str]]:
     return pairs
 
 
+# Everything else Prodamus may report — "pending", "hold", a blank — means
+# the payment is still in play and must not be written off.
+_FAILED = {"failed", "fail", "canceled", "cancelled", "rejected", "error", "expired"}
+
+
 class ProdamusProvider(ProviderDefaults):
     slug = "prodamus"
     title = "Prodamus"
@@ -189,8 +194,11 @@ class ProdamusProvider(ProviderDefaults):
         status = str(data.get("payment_status", "")).lower()
         if status != "success":
             # Not an error: a failed attempt is a legitimate notification.
+            # "Anything non-empty is a failure" used to be the rule, which
+            # turned an in-progress notification into a permanently failed
+            # payment — and a failed payment is never delivered.
             return WebhookResult(
-                status=PaymentStatus.failed if status else PaymentStatus.pending,
+                status=PaymentStatus.failed if status in _FAILED else PaymentStatus.pending,
                 provider_payment_id=str(data.get("order_num") or "") or None,
                 response_body="success",
             )

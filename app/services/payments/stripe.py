@@ -125,7 +125,11 @@ class StripeProvider(ProviderDefaults):
 
         if not timestamp or not signatures:
             raise ProviderError("Stripe: заголовок подписи отсутствует или повреждён")
-        if abs(time.time() - int(timestamp)) > _SIGNATURE_TOLERANCE_S:
+        try:
+            age = abs(time.time() - int(timestamp))
+        except ValueError:
+            raise ProviderError("Stripe: заголовок подписи повреждён") from None
+        if age > _SIGNATURE_TOLERANCE_S:
             raise ProviderError("Stripe: подпись просрочена")
 
         expected = hmac.new(secret.encode(), f"{timestamp}.".encode() + raw_body, hashlib.sha256).hexdigest()
