@@ -28,8 +28,26 @@ class PaymentOut(BaseModel):
     checkout_url: str | None = None
 
 
+class PublicationMethodOut(BaseModel):
+    """One way to pay for publishing, as offered at checkout."""
+
+    provider: str
+    title: str
+    price_minor: int
+    currency: str
+
+
 class PublicationInfoOut(BaseModel):
     required: bool
     paid: bool
+    # The first method's price, kept so an older frontend still renders.
     price_minor: int
     currency: str
+    methods: list[PublicationMethodOut] = []
+
+
+class PublicationCheckoutIn(BaseModel):
+    """Which of the offered methods the client picked. Omitted means the
+    first one, which is what a single-method deployment always wants."""
+
+    provider: str | None = None

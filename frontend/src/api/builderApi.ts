@@ -250,8 +250,11 @@ export const builderApi = {
     request<PaymentSettings>(`/bots/${botId}/payment-settings`, { method: "PUT", body: JSON.stringify(payload) }),
 
   getPublicationInfo: (botId: string) => request<PublicationInfo>(`/bots/${botId}/publication`),
-  startPublicationCheckout: (botId: string) =>
-    request<PaymentInfo>(`/bots/${botId}/publication-checkout`, { method: "POST" }),
+  startPublicationCheckout: (botId: string, provider?: string) =>
+    request<PaymentInfo>(`/bots/${botId}/publication-checkout`, {
+      method: "POST",
+      body: JSON.stringify({ provider: provider ?? null }),
+    }),
   getPayment: (paymentId: string) => request<PaymentInfo>(`/payments/${paymentId}`),
   listOrders: (botId: string) =>
     request<{ orders: Order[]; paid_count: number; paid_total_minor: number }>(`/bots/${botId}/orders`),
@@ -306,6 +309,17 @@ export interface PaymentInfo {
 export interface PublicationInfo {
   required: boolean;
   paid: boolean;
+  /** The first method's price — what a single-method deployment shows. */
+  price_minor: number;
+  currency: string;
+  /** Every way to pay, each with its own price: the same publication costs
+   * $9, ₸4500 and 9 USDT, which one number cannot express. */
+  methods: PublicationMethod[];
+}
+
+export interface PublicationMethod {
+  provider: string;
+  title: string;
   price_minor: number;
   currency: string;
 }

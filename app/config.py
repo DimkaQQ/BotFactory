@@ -47,7 +47,29 @@ class Settings(BaseSettings):
     media_max_upload_mb: int = 20
 
     # ---- Платформа: платная публикация бота ----
-    # Which provider *we* charge through (see app/services/payments).
+    # How *we* get paid, as a JSON array — one entry per method the client
+    # may choose at checkout. Several are needed because no single provider
+    # covers everyone: cards abroad go through Stripe (which does not operate
+    # in Russia or Kazakhstan and so needs a company elsewhere), local cards
+    # through a local acquirer, and crypto through Crypto Bot, which needs no
+    # company at all.
+    #
+    # Each entry carries its own price, because the same publication costs
+    # $9, ₸4500 and 9 USDT — one number in one currency cannot express that.
+    #
+    #   [{"provider": "stripe",    "price_minor": 900,    "currency": "USD",
+    #     "credentials": {"secret_key": "sk_live_…", "webhook_secret": "whsec_…"}},
+    #    {"provider": "robokassa", "price_minor": 450000, "currency": "KZT",
+    #     "credentials": {"merchant_login": "…", "password1": "…", "password2": "…"}},
+    #    {"provider": "cryptobot", "price_minor": 900,    "currency": "USDT",
+    #     "credentials": {"token": "…"}}]
+    #
+    # Empty falls back to the single-provider settings below, so an existing
+    # deployment keeps working untouched.
+    platform_payment_methods: str = ""
+
+    # Single-method fallback, kept for deployments configured before the list
+    # existed.
     platform_payment_provider: str = "test"
     # That provider's credentials as JSON, e.g.
     # {"secret_key": "sk_live_…", "webhook_secret": "whsec_…"} — one variable

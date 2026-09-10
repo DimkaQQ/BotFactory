@@ -142,10 +142,11 @@ async def publish_bot(
         )
 
     # Building a bot is free; putting it on the air is what's paid for.
-    # A price of 0 (the default) leaves publishing open — the paywall only
-    # exists once one is configured.
-    settings = get_settings()
-    if settings.publication_price_minor > 0 and bot.publication_paid_at is None:
+    # With no payment method configured (the default) publishing stays open —
+    # the paywall exists only once there is somewhere for the money to go.
+    from app.services import payment_service
+
+    if payment_service.platform_methods() and bot.publication_paid_at is None:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="Публикация бота не оплачена",

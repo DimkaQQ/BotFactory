@@ -21,6 +21,7 @@ from app.services.payments.base import (
     WebhookResult,
     minor_to_major,
 )
+from app.services.payments.cryptobot import CryptoBotProvider
 from app.services.payments.lavatop import LavaTopProvider
 from app.services.payments.lifepay import LifePayProvider
 from app.services.payments.link import LinkProvider
@@ -43,6 +44,7 @@ PROVIDERS: dict[str, PaymentProvider] = {
         LifePayProvider(),
         LavaTopProvider(),
         StripeProvider(),
+        CryptoBotProvider(),
         LinkProvider(),
         TestProvider(),
     )

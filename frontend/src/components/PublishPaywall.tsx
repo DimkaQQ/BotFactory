@@ -11,6 +11,13 @@ interface Props {
 
 const POLL_MS = 3000;
 
+/** Symbols where they read better than the code, plain code otherwise. */
+const SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", RUB: "₽", KZT: "₸", XTR: "⭐" };
+
+function money(currency: string): string {
+  return SYMBOLS[currency] ?? currency;
+}
+
 /** Building is free; putting the bot on the air is what's paid for. Opens
  * the provider's page in a new tab and polls the payment until the callback
  * settles it — the redirect back is never what we trust. */
@@ -40,11 +47,11 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
     return () => clearInterval(timer);
   }, [waiting, onPaid]);
 
-  async function handlePay() {
+  async function handlePay(provider?: string) {
     setStarting(true);
     setError(null);
     try {
-      const payment = await builderApi.startPublicationCheckout(botId);
+      const payment = await builderApi.startPublicationCheckout(botId, provider);
       paymentId.current = payment.id;
       if (payment.checkout_url) {
         openExternal(payment.checkout_url);
@@ -57,6 +64,13 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
     }
   }
 
+  // Several methods can be offered at once — cards abroad, a local
+  // acquirer, crypto — and they are priced in different currencies, so each
+  // shows its own amount rather than one converted number.
+  const methods = info.methods?.length
+    ? info.methods
+    : [{ provider: "", title: "Оплатить публикацию", price_minor: info.price_minor, currency: info.currency }];
+
   return (
     <div className="paywall">
       <div className="paywall__head">
@@ -64,7 +78,7 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
           🚀
         </span>
         <div>
-          <p className="paywall__title">Публикация — {formatAmount(info.price_minor)} {info.currency}</p>
+          <p className="paywall__title">Публикация бота</p>
           <p className="paywall__hint">
             Собирать и править сценарий можно бесплатно и сколько угодно. Оплата — один раз за запуск этого бота
             в Telegram.
@@ -79,10 +93,34 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
           <span className="btn-spinner" aria-hidden="true" />
           Ждём подтверждение оплаты… Страница оплаты открыта в соседней вкладке.
         </div>
-      ) : (
-        <button type="button" className="publish-button" onClick={handlePay} disabled={starting}>
-          {starting ? "Готовим счёт…" : `Оплатить публикацию · ${formatAmount(info.price_minor)} ${info.currency}`}
+      ) : methods.length === 1 ? (
+        <button
+          type="button"
+          className="publish-button"
+          onClick={() => handlePay(methods[0].provider || undefined)}
+          disabled={starting}
+        >
+          {starting
+            ? "Готовим счёт…"
+            : `Оплатить публикацию · ${formatAmount(methods[0].price_minor)} ${money(methods[0].currency)}`}
         </button>
+      ) : (
+        <div className="paywall__methods">
+          {methods.map((method) => (
+            <button
+              key={method.provider}
+              type="button"
+              className="paywall__method"
+              onClick={() => handlePay(method.provider)}
+              disabled={starting}
+            >
+              <span className="paywall__method-title">{method.title}</span>
+              <span className="paywall__method-price">
+                {formatAmount(method.price_minor)} {money(method.currency)}
+              </span>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

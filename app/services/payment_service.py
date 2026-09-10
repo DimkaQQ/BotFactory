@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
@@ -47,17 +48,86 @@ def decrypt_credentials(blob: bytes | None) -> dict[str, str]:
         return {}
 
 
-def platform_credentials() -> dict[str, str]:
-    """Our own merchant credentials, for publication payments. One env var
-    holding JSON, so a new provider needs no new settings field."""
-    raw = get_settings().platform_payment_credentials.strip()
-    if not raw:
-        return {}
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        logger.error("PLATFORM_PAYMENT_CREDENTIALS is not valid JSON — publication payments will fail")
-        return {}
+@dataclass(frozen=True)
+class PlatformMethod:
+    """One way a client can pay us for publishing a bot."""
+
+    provider: str
+    price_minor: int
+    currency: str
+    credentials: dict[str, str]
+    is_test: bool
+
+    @property
+    def title(self) -> str:
+        return payment_providers.get_provider(self.provider).title
+
+
+def platform_methods() -> list[PlatformMethod]:
+    """Every method offered at the publication checkout.
+
+    Read fresh rather than cached: these carry live credentials, and a
+    deployment changing them should not need a restart to take effect.
+    """
+    settings = get_settings()
+    raw = settings.platform_payment_methods.strip()
+
+    if raw:
+        try:
+            entries = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.error("PLATFORM_PAYMENT_METHODS is not valid JSON — publication payments will fail")
+            return []
+        methods = []
+        for entry in entries:
+            try:
+                provider = str(entry["provider"]).strip().lower()
+                payment_providers.get_provider(provider)  # rejects a typo here, not at checkout
+                methods.append(
+                    PlatformMethod(
+                        provider=provider,
+                        price_minor=int(entry["price_minor"]),
+                        currency=str(entry["currency"]).upper(),
+                        credentials=dict(entry.get("credentials") or {}),
+                        is_test=bool(entry.get("is_test", False)),
+                    )
+                )
+            except (KeyError, TypeError, ValueError, ProviderError):
+                logger.error("Skipping a malformed entry in PLATFORM_PAYMENT_METHODS: %r", entry)
+        return methods
+
+    # Nothing configured as a list — fall back to the single-provider
+    # settings, so a deployment set up before this keeps working.
+    if settings.publication_price_minor <= 0:
+        return []
+    credentials: dict[str, str] = {}
+    if settings.platform_payment_credentials.strip():
+        try:
+            credentials = json.loads(settings.platform_payment_credentials)
+        except json.JSONDecodeError:
+            logger.error("PLATFORM_PAYMENT_CREDENTIALS is not valid JSON — publication payments will fail")
+    return [
+        PlatformMethod(
+            provider=settings.platform_payment_provider,
+            price_minor=settings.publication_price_minor,
+            currency=settings.publication_currency.upper(),
+            credentials=credentials,
+            is_test=settings.platform_payment_is_test,
+        )
+    ]
+
+
+def platform_method(provider: str | None) -> PlatformMethod:
+    """The method the client picked, or the first one offered."""
+    methods = platform_methods()
+    if not methods:
+        raise ProviderError("Публикация сейчас бесплатна — оплата не требуется")
+    if provider:
+        for method in methods:
+            if method.provider == provider.strip().lower():
+                return method
+        raise ProviderError(f"Такой способ оплаты не подключён: {provider}")
+    return methods[0]
 
 
 def price_to_minor(value) -> int:
@@ -256,21 +326,22 @@ async def create_order_payment(
     )
 
 
-async def create_publication_payment(db: AsyncSession, *, bot: BotModel, client_id: uuid.UUID) -> tuple[Payment, str]:
-    """A client paying us to put their bot on the air."""
+async def create_publication_payment(
+    db: AsyncSession, *, bot: BotModel, client_id: uuid.UUID, provider: str | None = None
+) -> tuple[Payment, str]:
+    """A client paying us to put their bot on the air, by whichever of the
+    offered methods they picked."""
     settings = get_settings()
-    amount_minor = settings.publication_price_minor
-    if amount_minor <= 0:
-        raise ProviderError("Публикация сейчас бесплатна — оплата не требуется")
+    method = platform_method(provider)
 
     return await _create(
         db,
         kind=PaymentKind.publication,
-        provider_slug=settings.platform_payment_provider,
-        credentials=platform_credentials(),
-        is_test=settings.platform_payment_is_test,
-        amount_minor=amount_minor,
-        currency=settings.publication_currency,
+        provider_slug=method.provider,
+        credentials=method.credentials,
+        is_test=method.is_test,
+        amount_minor=method.price_minor,
+        currency=method.currency,
         description=f"Публикация бота в Telegram · {bot.name or 'Новый бот'}",
         # Back into the constructor, which polls the payment and unlocks
         # the publish button as soon as it turns paid.
@@ -299,8 +370,14 @@ async def credentials_for(db: AsyncSession, payment: Payment) -> tuple[dict[str,
     """Whose merchant account this payment belongs to — the bot owner's, or
     ours for a publication."""
     if payment.kind == PaymentKind.publication:
-        settings = get_settings()
-        return platform_credentials(), settings.platform_payment_is_test
+        # Keyed on the payment's own provider: several methods are offered at
+        # once, and a callback about a Stripe payment must not be verified
+        # with the crypto app's token.
+        for method in platform_methods():
+            if method.provider == payment.provider:
+                return method.credentials, method.is_test
+        logger.error("Payment %s used provider %r, which is no longer configured", payment.id, payment.provider)
+        return {}, False
 
     result = await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))
     bot = result.scalar_one_or_none()

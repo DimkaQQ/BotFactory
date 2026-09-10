@@ -464,3 +464,122 @@ def test_stars_refuses_a_payment_for_the_wrong_amount():
 
     with pytest.raises(ProviderError):
         settled(charge_id="chg", total_amount=5, amount_minor=25000)
+
+
+# ----------------------------------------------------------------- Crypto Bot
+
+
+CRYPTO_TOKEN = "12345:AAtestcryptotoken"
+CRYPTO_CREDS = {"token": CRYPTO_TOKEN}
+
+
+def crypto_signature(body: bytes) -> str:
+    """Their scheme: HMAC-SHA256 of the update body, keyed on the SHA256 of
+    the API token. Recomputed independently of the adapter."""
+    key = hashlib.sha256(CRYPTO_TOKEN.encode()).digest()
+    return hmac.new(key, body, hashlib.sha256).hexdigest()
+
+
+async def test_cryptobot_creates_an_invoice_tagged_with_our_payment_id(mock_http):
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"ok": True, "result": {
+            "invoice_id": 778899, "status": "active", "asset": "USDT", "amount": "990.00",
+            "bot_invoice_url": "https://t.me/CryptoBot?start=IV123",
+            "web_app_invoice_url": "https://app.crypt.bot/invoice/IV123"}})
+
+    with mock_http(handler):
+        checkout = await get_provider("cryptobot").create_checkout(
+            checkout_request(CRYPTO_CREDS, currency="USDT")
+        )
+
+    # The API takes query parameters, not a JSON body.
+    query = dict(seen[-1].url.params)
+    assert query["asset"] == "USDT"
+    assert query["amount"] == "990.00"
+    assert query["payload"] == str(PAYMENT_ID), "payload is the only field that returns in the webhook"
+    assert seen[-1].headers["Crypto-Pay-API-Token"] == CRYPTO_TOKEN
+    # The paywall lives on the web, so the browser link is preferred.
+    assert checkout.url == "https://app.crypt.bot/invoice/IV123"
+    assert checkout.provider_payment_id == "778899"
+
+
+async def test_cryptobot_reports_an_api_error_rather_than_a_bare_failure(mock_http):
+    with mock_http(lambda r: httpx.Response(200, json={"ok": False, "error": {"code": 401, "name": "UNAUTHORIZED"}})):
+        with pytest.raises(ProviderError, match="UNAUTHORIZED"):
+            await get_provider("cryptobot").create_checkout(checkout_request(CRYPTO_CREDS, currency="USDT"))
+
+
+async def test_cryptobot_rejects_an_unsigned_callback(mock_http):
+    body = json.dumps({"update_type": "invoice_paid", "payload": {"invoice_id": 778899, "status": "paid"}}).encode()
+
+    with mock_http(lambda r: httpx.Response(200, json={"ok": True, "result": {"items": []}})):
+        with pytest.raises(ProviderError, match="одпись"):
+            await get_provider("cryptobot").verify_webhook(
+                headers={"crypto-pay-api-signature": "deadbeef"}, raw_body=body, form={},
+                credentials=CRYPTO_CREDS, amount_minor=99000, invoice_no=1,
+                payment_id=PAYMENT_ID, provider_payment_id="778899",
+            )
+
+
+async def test_cryptobot_believes_the_api_not_the_signed_callback(mock_http):
+    """A correctly signed callback still proves only that the message is
+    theirs — the invoice is read back before anything ships."""
+    body = json.dumps({
+        "update_type": "invoice_paid",
+        "payload": {"invoice_id": 778899, "status": "paid", "payload": str(PAYMENT_ID)},
+    }).encode()
+
+    def unpaid(request):
+        return httpx.Response(200, json={"ok": True, "result": {
+            "items": [{"invoice_id": 778899, "status": "active", "amount": "990.00"}]}})
+
+    with mock_http(unpaid):
+        result = await get_provider("cryptobot").verify_webhook(
+            headers={"crypto-pay-api-signature": crypto_signature(body)}, raw_body=body, form={},
+            credentials=CRYPTO_CREDS, amount_minor=99000, invoice_no=1,
+            payment_id=PAYMENT_ID, provider_payment_id="778899",
+        )
+
+    assert result.status.value == "pending"
+
+    def paid(request):
+        return httpx.Response(200, json={"ok": True, "result": {
+            "items": [{"invoice_id": 778899, "status": "paid", "amount": "990.00"}]}})
+
+    with mock_http(paid):
+        result = await get_provider("cryptobot").verify_webhook(
+            headers={"crypto-pay-api-signature": crypto_signature(body)}, raw_body=body, form={},
+            credentials=CRYPTO_CREDS, amount_minor=99000, invoice_no=1,
+            payment_id=PAYMENT_ID, provider_payment_id="778899",
+        )
+
+    assert result.status.value == "paid"
+
+
+async def test_cryptobot_refuses_an_invoice_paid_for_less(mock_http):
+    body = json.dumps({"update_type": "invoice_paid", "payload": {"invoice_id": 778899}}).encode()
+
+    def short(request):
+        return httpx.Response(200, json={"ok": True, "result": {
+            "items": [{"invoice_id": 778899, "status": "paid", "amount": "1.00"}]}})
+
+    with mock_http(short), pytest.raises(ProviderError, match="сумма"):
+        await get_provider("cryptobot").verify_webhook(
+            headers={"crypto-pay-api-signature": crypto_signature(body)}, raw_body=body, form={},
+            credentials=CRYPTO_CREDS, amount_minor=99000, invoice_no=1,
+            payment_id=PAYMENT_ID, provider_payment_id="778899",
+        )
+
+
+def test_cryptobot_finds_the_payment_by_our_own_payload():
+    body = json.dumps({
+        "update_type": "invoice_paid",
+        "payload": {"invoice_id": 778899, "payload": str(PAYMENT_ID)},
+    }).encode()
+
+    ref = get_provider("cryptobot").locate_payment(headers={}, raw_body=body, form={})
+
+    assert ref.payment_id == PAYMENT_ID

@@ -26,7 +26,9 @@ from app.schemas.payment import (
     PaymentOut,
     PaymentSettingsIn,
     PaymentSettingsOut,
+    PublicationCheckoutIn,
     PublicationInfoOut,
+    PublicationMethodOut,
 )
 from app.services import payment_service
 from app.services import payments as payment_providers
@@ -232,18 +234,27 @@ async def set_payment_settings(
 
 @router.get("/api/bots/{bot_id}/publication", response_model=PublicationInfoOut)
 async def publication_info(bot_id: uuid.UUID, bot: BotModel = Depends(get_owned_bot)) -> PublicationInfoOut:
-    settings = get_settings()
+    methods = payment_service.platform_methods()
     return PublicationInfoOut(
-        required=settings.publication_price_minor > 0,
+        # No configured method means publishing is free — a fresh deployment
+        # is never locked behind a paywall nobody set up.
+        required=bool(methods),
         paid=bot.publication_paid_at is not None,
-        price_minor=settings.publication_price_minor,
-        currency=settings.publication_currency,
+        price_minor=methods[0].price_minor if methods else 0,
+        currency=methods[0].currency if methods else "",
+        methods=[
+            PublicationMethodOut(
+                provider=m.provider, title=m.title, price_minor=m.price_minor, currency=m.currency
+            )
+            for m in methods
+        ],
     )
 
 
 @router.post("/api/bots/{bot_id}/publication-checkout", response_model=PaymentOut)
 async def publication_checkout(
     bot_id: uuid.UUID,
+    payload: PublicationCheckoutIn | None = None,
     bot: BotModel = Depends(get_owned_bot),
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
@@ -252,7 +263,9 @@ async def publication_checkout(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Публикация этого бота уже оплачена")
 
     try:
-        payment, url = await payment_service.create_publication_payment(db, bot=bot, client_id=client.id)
+        payment, url = await payment_service.create_publication_payment(
+            db, bot=bot, client_id=client.id, provider=payload.provider if payload else None
+        )
     except ProviderError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
