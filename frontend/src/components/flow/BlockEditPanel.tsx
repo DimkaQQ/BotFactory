@@ -1,5 +1,6 @@
 import type { BotBlock, PaymentProviderInfo } from "../../api/builderApi";
 import { BLOCK_TYPE_BY_ID } from "../../blockTypes";
+import { useEscape } from "../../hooks/useEscape";
 import { ButtonsEditor } from "../ButtonsEditor";
 import { MediaEditor } from "../MediaEditor";
 import { PaymentEditor } from "../PaymentEditor";
@@ -53,6 +54,7 @@ export function BlockEditPanel({
   paymentProviderInfo,
   onOpenPaymentSettings,
 }: Props) {
+  useEscape(onClose);
   const def = BLOCK_TYPE_BY_ID[block.block_type];
   const isMediaBlock = block.block_type === "image" || block.block_type === "video";
   const isPollBlock = block.block_type === "poll";

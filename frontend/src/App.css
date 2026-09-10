@@ -3515,6 +3515,10 @@
 }
 
 .flow-canvas .react-flow__controls-button {
+  /* React Flow ships 26px buttons; on touch that is well under the 44px
+     minimum, and zoom is the control people reach for most on a phone. */
+  width: 36px;
+  height: 36px;
   background: var(--tg-bg);
   border-bottom: 1px solid var(--tg-separator);
   color: var(--text-secondary);
@@ -3648,8 +3652,12 @@
 
 .flow-node__delete {
   flex-shrink: 0;
+  /* The visible dot stays small so it doesn't shout on the node, but the
+     tappable area is a finger's width — a 20px target on a phone is a
+     coin toss between deleting a block and selecting it. */
   width: 20px;
   height: 20px;
+  position: relative;
   border-radius: 999px;
   border: none;
   background: transparent;
@@ -3657,6 +3665,12 @@
   font-size: 11px;
   cursor: pointer;
   opacity: 0.6;
+}
+
+.flow-node__delete::after {
+  content: "";
+  position: absolute;
+  inset: -12px;
 }
 
 .flow-node__delete:hover {
@@ -3932,10 +3946,17 @@
   .edit-panel {
     left: auto;
     right: var(--sp-6);
-    top: calc(var(--sp-6) + 64px);
-    bottom: var(--sp-6);
+    /* Below the header, not across it: the header runs to ~119px on desktop
+       (32px of screen padding plus its own height), and the panel used to
+       start at 96px — right on top of the кассa and delete buttons. */
+    top: 136px;
+    /* Height follows the content instead of spanning the whole window: a
+       welcome block has one textarea in it, and pinning the panel to the
+       bottom left ~900px of blank white under it. It still scrolls when the
+       content genuinely is that tall. */
+    bottom: auto;
+    max-height: calc(100vh - var(--sp-6) * 2 - 64px);
     width: 360px;
-    max-height: none;
     border-radius: var(--radius-lg);
   }
 }
@@ -4188,6 +4209,65 @@
 .orders__amount {
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.orders--summary {
+  border-top: 1px solid var(--tg-separator);
+}
+
+.orders__totals {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: 2px 0 var(--sp-1);
+}
+
+.orders__total-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent-success);
+  letter-spacing: -0.02em;
+}
+
+.orders__total-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.orders__log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.orders__log-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--tg-separator);
+  font-size: 12.5px;
+}
+
+.orders__log-row:last-child {
+  border-bottom: none;
+}
+
+.orders__log-title {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders__log-amount {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .orders__actions {

@@ -41,6 +41,14 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         content: { buttons: [{ label: "Купить", action_type: "text", action_value: "" }] },
       },
       {
+        block_type: "payment",
+        content: {
+          text: "Стоимость — [цена]. После оплаты материал придёт сюда автоматически.",
+          title: "[название продукта]",
+          price: "990",
+        },
+      },
+      {
         block_type: "delivery",
         content: { text: "Спасибо за покупку! Вот твой материал 🎁 (пришли сюда ссылку или файл)" },
       },
@@ -63,6 +71,14 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         block_type: "buttons",
         content: { buttons: [{ label: "Оформить подписку", action_type: "text", action_value: "" }] },
       },
+      {
+        block_type: "payment",
+        content: {
+          text: "Подписка стоит [цена] в месяц. После оплаты доступ откроется сразу.",
+          title: "Подписка на месяц",
+          price: "590",
+        },
+      },
       { block_type: "delivery", content: { text: "Отлично! Первый материал уже готовится — жди на этой неделе 👀" } },
     ],
   },
@@ -81,7 +97,19 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       },
       {
         block_type: "buttons",
-        content: { buttons: [{ label: "Записаться", action_type: "url", action_value: "https://" }] },
+        content: { buttons: [{ label: "Записаться", action_type: "text", action_value: "" }] },
+      },
+      {
+        block_type: "payment",
+        content: {
+          text: "Сессия стоит [цена]. Оплати, и я пришлю ссылку на запись в календарь.",
+          title: "Личная сессия",
+          price: "3000",
+        },
+      },
+      {
+        block_type: "delivery",
+        content: { text: "Оплата получена! Выбери удобное время: [ссылка на календарь]" },
       },
     ],
   },
@@ -108,7 +136,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
   {
     id: "blank",
     accent: "delay",
-    icon: "⬜",
+    icon: "✏️",
     label: "С нуля",
     pitch: "Пустой бот — соберёшь сам из блоков",
     suggestedName: "",

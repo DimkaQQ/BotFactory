@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { BotBlock, BotWithBlocks } from "../api/builderApi";
+import { useEscape } from "../hooks/useEscape";
 
 interface Props {
   bot: BotWithBlocks;
@@ -29,6 +30,8 @@ function hasBranches(block: BotBlock): boolean {
  * replaying the flat block list — tapping a button here actually picks the
  * path, exactly like a real Telegram chat with this bot would. */
 export function LivePreview({ bot, botName, onClose }: Props) {
+  useEscape(onClose);
+
   const blocksById = useMemo(() => new Map(bot.blocks.map((b) => [b.id, b])), [bot.blocks]);
 
   const [revealed, setRevealed] = useState<BotBlock[]>([]);

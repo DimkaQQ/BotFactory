@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { type Bot, ApiError, builderApi } from "../api/builderApi";
 import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
 import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
+import { useEscape } from "../hooks/useEscape";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
@@ -28,9 +29,7 @@ function botTitle(bot: Bot): string {
 
 function blockCountLabel(count: number): string {
   if (count === 0) return "Пока пусто";
-  if (count === 1) return "1 сообщение";
-  if (count >= 2 && count <= 4) return `${count} сообщения`;
-  return `${count} сообщений`;
+  return blocksLabel(count);
 }
 
 export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
@@ -39,6 +38,7 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  useEscape(() => setPickerOpen(false), pickerOpen);
   const { sheetRef, handleProps } = useSwipeToDismiss(() => {
     if (!creatingTemplateId) setPickerOpen(false);
   });

@@ -8,6 +8,7 @@ import {
   builderApi,
   formatAmount,
 } from "../api/builderApi";
+import { useEscape } from "../hooks/useEscape";
 
 interface Props {
   botId: string;
@@ -19,6 +20,8 @@ interface Props {
  * GET /payments/providers returns, so adding a provider on the backend
  * makes it appear here with no frontend change. */
 export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
+  useEscape(onClose);
+
   const [providers, setProviders] = useState<PaymentProviderInfo[] | null>(null);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [slug, setSlug] = useState<string>("");
@@ -28,6 +31,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [sales, setSales] = useState<{ count: number; totalMinor: number } | null>(null);
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,13 +42,18 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
           builderApi.getPaymentSettings(botId),
           // A bot with no sales yet is the normal case, so a failure here
           // must not take the settings form down with it.
-          builderApi.listOrders(botId).catch(() => ({ orders: [] as Order[] })),
+          builderApi
+            .listOrders(botId)
+            .catch(() => ({ orders: [] as Order[], paid_count: 0, paid_total_minor: 0 })),
         ]);
         setProviders(list.providers);
         setSettings(current);
         setSlug(current.provider ?? "");
         setIsTest(current.is_test);
         setOrders(sales.orders);
+        if ("paid_count" in sales) {
+          setSales({ count: sales.paid_count, totalMinor: sales.paid_total_minor });
+        }
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Не удалось загрузить настройки оплаты");
       }
@@ -65,8 +74,9 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
       } else {
         await builderApi.rejectOrder(botId, order.id);
       }
-      const sales = await builderApi.listOrders(botId);
-      setOrders(sales.orders);
+      const refreshed = await builderApi.listOrders(botId);
+      setOrders(refreshed.orders);
+      setSales({ count: refreshed.paid_count, totalMinor: refreshed.paid_total_minor });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось обновить заказ");
     } finally {
@@ -166,13 +176,15 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                     );
                   })}
 
-                  <label className="payment-settings__test">
-                    <input type="checkbox" checked={isTest} onChange={(e) => setIsTest(e.target.checked)} />
-                    <span>
-                      Тестовый режим — платежи не настоящие. Сними галочку, когда проверишь сценарий и будешь
-                      готов принимать деньги.
-                    </span>
-                  </label>
+                  {active.uses_callback && (
+                    <label className="payment-settings__test">
+                      <input type="checkbox" checked={isTest} onChange={(e) => setIsTest(e.target.checked)} />
+                      <span>
+                        Тестовый режим — платежи не настоящие. Сними галочку, когда проверишь сценарий и будешь
+                        готов принимать деньги.
+                      </span>
+                    </label>
+                  )}
 
                   {settings?.callback_url && settings.provider === active.slug && active.uses_callback && (
                     <div className="payment-settings__callback">
@@ -190,6 +202,33 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
               <button type="button" className="payment-settings__save" onClick={handleSave} disabled={saving}>
                 {saving ? "Сохраняем…" : saved ? "✓ Сохранено" : "Сохранить"}
               </button>
+
+              {sales && sales.count > 0 && (
+                <div className="orders orders--summary">
+                  <span className="buttons-editor__field-label">Продажи</span>
+                  <div className="orders__totals">
+                    <span className="orders__total-value">{formatAmount(sales.totalMinor)}</span>
+                    <span className="orders__total-label">
+                      за {sales.count} {sales.count === 1 ? "оплаченный заказ" : "оплаченных заказов"}
+                    </span>
+                  </div>
+                  <ul className="orders__log">
+                    {orders
+                      .filter((o) => o.status === "paid")
+                      .slice(0, 8)
+                      .map((order) => (
+                        <li className="orders__log-row" key={order.id}>
+                          <span className="orders__log-title">
+                            №{order.invoice_no} · {order.description}
+                          </span>
+                          <span className="orders__log-amount">
+                            {formatAmount(order.amount_minor)} {order.currency === "XTR" ? "⭐" : order.currency}
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
 
               {awaiting.length > 0 && (
                 <div className="orders">

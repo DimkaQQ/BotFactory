@@ -12,7 +12,8 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import type { BlockType, BotBlock, BotWithBlocks, PaymentProviderInfo } from "../../api/builderApi";
-import { BLOCK_TYPES } from "../../blockTypes";
+import { useEscape } from "../../hooks/useEscape";
+import { BLOCK_TYPES, BLOCK_TYPE_BY_ID } from "../../blockTypes";
 import { BlockEditPanel } from "./BlockEditPanel";
 import { BlockNode, type BlockNodeData } from "./BlockNode";
 import { FlowActionsContext, type FlowActions } from "./flowActions";
@@ -93,6 +94,7 @@ function Inner({
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  useEscape(() => setSheetOpen(false), sheetOpen);
 
   const blocksById = useMemo(() => new Map(bot.blocks.map((b) => [b.id, b])), [bot.blocks]);
 
@@ -197,10 +199,16 @@ function Inner({
   const handleEdit = useCallback((blockId: string) => setEditingId(blockId), []);
   const handleDelete = useCallback(
     (blockId: string) => {
+      // There is no undo, and a deleted block takes every arrow into and out
+      // of it. The ✕ that does this sits beside the ✕ that merely closes the
+      // panel, so one misread is enough to lose work.
+      const block = bot.blocks.find((b) => b.id === blockId);
+      const name = BLOCK_TYPE_BY_ID[block?.block_type ?? "description"]?.label ?? "блок";
+      if (!window.confirm(`Удалить блок «${name}»? Связи с другими блоками тоже пропадут.`)) return;
       setEditingId((cur) => (cur === blockId ? null : cur));
       onDelete(blockId);
     },
-    [onDelete],
+    [bot.blocks, onDelete],
   );
 
   // The node callbacks reach BlockNode through context, not through node
@@ -315,7 +323,10 @@ function Inner({
 
         {!disabled && bot.blocks.length === 0 && (
           <div className="flow-canvas__empty">
-            <p>Пока пусто — добавь первый блок слева, и от него потянется стрелка «▶ Старт».</p>
+            <p>
+              Пока пусто. Добавь первый блок — из списка слева или кнопкой «+ Добавить блок» внизу — и от
+              него потянется стрелка «▶ Старт».
+            </p>
           </div>
         )}
       </div>

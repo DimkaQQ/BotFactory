@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import type { BlockContent, PaymentProviderInfo } from "../api/builderApi";
 
 interface Props {
@@ -13,14 +15,25 @@ interface Props {
   onOpenSettings: () => void;
 }
 
-const FALLBACK_CURRENCIES = ["KZT", "RUB", "USD", "EUR"];
+// Only used before a provider is chosen; once one is, its own list wins.
+const FALLBACK_CURRENCIES = ["RUB", "KZT", "USD", "EUR"];
 
 /** Editor for a payment block: what's being sold, for how much, and what
  * the button says. What happens *after* the money lands is the block's
  * plain arrow on the canvas — usually a delivery block. */
 export function PaymentEditor({ content, provider, currencies, providerInfo, onChange, onOpenSettings }: Props) {
   const options = currencies.length > 0 ? currencies : FALLBACK_CURRENCIES;
-  const currency = content.currency || options[0];
+  const currency = content.currency && options.includes(content.currency) ? content.currency : options[0];
+
+  // A block created before a provider was chosen keeps whatever currency it
+  // defaulted to, and a `<select>` whose value is not in its options renders
+  // the first one instead — so the owner read "RUB" while the block still
+  // said "KZT". Write the displayed value back so the two agree.
+  useEffect(() => {
+    if (content.currency !== currency) {
+      onChange({ ...content, currency });
+    }
+  }, [content, currency, onChange]);
   const isStars = currency === "XTR";
   const blockFields = providerInfo?.block_fields ?? [];
 

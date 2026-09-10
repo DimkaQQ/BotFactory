@@ -358,9 +358,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               type="button"
               className={`bot-payments-button ${paymentSettings?.provider ? "bot-payments-button--on" : ""}`}
               onClick={() => setPaymentPanelOpen(true)}
-              title="Приём оплаты в этом боте"
+              title="Платёжная система, через которую бот принимает деньги"
             >
-              💳 {paymentSettings?.provider ? "Оплата подключена" : "Оплата"}
+              💳 {paymentSettings?.provider ? "Касса подключена" : "Подключить кассу"}
             </button>
           )}
           <button type="button" className="bot-delete-button" onClick={handleDeleteBot} disabled={deleting} aria-label="Удалить бота">
@@ -393,7 +393,8 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       ) : (
         !isMiniApp && (
           <p className="app-hint">
-            Нажми на блок, чтобы изменить его, потяни от кружка снизу или от кнопки — чтобы решить, что дальше.
+            Блоки добавляются из списка слева. Нажми на блок, чтобы изменить его; потяни от кружка снизу или
+            от кнопки — чтобы решить, что будет дальше.
           </p>
         )
       )}
