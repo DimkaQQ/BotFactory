@@ -42,6 +42,14 @@ const STATUS_LABEL: Record<Order["status"], string> = {
   refunded: "возврат",
 };
 
+/** "1 заказ" / "2 заказа" / "5 заказов" — the two-form version printed
+ * "2 заказов". */
+function ordersLabel(count: number): string {
+  if (count % 10 === 1 && count % 100 !== 11) return `${count} заказ`;
+  if ([2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)) return `${count} заказа`;
+  return `${count} заказов`;
+}
+
 function unit(currency: string): string {
   return currency === "XTR" ? "⭐" : currency;
 }
@@ -243,49 +251,6 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                 {saving ? "Сохраняем…" : saved ? "✓ Сохранено" : "Сохранить"}
               </button>
 
-              {(totals.length > 0 || orders.length > 0) && (
-                <div className="orders orders--summary">
-                  <span className="buttons-editor__field-label">Продажи</span>
-
-                  {totals.length === 0 ? (
-                    <p className="orders__lead">
-                      Оплаченных заказов пока нет. Здесь появятся все продажи этого бота.
-                    </p>
-                  ) : (
-                    <div className="orders__totals">
-                      {totals.map((total) => (
-                        <span className="orders__total" key={total.currency}>
-                          <span className="orders__total-value">
-                            {formatAmount(total.total_minor)} {unit(total.currency)}
-                          </span>
-                          <span className="orders__total-label">
-                            {total.count} {total.count === 1 ? "заказ" : "заказов"}
-                          </span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <ul className="orders__log">
-                    {orders.slice(0, 12).map((order) => (
-                      <li className={`orders__log-row orders__log-row--${order.status}`} key={order.id}>
-                        <span className="orders__log-main">
-                          <span className="orders__log-title">
-                            №{order.invoice_no} · {order.description}
-                          </span>
-                          <span className="orders__log-meta">
-                            {STATUS_LABEL[order.status]} · {when(order.paid_at ?? order.created_at)}
-                          </span>
-                        </span>
-                        <span className="orders__log-amount">
-                          {formatAmount(order.amount_minor)} {unit(order.currency)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
               {awaiting.length > 0 && (
                 <div className="orders">
                   <span className="buttons-editor__field-label">Ждут подтверждения</span>
@@ -300,7 +265,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                           №{order.invoice_no} · {order.description}
                         </span>
                         <span className="orders__amount">
-                          {formatAmount(order.amount_minor)} {order.currency === "XTR" ? "⭐" : order.currency}
+                          {formatAmount(order.amount_minor)} {unit(order.currency)}
                         </span>
                       </div>
                       <div className="orders__actions">
@@ -329,6 +294,48 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                   ))}
                 </div>
               )}
+
+              {(totals.length > 0 || orders.length > 0) && (
+                <div className="orders orders--summary">
+                  <span className="buttons-editor__field-label">Продажи</span>
+
+                  {totals.length === 0 ? (
+                    <p className="orders__lead">
+                      Оплаченных заказов пока нет. Здесь появятся все продажи этого бота.
+                    </p>
+                  ) : (
+                    <div className="orders__totals">
+                      {totals.map((total) => (
+                        <span className="orders__total" key={total.currency}>
+                          <span className="orders__total-value">
+                            {formatAmount(total.total_minor)} {unit(total.currency)}
+                          </span>
+                          <span className="orders__total-label">{ordersLabel(total.count)}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <ul className="orders__log">
+                    {orders.slice(0, 12).map((order) => (
+                      <li className={`orders__log-row orders__log-row--${order.status}`} key={order.id}>
+                        <span className="orders__log-main">
+                          <span className="orders__log-title">
+                            №{order.invoice_no} · {order.description}
+                          </span>
+                          <span className="orders__log-meta">
+                            {STATUS_LABEL[order.status]} · {when(order.paid_at ?? order.created_at)}
+                          </span>
+                        </span>
+                        <span className="orders__log-amount">
+                          {formatAmount(order.amount_minor)} {unit(order.currency)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
             </>
           )}
         </div>

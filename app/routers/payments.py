@@ -284,7 +284,14 @@ async def publication_checkout(
             db, bot=bot, client_id=client.id, provider=payload.provider if payload else None
         )
     except ProviderError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        # The detail names our own misconfiguration ("не заполнен secret
+        # key") — useful in the log, not something to show the person trying
+        # to pay us.
+        logger.error("Publication checkout failed for bot %s: %s", bot_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Этот способ оплаты сейчас недоступен. Попробуй другой или напиши нам.",
+        ) from exc
 
     return PaymentOut(
         id=payment.id,
@@ -402,7 +409,12 @@ async def confirm_order(
     """The owner confirms a payment nobody's API can vouch for — and the bot
     delivers on the spot, exactly as it would on a provider's callback."""
     payment = await _owned_order(bot_id, payment_id, db)
-    delivered = await payment_service.confirm_by_owner(db, payment)
+    # Settled here, handed over in the background — like every other path.
+    # Delivering inline meant this request hung for as long as the dialogue
+    # takes, which for a scenario with pauses is minutes.
+    delivered = await payment_service.confirm_by_owner(db, payment, deliver=False)
+    if delivered:
+        payment_service.deliver_later(payment.id)
     return {"status": payment.status, "delivered": delivered}
 
 

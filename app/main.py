@@ -28,7 +28,10 @@ async def lifespan(app: FastAPI):
     # cancelled *before* the bot sessions close, so it fails cleanly instead
     # of tripping over a connection pulled out from under it — and anything
     # undelivered is picked up on the next boot.
-    await background.wait_for_all()
+    # Longer than the longest single pause a block can hold (15s), so an
+    # in-flight delivery finishes rather than being cut in half and
+    # replayed from the start on the next boot.
+    await background.wait_for_all(timeout=25.0)
     await background.cancel_all()
     await bot_registry.close_all()
 

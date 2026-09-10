@@ -526,11 +526,16 @@ async def redeliver_undelivered(limit: int = 100) -> None:
                 # mid-flight; a payment from the last minute may simply be
                 # in progress right now.
                 Payment.paid_at < datetime.now(timezone.utc) - timedelta(minutes=1),
+                # Filtered in SQL, not afterwards in Python: applying LIMIT
+                # first and then dropping the delivered ones meant a single
+                # undelivered order sitting behind a hundred delivered ones
+                # was never found at all.
+                ~Payment.meta.has_key("delivered_at"),  # noqa: W601 — JSONB ? operator
             )
             .order_by(Payment.paid_at.desc())
             .limit(limit)
         )
-        pending = [p for p in result.scalars().all() if not (p.meta or {}).get("delivered_at")]
+        pending = list(result.scalars().all())
 
     if not pending:
         return
@@ -607,8 +612,8 @@ async def check_and_settle(db: AsyncSession, payment: Payment) -> PaymentStatus:
     provider = payment_providers.get_provider(payment.provider)
     if not provider.supports_status_check:
         raise ProviderError(f"{provider.title}: статус платежа так не проверяется")
-    if payment.status == PaymentStatus.paid:
-        return PaymentStatus.paid
+    if payment.status in (PaymentStatus.paid, PaymentStatus.refunded):
+        return payment.status
 
     credentials, _is_test = await credentials_for(db, payment)
     result = await provider.check_status(
@@ -679,7 +684,7 @@ async def _notify_owner_of_claim(db: AsyncSession, payment: Payment) -> None:
         logger.info("Could not notify the owner about claimed payment %s", payment.id, exc_info=True)
 
 
-async def confirm_by_owner(db: AsyncSession, payment: Payment) -> bool:
+async def confirm_by_owner(db: AsyncSession, payment: Payment, *, deliver: bool = True) -> bool:
     """The shop owner vouches for a payment we cannot verify ourselves."""
     from app.services.payments import WebhookResult
 
@@ -687,6 +692,7 @@ async def confirm_by_owner(db: AsyncSession, payment: Payment) -> bool:
         db,
         payment,
         WebhookResult(status=PaymentStatus.paid, provider_payment_id=payment.provider_payment_id),
+        deliver=deliver,
     )
 
 
@@ -731,7 +737,14 @@ async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str
 
     result = await db.execute(
         update(Payment)
-        .where(Payment.id == payment.id, Payment.status != PaymentStatus.paid)
+        .where(
+            Payment.id == payment.id,
+            # Only an open payment may become paid. `status != paid` also
+            # matched a *refunded* one, so a stale "я оплатил" tap after a
+            # refund re-settled the order and shipped the goods again — and
+            # put the money back into the revenue figure.
+            Payment.status.in_((PaymentStatus.pending, PaymentStatus.failed)),
+        )
         .values(**values)
     )
     if result.rowcount == 0:

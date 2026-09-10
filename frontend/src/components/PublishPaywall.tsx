@@ -14,6 +14,16 @@ const POLL_MS = 3000;
 /** Symbols where they read better than the code, plain code otherwise. */
 const SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", RUB: "₽", KZT: "₸", XTR: "⭐" };
 
+/** Which method is yours — the same guidance the settings panel gives. */
+const METHOD_NOTE: Record<string, string> = {
+  stripe: "зарубежная карта",
+  cryptobot: "USDT или TON из Telegram",
+  robokassa: "карта РФ или KZT",
+  yookassa: "карта РФ",
+  lavatop: "карта РФ",
+  stars: "звёзды Telegram",
+};
+
 function money(currency: string): string {
   return SYMBOLS[currency] ?? currency;
 }
@@ -26,6 +36,10 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const paymentId = useRef<string | null>(null);
+  // Kept so the link can be offered in the waiting state: the page is opened
+  // after an await, which is outside the user gesture, and Safari and Firefox
+  // block that — leaving the old UI insisting a tab was open when none was.
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!waiting) return;
@@ -53,10 +67,13 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
     try {
       const payment = await builderApi.startPublicationCheckout(botId, provider);
       paymentId.current = payment.id;
-      if (payment.checkout_url) {
-        openExternal(payment.checkout_url);
-        setWaiting(true);
+      if (!payment.checkout_url) {
+        setError("Счёт создан, но ссылки на оплату нет. Напиши нам, мы разберёмся.");
+        return;
       }
+      setCheckoutUrl(payment.checkout_url);
+      openExternal(payment.checkout_url);
+      setWaiting(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось создать счёт");
     } finally {
@@ -91,7 +108,14 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
       {waiting ? (
         <div className="paywall__waiting">
           <span className="btn-spinner" aria-hidden="true" />
-          Ждём подтверждение оплаты… Страница оплаты открыта в соседней вкладке.
+          <span>
+            Ждём подтверждение оплаты.{" "}
+            {checkoutUrl && (
+              <a href={checkoutUrl} target="_blank" rel="noreferrer">
+                Если страница не открылась — открой её здесь
+              </a>
+            )}
+          </span>
         </div>
       ) : methods.length === 1 ? (
         <button
@@ -114,7 +138,12 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
               onClick={() => handlePay(method.provider)}
               disabled={starting}
             >
-              <span className="paywall__method-title">{method.title}</span>
+              <span className="paywall__method-title">
+                {method.title}
+                {METHOD_NOTE[method.provider] && (
+                  <span className="paywall__method-note">{METHOD_NOTE[method.provider]}</span>
+                )}
+              </span>
               <span className="paywall__method-price">
                 {formatAmount(method.price_minor)} {money(method.currency)}
               </span>

@@ -329,3 +329,28 @@ async def test_a_published_bot_cannot_be_switched_to_the_test_provider(api, auth
 
     assert response.status_code == 400
     assert "Тестовая оплата" in response.json()["detail"]
+
+
+async def test_a_refunded_order_cannot_be_paid_again(db, owner, make_bot, as_bot):
+    """`WHERE status != 'paid'` also matched a refunded payment, so a stale
+    «Я оплатил» tap after a refund re-settled the order, shipped the goods a
+    second time and put the money back into the revenue figure."""
+    from app.services.payments.base import WebhookResult
+
+    bot, _ = await paid_bot(make_bot, owner)
+    await bot_dispatcher.process_update(
+        as_bot, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+    payment = (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalar_one()
+    await payment_service.mark_paid(db, payment, "x")
+    await payment_service.apply_result(
+        db, payment, WebhookResult(status=PaymentStatus.refunded, provider_payment_id="x"), deliver=False
+    )
+    as_bot.reset_mock()
+
+    settled_again = await payment_service.mark_paid(db, payment, "x")
+
+    assert settled_again is False
+    await db.refresh(payment)
+    assert payment.status == PaymentStatus.refunded
+    assert as_bot.sent() == []

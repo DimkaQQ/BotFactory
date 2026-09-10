@@ -8,10 +8,10 @@
   padding: var(--sp-4) var(--sp-4) calc(var(--footer-h) + env(safe-area-inset-bottom));
 }
 
-/* The paywall card is about twice the height of the publish button. */
-.screen--builder-paywall {
-  --footer-h: 200px;
-}
+/* --footer-h is set from JS by measuring the footer (see BotBuilder): its
+   height depends on whether it holds a publish button, a one-method paywall
+   or a three-method one, and every constant guessed here was wrong for at
+   least one of those. The value below is only the pre-measurement default. */
 
 /* The builder is the one screen that must not scroll as a whole: the canvas
    pans and zooms on its own, and a page that scrolls underneath it makes
@@ -2471,8 +2471,8 @@
        and preview button above it take ~270px, so a fixed fraction ran the
        builder past the fold — the zoom controls were cut in half and the
        last node sat below it. */
-    height: calc(100dvh - 350px - var(--footer-h));
-    min-height: 340px;
+    height: calc(100dvh - 360px - var(--footer-h));
+    min-height: 200px;
     box-shadow: var(--shadow-elevated);
   }
 
@@ -2660,6 +2660,10 @@
   box-shadow: var(--shadow-elevated);
   text-align: center;
   animation: login-card-in var(--dur-slow) var(--ease-out) 0.1s backwards;
+}
+
+.login-card__fallback a.publish-button {
+  text-decoration: none;
 }
 
 .login-card__fallback {
@@ -4563,6 +4567,25 @@
   color: var(--text-tertiary);
 }
 
+/* On a laptop screen a three-method paywall plus the canvas simply does not
+   fit 768px, and it is the paywall — the thing you have to click — that ends
+   up under the fold. Tighten it there rather than letting the canvas shrink
+   to a strip. */
+@media (max-height: 820px) {
+  .paywall {
+    padding: var(--sp-3);
+    gap: var(--sp-2);
+  }
+
+  .paywall__hint {
+    display: none;
+  }
+
+  .paywall__method {
+    padding: 8px 12px;
+  }
+}
+
 .paywall__methods {
   display: flex;
   flex-direction: column;
@@ -4592,10 +4615,24 @@
 }
 
 .paywall__method-title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text-primary);
   text-align: left;
+}
+
+.paywall__method-note {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+/* Without a pressed state these read as rows, not as the buttons they are. */
+.paywall__method:active:not(:disabled) {
+  transform: scale(0.99);
 }
 
 .paywall__method-price {

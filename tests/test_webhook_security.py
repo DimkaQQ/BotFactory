@@ -87,3 +87,31 @@ async def test_the_request_answers_without_waiting_for_the_dialogue(api, owner, 
     assert elapsed < 2, f"запрос держали {elapsed:.1f}с — Telegram успеет переотправить апдейт"
 
     # The dialogue is still running in the background; the fixtures stop it.
+
+
+async def test_one_unreadable_token_does_not_stop_the_other_bots(db, owner, make_bot, monkeypatch):
+    """Every live bot's webhook is re-registered at startup, and that is how
+    they get their secret — so an exception escaping the loop takes the whole
+    fleet off the air, since unsigned updates are now refused."""
+    from app.models.bot import BotStatus
+    from app.services import bot_registry
+
+    broken, _ = await make_bot(owner, [], status=BotStatus.active)
+    healthy, _ = await make_bot(owner, [], status=BotStatus.active)
+    broken.bot_token_encrypted = b"not-a-fernet-token"
+    healthy.bot_token_encrypted = __import__(
+        "app.services.security", fromlist=["encrypt_token"]
+    ).encrypt_token("123:ok")
+    await db.commit()
+
+    registered: list = []
+
+    async def fake_register(bot_id, token):
+        registered.append(bot_id)
+
+    monkeypatch.setattr(bot_registry, "register_webhook", fake_register)
+
+    await bot_registry.refresh_all_webhooks()
+
+    assert healthy.id in registered
+    assert broken.id not in registered

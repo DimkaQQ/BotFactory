@@ -45,6 +45,24 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [paymentProviders, setPaymentProviders] = useState<PaymentProviderInfo[]>([]);
   const [publication, setPublication] = useState<PublicationInfo | null>(null);
 
+  // The fixed footer's height decides how much room the canvas gets and how
+  // much the page must reserve below it. Guessing it with a constant was
+  // wrong every time it changed shape — a publish button, a paywall with one
+  // method, a paywall with three — so it is measured instead.
+  const footerRef = useRef<HTMLDivElement | null>(null);
+  const screenRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const footer = footerRef.current;
+    const screen = screenRef.current;
+    if (!footer || !screen) return;
+    const apply = () => screen.style.setProperty("--footer-h", `${Math.ceil(footer.offsetHeight)}px`);
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(footer);
+    return () => observer.disconnect();
+  });
+
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const nameTimer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -83,14 +101,19 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     try {
       // Re-send the whole bot as it stands locally: what failed is whatever
       // the server has not got, and the client's copy is the truth here.
+      // Positions and the start block are included — leaving them out meant
+      // the indicator said "Сохранено" for changes still only in the browser.
       await Promise.all(
         bot.blocks.map((block) =>
           builderApi.updateBlock(bot.id, block.id, {
             content: block.content,
             next_block_id: block.next_block_id,
+            position_x: block.position_x,
+            position_y: block.position_y,
           }),
         ),
       );
+      await builderApi.setStartBlock(bot.id, bot.start_block_id);
       if (bot.name) await builderApi.renameBot(bot.id, bot.name);
       failedSaves.current.clear();
       setSaveStatus("saved");
@@ -265,11 +288,13 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       setBot((prev) =>
         prev ? { ...prev, blocks: prev.blocks.map((b) => (b.id === blockId ? { ...b, position_x: x, position_y: y } : b)) } : prev,
       );
-      builderApi.updateBlock(bot.id, blockId, { position_x: x, position_y: y }).catch(() => {
-        /* best-effort; the node just snaps back to its last saved spot on reload */
-      });
+      markPending(`${blockId}:pos`);
+      builderApi
+        .updateBlock(bot.id, blockId, { position_x: x, position_y: y })
+        .then(() => markSettled(`${blockId}:pos`))
+        .catch(() => markFailed(`${blockId}:pos`));
     },
-    [bot],
+    [bot, markPending, markSettled, markFailed],
   );
 
   const handleNameChange = useCallback(
@@ -338,14 +363,12 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     );
   }
 
-  const showsPaywall = bot.status === "draft" && Boolean(publication?.required) && !publication?.paid;
-
   return (
     // The paywall card is roughly twice the height of the publish button, and
     // the footer is fixed — so the space reserved for it at the bottom of the
     // screen has to know which one is showing, or the card lands on top of the
     // "+ Добавить блок" bar and no block can be added on a phone.
-    <div className={`screen screen--builder${showsPaywall ? " screen--builder-paywall" : ""}`}>
+    <div ref={screenRef} className="screen screen--builder">
       <header className="app-header">
         <button type="button" className="back-link" onClick={onBack}>
           ← Мои боты
@@ -460,7 +483,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       />
 
       {bot.status === "draft" && (
-        <div className="app-footer">
+        <div className="app-footer" ref={footerRef}>
           {publication?.required && !publication.paid ? (
             <PublishPaywall
               botId={bot.id}
@@ -474,7 +497,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       )}
 
       {bot.status === "active" && (
-        <div className="app-footer">
+        <div className="app-footer" ref={footerRef}>
           <a
             className="publish-button publish-button--link"
             href={`https://t.me/${bot.telegram_bot_username}`}

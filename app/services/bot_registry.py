@@ -111,14 +111,18 @@ async def refresh_webhook(bot_id: uuid.UUID) -> None:
     Best-effort: an unreachable Telegram must not turn a startup into a
     crash, or one bot's revoked token into every other bot staying stale.
     """
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(BotModel).where(BotModel.id == bot_id))
-        bot_row = result.scalar_one_or_none()
-        if bot_row is None or bot_row.status != BotStatus.active or not bot_row.bot_token_encrypted:
-            return
-        token = decrypt_token(bot_row.bot_token_encrypted)
-
     try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(BotModel).where(BotModel.id == bot_id))
+            bot_row = result.scalar_one_or_none()
+            if bot_row is None or bot_row.status != BotStatus.active or not bot_row.bot_token_encrypted:
+                return
+            # Inside the try on purpose: an unreadable token blob — a rotated
+            # FERNET_KEY, a corrupted row — raises here, and left uncaught it
+            # aborted the loop over every other bot. Since the webhook route
+            # now refuses updates without a secret, and the secret is handed
+            # out by exactly this call, that took the whole fleet off the air.
+            token = decrypt_token(bot_row.bot_token_encrypted)
         await register_webhook(bot_id, token)
     except Exception:
         logger.warning("Could not refresh the webhook for bot %s", bot_id, exc_info=True)

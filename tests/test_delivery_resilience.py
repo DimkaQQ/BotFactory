@@ -116,3 +116,51 @@ async def test_one_chat_is_processed_in_order(db, owner, make_bot, as_bot):
     await background.wait_for_all()
 
     assert order_seen == [0, 1, 2, 3, 4]
+
+
+async def test_redelivery_finds_an_old_order_behind_newer_delivered_ones(db, owner, make_bot, as_bot):
+    """The undelivered one is not necessarily recent.
+
+    Filtering `delivered_at` in Python *after* LIMIT meant a single stranded
+    order sitting behind a page of delivered ones was never found at all.
+    """
+    bot, _ = await sold_bot(make_bot, owner)
+    payment = await order(db, bot, as_bot)
+    await payment_service.mark_paid(db, payment, "x")
+    await db.execute(
+        Payment.__table__.update()
+        .where(Payment.id == payment.id)
+        .values(paid_at=payment.paid_at.replace(year=payment.paid_at.year - 1))
+    )
+    await db.commit()
+    as_bot.reset_mock()
+
+    # A limit of one, with newer *delivered* orders that would otherwise fill
+    # the page — only the SQL-side filter can see past them.
+    await payment_service.redeliver_undelivered(limit=1)
+
+    assert "ВОТ ТОВАР" in as_bot.sent()
+
+
+async def test_queued_work_cancelled_before_it_runs_is_closed_cleanly(db):
+    """Cancelling a task still waiting for its predecessor used to leave the
+    coroutine un-awaited — a bare warning, and the update simply gone."""
+    import warnings
+
+    ran: list[int] = []
+
+    async def slow() -> None:
+        await asyncio.sleep(5)
+        ran.append(0)
+
+    async def queued() -> None:
+        ran.append(1)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        background.spawn(slow(), name="head", key="chat-x")
+        background.spawn(queued(), name="tail", key="chat-x")
+        await asyncio.sleep(0.05)
+        await background.cancel_all()
+
+    assert ran == []

@@ -62,10 +62,20 @@ def _spawn_chained(coro: Coroutine, *, name: str, key: str) -> None:
     previous = _queues.get(key)
 
     async def run() -> None:
-        if previous is not None:
-            # Wait for the chat's previous update, however it ended — a
-            # failure there must not strand everything queued behind it.
-            await asyncio.wait([previous])
+        try:
+            if previous is not None:
+                # Wait for the chat's previous update, however it ended — a
+                # failure there must not strand everything queued behind it.
+                await asyncio.wait([previous])
+        except asyncio.CancelledError:
+            # Cancelled while still queued: the work never started, so close
+            # the coroutine explicitly. Left to the garbage collector it
+            # became a bare "coroutine was never awaited" warning and the
+            # update vanished — and Telegram was already told "ok", so
+            # nothing retries it.
+            coro.close()
+            logger.warning("Dropped queued work %s — shutting down before it ran", name)
+            raise
         await coro
 
     task = asyncio.create_task(run(), name=name)
