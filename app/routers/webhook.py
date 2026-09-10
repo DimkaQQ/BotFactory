@@ -50,15 +50,16 @@ async def handle_update(
     update: dict,
     x_telegram_bot_api_secret_token: str | None = Header(default=None),
 ) -> dict:
-    expected = webhook_secret(bot_id)
-
-    if x_telegram_bot_api_secret_token is None:
-        # A bot published before secrets existed: Telegram was never told to
-        # send one. Its webhook is re-registered (with the secret) on the way
-        # past, so this is the last unauthenticated update it can deliver.
-        logger.info("Update for bot %s arrived without a secret token — re-registering its webhook", bot_id)
-        background.spawn(bot_registry.refresh_webhook(bot_id), name=f"refresh-webhook:{bot_id}")
-    elif not hmac.compare_digest(x_telegram_bot_api_secret_token, expected):
+    # A missing header is refused exactly like a wrong one. Letting it
+    # through — which this route briefly did, as a migration path for bots
+    # published before secrets existed — is not a smaller hole than having no
+    # check at all: an attacker simply omits the header. Those older bots are
+    # instead re-registered at startup (see app/main.py), so nothing has to be
+    # trusted on the way past.
+    if x_telegram_bot_api_secret_token is None or not hmac.compare_digest(
+        x_telegram_bot_api_secret_token, webhook_secret(bot_id)
+    ):
+        logger.warning("Rejected an update for bot %s: bad or missing secret token", bot_id)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bad secret token")
 
     background.spawn(_dispatch(bot_id, update), name=f"update:{bot_id}")

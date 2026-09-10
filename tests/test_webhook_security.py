@@ -27,6 +27,21 @@ async def test_an_update_with_the_wrong_secret_is_refused(api, owner, make_bot):
     assert response.status_code == 403
 
 
+async def test_an_update_with_no_secret_at_all_is_refused(api, owner, make_bot):
+    """The gap the first version of this check left open.
+
+    Rejecting a *wrong* secret while accepting a *missing* one is not a
+    smaller hole than having no check: an attacker simply omits the header.
+    A forged callback_query can then claim to be the shop owner and confirm
+    an unpaid order.
+    """
+    bot, _ = await make_bot(owner, [(BlockType.welcome, {"text": "Привет!"})])
+
+    response = await api.post(f"/webhook/{bot.id}", json=START)
+
+    assert response.status_code == 403
+
+
 async def test_an_update_with_the_right_secret_is_accepted(api, owner, make_bot, as_bot):
     bot, _ = await make_bot(owner, [(BlockType.welcome, {"text": "Привет!"})])
 

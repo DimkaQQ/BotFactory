@@ -15,6 +15,9 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Brings bots published before webhook secrets existed up to date, so the
+    # webhook route can refuse anything that arrives without one.
+    background.spawn(bot_registry.refresh_all_webhooks(), name="refresh-all-webhooks")
     yield
     # Dialogues and deliveries scheduled off a request are still in flight;
     # give them a moment to finish rather than dropping a buyer's goods

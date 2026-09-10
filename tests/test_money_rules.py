@@ -220,3 +220,42 @@ async def test_stripe_accepts_a_delivery_signed_during_a_secret_rotation():
     )
 
     assert result.status == PaymentStatus.paid
+
+
+async def test_a_settled_payment_can_still_be_read_afterwards(db, owner, make_bot, as_bot):
+    """`mark_paid` returning False must leave the session usable.
+
+    It rolls back so a losing racer leaves no trace, and a rollback expires
+    every ORM object — while the caller goes straight on to read the payment
+    (the router returns its status, the bot names its invoice_no). That read
+    used to blow up, turning a redelivered callback into a 500 and making the
+    owner's confirm button silently do nothing the second time.
+    """
+    bot, _ = await paid_bot(make_bot, owner)
+    await bot_dispatcher.process_update(
+        as_bot, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+    payment = (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalar_one()
+
+    assert await payment_service.mark_paid(db, payment, "chg") is True
+    assert await payment_service.mark_paid(db, payment, "chg") is False
+
+    assert payment.status == PaymentStatus.paid
+    assert payment.invoice_no > 0
+
+
+async def test_confirming_an_already_paid_order_does_not_error(api, auth, owner, make_bot, db, as_bot):
+    """The owner tapping «Оплачен» after the webhook already settled it."""
+    bot, _ = await paid_bot(make_bot, owner)
+    await bot_dispatcher.process_update(
+        as_bot, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+    payment = (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalar_one()
+    await payment_service.mark_paid(db, payment, "chg")
+
+    response = await api.post(
+        f"/api/bots/{bot.id}/orders/{payment.id}/confirm", headers=auth(owner)
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["delivered"] is False, "второй раз товар отправлять нельзя"

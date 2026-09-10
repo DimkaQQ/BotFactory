@@ -602,8 +602,14 @@ async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str
     )
     if result.rowcount == 0:
         # Someone else got there first. Roll back rather than commit, so this
-        # call leaves no trace at all.
+        # call leaves no trace — but a rollback expires every ORM object in
+        # the session, and the caller goes on to read this payment (the router
+        # returns its status; the bot names its invoice_no in a message). Left
+        # expired, that read is lazy IO outside a greenlet and blows up, which
+        # turned a redelivered callback into a 500 and made the owner's
+        # confirm button silently do nothing the second time.
         await db.rollback()
+        await db.refresh(payment)
         return False
 
     if payment.kind == PaymentKind.publication and payment.bot_id:

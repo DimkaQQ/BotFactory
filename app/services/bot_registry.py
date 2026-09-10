@@ -72,13 +72,30 @@ async def register_webhook(bot_id: uuid.UUID, token: str) -> None:
     put(bot_id, instance)
 
 
+async def refresh_all_webhooks() -> None:
+    """Re-register every live bot's webhook, once, at startup.
+
+    This is what lets the webhook route refuse an update that carries no
+    secret token: bots published before secret tokens existed were registered
+    without one, and rather than leaving a permanent unauthenticated path
+    open for their sake, they are brought up to date here. Doing it on every
+    boot is cheap and idempotent — Telegram simply stores the same URL again.
+    """
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(BotModel.id).where(BotModel.status == BotStatus.active))
+        bot_ids = list(result.scalars().all())
+
+    for bot_id in bot_ids:
+        await refresh_webhook(bot_id)
+    if bot_ids:
+        logger.info("Refreshed webhooks for %d live bots", len(bot_ids))
+
+
 async def refresh_webhook(bot_id: uuid.UUID) -> None:
     """Re-register a live bot's webhook, so it starts sending the secret.
 
-    For bots published before secret tokens existed: their webhook is set
-    without one, and this brings them up to date on the first update they
-    deliver. Best-effort — an unreachable Telegram must not turn into a
-    failed update.
+    Best-effort: an unreachable Telegram must not turn a startup into a
+    crash, or one bot's revoked token into every other bot staying stale.
     """
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(BotModel).where(BotModel.id == bot_id))
