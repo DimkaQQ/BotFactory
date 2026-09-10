@@ -833,3 +833,183 @@ async def test_processingkz_refuses_a_currency_it_has_no_code_for():
         await get_provider("processingkz").create_checkout(
             checkout_request(PROC_CREDS, currency="UZS")
         )
+
+
+# ---------------------------------------------------------------------- ioka
+
+IOKA_CREDS = {"api_key": "shp_secret_key"}
+IOKA_ORDER_ID = "ord_9f8e7d"
+
+
+def ioka_order(status: str = "PAID", amount: int = 99000) -> dict:
+    return {
+        "id": IOKA_ORDER_ID,
+        "status": status,
+        "amount": amount,
+        "currency": "KZT",
+        "external_id": str(PAYMENT_ID),
+        "checkout_url": f"https://checkout.ioka.kz/{IOKA_ORDER_ID}",
+    }
+
+
+def ioka_api(status: str = "PAID", amount: int = 99000, *, wrap_create: bool = True):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            order = ioka_order(status, amount)
+            return httpx.Response(201, json={"order": order} if wrap_create else order)
+        return httpx.Response(200, json=ioka_order(status, amount))
+
+    return handler
+
+
+async def test_ioka_creates_an_order_in_minor_units_and_captures_automatically(mock_http):
+    seen: list = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), json.loads(request.content), dict(request.headers)))
+        return ioka_api()(request)
+
+    with mock_http(handler):
+        checkout = await get_provider("ioka").create_checkout(
+            checkout_request(IOKA_CREDS, currency="KZT")
+        )
+
+    url, body, headers = seen[0]
+    assert checkout.url == f"https://checkout.ioka.kz/{IOKA_ORDER_ID}"
+    assert checkout.provider_payment_id == IOKA_ORDER_ID
+    # Test mode has its own ledger; production must not be touched by it.
+    assert url == "https://stage-api.ioka.kz/v2/orders"
+    assert headers["api-key"] == "shp_secret_key"
+    assert body["amount"] == 99000, "тиыны, а не тенге"
+    assert body["external_id"] == str(PAYMENT_ID)
+    # AUTO, so a paid order lands on PAID rather than sitting at ON_HOLD.
+    assert body["capture_method"] == "AUTO"
+
+
+async def test_ioka_reads_an_order_returned_without_the_wrapper(mock_http):
+    """`POST /orders` wraps the order and `GET /orders/{id}` does not; both
+    shapes have to work or checkout breaks on a whim of the gateway."""
+    with mock_http(ioka_api(wrap_create=False)):
+        checkout = await get_provider("ioka").create_checkout(
+            checkout_request(IOKA_CREDS, currency="KZT")
+        )
+
+    assert checkout.provider_payment_id == IOKA_ORDER_ID
+
+
+async def test_ioka_ignores_a_forged_callback_and_believes_its_own_api(mock_http):
+    """ioka's signature is an HMAC over a JavaScript-shaped canonical JSON,
+    which is easy to reproduce almost right. So nothing in the body counts —
+    the order is re-read, and only that answer settles anything."""
+    forged = json.dumps({"event": "PAYMENT_CAPTURED", "order": {**ioka_order(), "status": "PAID"}}).encode()
+
+    with mock_http(ioka_api(status="UNPAID")):
+        result = await get_provider("ioka").verify_webhook(
+            headers={"x-signature": "0" * 64}, raw_body=forged, form={}, credentials=IOKA_CREDS,
+            amount_minor=99000, invoice_no=4242, payment_id=PAYMENT_ID,
+            provider_payment_id=IOKA_ORDER_ID, meta={"is_test": True},
+        )
+
+    assert result.status.value == "pending"
+
+
+async def test_ioka_settles_when_its_api_says_paid(mock_http):
+    with mock_http(ioka_api(status="PAID")):
+        result = await get_provider("ioka").check_status(
+            credentials=IOKA_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id=IOKA_ORDER_ID, meta={"is_test": True},
+        )
+
+    assert result.status.value == "paid"
+    assert result.provider_payment_id == IOKA_ORDER_ID
+
+
+async def test_ioka_does_not_treat_a_hold_as_a_sale(mock_http):
+    """ON_HOLD is money blocked on the card. We ask for AUTO capture so it
+    should not happen — and if it does, it is still not money taken."""
+    with mock_http(ioka_api(status="ON_HOLD")):
+        result = await get_provider("ioka").check_status(
+            credentials=IOKA_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id=IOKA_ORDER_ID, meta={"is_test": True},
+        )
+
+    assert result.status.value == "pending"
+
+
+async def test_ioka_reads_an_expired_order_as_failed(mock_http):
+    with mock_http(ioka_api(status="EXPIRED")):
+        result = await get_provider("ioka").check_status(
+            credentials=IOKA_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id=IOKA_ORDER_ID, meta={"is_test": True},
+        )
+
+    assert result.status.value == "failed"
+
+
+async def test_ioka_refuses_an_order_paid_for_less(mock_http):
+    with mock_http(ioka_api(status="PAID", amount=1000)), pytest.raises(ProviderError, match="сумма"):
+        await get_provider("ioka").check_status(
+            credentials=IOKA_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id=IOKA_ORDER_ID, meta={"is_test": True},
+        )
+
+
+async def test_ioka_says_so_rather_than_guessing_at_a_status_it_does_not_know(mock_http):
+    """A status nobody has seen before must show up in the log, not settle
+    silently into "not paid" for the rest of time."""
+    with mock_http(ioka_api(status="SOMETHING_NEW")), pytest.raises(ProviderError, match="SOMETHING_NEW"):
+        await get_provider("ioka").check_status(
+            credentials=IOKA_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id=IOKA_ORDER_ID, meta={"is_test": True},
+        )
+
+
+async def test_ioka_finds_the_order_by_our_own_id_when_theirs_was_never_stored(mock_http):
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, json=[ioka_order()])
+
+    with mock_http(handler):
+        result = await get_provider("ioka").check_status(
+            credentials=IOKA_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id=None, meta={"is_test": True},
+        )
+
+    assert result.status.value == "paid"
+    assert f"external_id={PAYMENT_ID}" in seen[0]
+
+
+async def test_ioka_uses_the_live_host_when_the_shop_is_not_in_test_mode(mock_http):
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return ioka_api()(request)
+
+    with mock_http(handler):
+        await get_provider("ioka").create_checkout(
+            CheckoutRequest(
+                payment_id=PAYMENT_ID, invoice_no=4242, amount_minor=99000, currency="KZT",
+                description="Гайд", return_url="https://t.me/some_bot", is_test=False,
+                credentials=IOKA_CREDS,
+            )
+        )
+
+    assert seen[0] == "https://api.ioka.kz/v2/orders"
+
+
+async def test_ioka_refuses_an_amount_below_the_gateways_floor():
+    with pytest.raises(ProviderError, match="минимальная"):
+        await get_provider("ioka").create_checkout(
+            checkout_request(IOKA_CREDS, currency="KZT", amount_minor=50)
+        )
+
+
+async def test_ioka_reports_the_gateways_own_error(mock_http):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"code": "Unauthorized", "message": "Неверный ключ"})
+
+    with mock_http(handler), pytest.raises(ProviderError, match="Неверный ключ"):
+        await get_provider("ioka").create_checkout(checkout_request(IOKA_CREDS, currency="KZT"))

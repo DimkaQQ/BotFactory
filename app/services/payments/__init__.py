@@ -27,6 +27,7 @@ from app.services.payments.click import ClickProvider
 from app.services.payments.cloudpayments import CloudPaymentsProvider
 from app.services.payments.cryptobot import CryptoBotProvider
 from app.services.payments.freedompay import FreedomPayProvider
+from app.services.payments.ioka import IokaProvider
 from app.services.payments.lavatop import LavaTopProvider
 from app.services.payments.lifepay import LifePayProvider
 from app.services.payments.link import LinkProvider
@@ -58,6 +59,7 @@ PROVIDERS: dict[str, PaymentProvider] = {
         LavaTopProvider(),
         # Казахстан, Узбекистан, Кыргызстан.
         FreedomPayProvider(),
+        IokaProvider(),
         ProcessingKzProvider(),
         ClickProvider(),
         PaymeProvider(),

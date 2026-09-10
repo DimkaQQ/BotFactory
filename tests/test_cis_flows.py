@@ -330,7 +330,7 @@ def test_every_cis_gateway_is_offered_to_shop_owners():
     offered = {entry["slug"] for entry in describe_providers()}
 
     assert {
-        "tbank", "cloudpayments", "freedompay", "processingkz", "click", "payme", "liqpay",
+        "tbank", "cloudpayments", "freedompay", "ioka", "processingkz", "click", "payme", "liqpay",
     } <= offered
 
 
