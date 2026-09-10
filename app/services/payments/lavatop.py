@@ -144,6 +144,7 @@ class LavaTopProvider(ProviderDefaults):
         invoice_no: int,
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
+        meta: dict | None = None,
     ) -> WebhookResult:
         try:
             event = json.loads(raw_body or b"{}")

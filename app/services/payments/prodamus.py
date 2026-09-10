@@ -178,6 +178,7 @@ class ProdamusProvider(ProviderDefaults):
         invoice_no: int,
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
+        meta: dict | None = None,
     ) -> WebhookResult:
         secret = (credentials.get("secret_key") or "").strip()
         if not secret:

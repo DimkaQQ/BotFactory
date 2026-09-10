@@ -83,6 +83,7 @@ class RobokassaProvider(ProviderDefaults):
         invoice_no: int,
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
+        meta: dict | None = None,
     ) -> WebhookResult:
         password2 = (credentials.get("password2") or "").strip()
         if not password2:

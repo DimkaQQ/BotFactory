@@ -104,6 +104,7 @@ class StripeProvider(ProviderDefaults):
         invoice_no: int,
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
+        meta: dict | None = None,
     ) -> WebhookResult:
         secret = (credentials.get("webhook_secret") or "").strip()
         if not secret:

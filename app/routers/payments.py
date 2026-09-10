@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from html import escape
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
@@ -58,6 +59,25 @@ async def _apply(db: AsyncSession, payment: Payment, result) -> None:
             payment_service.deliver_later(payment.id)
 
 
+def _refusal(provider, *, form: dict, raw_body: bytes, found: bool, exc: Exception | None = None):
+    """How to say no to this particular provider.
+
+    Almost all of them read an HTTP error as "delivery failed, try again",
+    which is what we want. Click and Payme are built the other way round:
+    they answer everything with 200 and put the verdict in the body, and an
+    HTTP error tells them the integration is broken rather than that the
+    payment was rejected. Those two supply their own refusal.
+    """
+    body = getattr(exc, "body", None)
+    if body is not None:
+        return Response(content=body, media_type="application/json")
+    supplied = provider.error_body(form=form, raw_body=raw_body, found=found)
+    if supplied is None:
+        return None
+    content, media_type = supplied
+    return Response(content=content, media_type=media_type)
+
+
 @router.post("/webhook/pay/{provider_slug}")
 async def payment_callback(provider_slug: str, request: Request, db: AsyncSession = Depends(get_db)) -> Response:
     try:
@@ -74,11 +94,15 @@ async def payment_callback(provider_slug: str, request: Request, db: AsyncSessio
 
     ref = provider.locate_payment(headers=headers, raw_body=raw_body, form=form)
     payment = await payment_service.find_payment(db, ref)
+    if payment is not None and payment.provider != provider.slug:
+        # Someone else's payment, addressed to this provider's route.
+        payment = None
     if payment is None:
         logger.warning("Payment callback from %s did not match any payment", provider_slug)
+        refusal = _refusal(provider, form=form, raw_body=raw_body, found=False)
+        if refusal is not None:
+            return refusal
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown payment")
-    if payment.provider != provider.slug:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provider mismatch")
 
     credentials, _is_test = await payment_service.credentials_for(db, payment)
     try:
@@ -91,13 +115,55 @@ async def payment_callback(provider_slug: str, request: Request, db: AsyncSessio
             invoice_no=payment.invoice_no,
             payment_id=payment.id,
             provider_payment_id=payment.provider_payment_id,
+            meta=payment.meta or {},
         )
     except ProviderError as exc:
         logger.warning("Rejected %s callback for payment %s: %s", provider_slug, payment.id, exc)
+        refusal = _refusal(provider, form=form, raw_body=raw_body, found=True, exc=exc)
+        if refusal is not None:
+            return refusal
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     await _apply(db, payment, result)
     return Response(content=result.response_body, media_type=result.response_content_type)
+
+
+@router.get("/api/pay/redirect/{payment_id}", response_class=HTMLResponse)
+async def payment_redirect(payment_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """A link for a checkout that is only reachable by POST.
+
+    LiqPay's checkout is an HTML form, not a URL, and a bot button can only
+    carry a link — so the link points here and this page submits the form.
+    The fields were built when the payment was created and contain nothing
+    secret: they are exactly what the browser would have sent anyway.
+    """
+    result = await db.execute(select(Payment).where(Payment.id == payment_id))
+    payment = result.scalar_one_or_none()
+    meta = (payment.meta or {}) if payment else {}
+    action = meta.get("form_action")
+    fields = meta.get("form_fields") or {}
+    if payment is None or not action:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Платёж не найден")
+
+    inputs = "".join(
+        f'<input type="hidden" name="{escape(str(key), quote=True)}" '
+        f'value="{escape(str(value), quote=True)}">'
+        for key, value in fields.items()
+    )
+    return HTMLResponse(
+        f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Переход к оплате</title></head>
+        <body style="font-family:system-ui,sans-serif;display:flex;min-height:100vh;margin:0;
+                     align-items:center;justify-content:center;background:#fdfcfe;color:#14121f">
+          <form id="pay" method="post" action="{escape(str(action), quote=True)}" accept-charset="utf-8">
+            {inputs}
+            <noscript><button type="submit">Перейти к оплате</button></noscript>
+          </form>
+          <p style="color:#83829a;font-size:14px">Открываем страницу оплаты…</p>
+          <script>document.getElementById('pay').submit();</script>
+        </body></html>"""
+    )
 
 
 @router.get("/webhook/pay/test/{payment_id}", response_class=HTMLResponse)

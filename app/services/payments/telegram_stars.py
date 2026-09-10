@@ -109,6 +109,7 @@ class TelegramStarsProvider(ProviderDefaults):
         invoice_no: int,
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
+        meta: dict | None = None,
     ) -> WebhookResult:
         raise ProviderError("Telegram Stars: оплата подтверждается через webhook самого бота, не здесь")
 

@@ -1,11 +1,13 @@
 """Payment provider registry.
 
-Adding a provider (CKassa is the one still missing) means
-writing one module against `base.PaymentProvider` and registering it here —
-the settings form, the webhook route and the constructor's payment block all
-read this registry and need no changes of their own.
+Adding a provider means writing one module against `base.PaymentProvider`
+and registering it here — the settings form, the webhook route and the
+constructor's payment block all read this registry and need no changes of
+their own.
 
-Order matters: it is the order the shop owner sees in the settings form.
+Order matters: it is the order the shop owner sees in the settings form, so
+it runs by geography — Russia, then Central Asia, then Ukraine, then what
+works anywhere.
 """
 
 from __future__ import annotations
@@ -21,14 +23,20 @@ from app.services.payments.base import (
     WebhookResult,
     minor_to_major,
 )
+from app.services.payments.click import ClickProvider
+from app.services.payments.cloudpayments import CloudPaymentsProvider
 from app.services.payments.cryptobot import CryptoBotProvider
+from app.services.payments.freedompay import FreedomPayProvider
 from app.services.payments.lavatop import LavaTopProvider
 from app.services.payments.lifepay import LifePayProvider
 from app.services.payments.link import LinkProvider
+from app.services.payments.liqpay import LiqPayProvider
+from app.services.payments.payme import PaymeProvider
 from app.services.payments.paymaster import PayMasterProvider
 from app.services.payments.prodamus import ProdamusProvider
 from app.services.payments.robokassa import RobokassaProvider
 from app.services.payments.stripe import StripeProvider
+from app.services.payments.tbank import TBankProvider
 from app.services.payments.telegram_stars import TelegramStarsProvider
 from app.services.payments.test_provider import TestProvider
 from app.services.payments.yookassa import YooKassaProvider
@@ -36,13 +44,24 @@ from app.services.payments.yookassa import YooKassaProvider
 PROVIDERS: dict[str, PaymentProvider] = {
     provider.slug: provider
     for provider in (
+        # Works anywhere Telegram does, so it goes first.
         TelegramStarsProvider(),
+        # Россия.
         YooKassaProvider(),
+        TBankProvider(),
+        CloudPaymentsProvider(),
         ProdamusProvider(),
         RobokassaProvider(),
         PayMasterProvider(),
         LifePayProvider(),
         LavaTopProvider(),
+        # Казахстан, Узбекистан, Кыргызстан.
+        FreedomPayProvider(),
+        ClickProvider(),
+        PaymeProvider(),
+        # Украина.
+        LiqPayProvider(),
+        # Везде.
         StripeProvider(),
         CryptoBotProvider(),
         LinkProvider(),

@@ -558,6 +558,8 @@ async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: b
     that want to acknowledge the provider first and hand the goods over from
     a background task — see `deliver_later`.
     """
+    await _remember(db, payment, result)
+
     if result.status == PaymentStatus.paid:
         if await mark_paid(db, payment, result.provider_payment_id):
             if deliver:
@@ -580,6 +582,33 @@ async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: b
         payment.status = PaymentStatus.failed
         await db.commit()
     return False
+
+
+async def _remember(db: AsyncSession, payment: Payment, result) -> None:
+    """Write down what the adapter learned, before deciding what it means.
+
+    Most providers hand us one notification and are done. Payme instead
+    holds a conversation about the same transaction and expects every answer
+    to match the last, so an adapter can return notes in
+    `WebhookResult.meta` and read them back on the next call.
+
+    Committed on its own, ahead of the status handling: `mark_paid` rolls
+    back when it loses the race to settle, and these notes must survive
+    that.
+    """
+    notes = dict(getattr(result, "meta", None) or {})
+    remote_id = getattr(result, "provider_payment_id", None)
+    changed = False
+
+    if remote_id and payment.provider_payment_id != remote_id:
+        payment.provider_payment_id = remote_id
+        changed = True
+    if notes:
+        payment.meta = {**(payment.meta or {}), **notes}
+        changed = True
+
+    if changed:
+        await db.commit()
 
 
 def deliver_later(payment_id: uuid.UUID) -> None:

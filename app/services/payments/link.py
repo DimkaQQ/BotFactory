@@ -75,5 +75,6 @@ class LinkProvider(ProviderDefaults):
         invoice_no: int,
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
+        meta: dict | None = None,
     ) -> WebhookResult:
         raise ProviderError("Оплата по ссылке подтверждается владельцем бота, а не уведомлением")

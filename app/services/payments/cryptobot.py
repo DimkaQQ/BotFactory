@@ -156,6 +156,7 @@ class CryptoBotProvider(ProviderDefaults):
         invoice_no: int,
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
+        meta: dict | None = None,
     ) -> WebhookResult:
         token = self._token(credentials)
         if not self._signature_ok(token, raw_body, headers.get("crypto-pay-api-signature", "")):

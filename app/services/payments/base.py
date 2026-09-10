@@ -133,13 +133,20 @@ class PaymentProvider(Protocol):
         invoice_no: int,
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
+        meta: dict | None = None,
     ) -> WebhookResult:
         """Check the callback's authenticity and say what it means.
 
         Where the provider signs its callbacks (Prodamus), that signature is
         the proof. Where it doesn't (ЮKassa, PayMaster, LIFE PAY), the
         callback is only a hint: the adapter calls the provider's API back
-        and believes the answer, not the request body."""
+        and believes the answer, not the request body.
+
+        `meta` is the payment's stored notes, for the one protocol that is a
+        conversation rather than a single message: Payme asks about the same
+        transaction repeatedly and expects the same timestamps back every
+        time. Anything an adapter returns in `WebhookResult.meta` is written
+        there, so the next call can read it."""
         ...
 
     async def check_status(
@@ -158,6 +165,11 @@ class PaymentProvider(Protocol):
         Only meaningful when `supports_status_check` is True; a webhook can
         be lost or delayed, and a buyer who has already paid should not have
         to wait for a retry schedule to get what they bought."""
+        ...
+
+    def error_body(self, *, form: dict[str, str], raw_body: bytes, found: bool) -> tuple[str, str] | None:
+        """The body to answer a refused callback with, or None for an HTTP
+        error. See `ProviderDefaults.error_body`."""
         ...
 
 
@@ -188,6 +200,19 @@ class ProviderDefaults:
         meta: dict,
     ) -> WebhookResult:
         raise ProviderError(f"{getattr(self, 'title', 'Провайдер')}: статус платежа так не проверяется")
+
+    def error_body(self, *, form: dict[str, str], raw_body: bytes, found: bool) -> tuple[str, str] | None:
+        """What to answer a callback we are refusing.
+
+        `None` — the default — means the router answers with an HTTP error,
+        which is what almost every provider reads as "try again later".
+        Click and Payme are the exceptions: they answer *everything* with
+        200 and put the refusal in the body, and an HTTP error to them means
+        a broken integration, not a rejected payment. Those two override it.
+
+        `found` is False when no payment matched the callback at all.
+        """
+        return None
 
 
 def minor_to_major(amount_minor: int) -> str:

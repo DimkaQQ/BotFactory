@@ -107,6 +107,7 @@ class LifePayProvider(ProviderDefaults):
         invoice_no: int,
         payment_id,
         provider_payment_id: str | None,
+        meta: dict | None = None,
     ) -> WebhookResult:
         return await self._read(credentials, provider_payment_id, amount_minor)
 
