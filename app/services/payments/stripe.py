@@ -110,15 +110,26 @@ class StripeProvider(ProviderDefaults):
             raise ProviderError("Stripe: не заполнен webhook secret")
 
         header = headers.get("stripe-signature") or ""
-        parts = dict(item.split("=", 1) for item in header.split(",") if "=" in item)
-        timestamp, signature = parts.get("t"), parts.get("v1")
-        if not timestamp or not signature:
+        timestamp = None
+        signatures = []
+        for item in header.split(","):
+            key, _, value = item.strip().partition("=")
+            if key == "t":
+                timestamp = value
+            elif key == "v1":
+                # During a secret rotation Stripe signs one delivery with
+                # every active secret, so the header carries several `v1=`
+                # entries. Collapsing them into a dict kept only the last and
+                # rejected a legitimate callback.
+                signatures.append(value)
+
+        if not timestamp or not signatures:
             raise ProviderError("Stripe: заголовок подписи отсутствует или повреждён")
         if abs(time.time() - int(timestamp)) > _SIGNATURE_TOLERANCE_S:
             raise ProviderError("Stripe: подпись просрочена")
 
         expected = hmac.new(secret.encode(), f"{timestamp}.".encode() + raw_body, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(expected, signature):
+        if not any(hmac.compare_digest(expected, candidate) for candidate in signatures):
             raise ProviderError("Stripe: подпись не совпала")
 
         event = json.loads(raw_body or b"{}")
@@ -126,6 +137,14 @@ class StripeProvider(ProviderDefaults):
         event_type = event.get("type", "")
 
         if event_type == "checkout.session.completed" and obj.get("payment_status") == "paid":
+            # Every other adapter here cross-checks the amount before letting
+            # the goods go; Stripe gets the same treatment rather than being
+            # trusted purely because the signature held.
+            charged = obj.get("amount_total")
+            currency = (obj.get("currency") or "").upper()
+            expected = amount_minor // 100 if currency in _ZERO_DECIMAL else amount_minor
+            if charged is not None and int(charged) != expected:
+                raise ProviderError(f"Stripe: сумма не совпадает (оплачено {charged}, ожидалось {expected})")
             status = PaymentStatus.paid
         elif event_type in {"checkout.session.expired", "payment_intent.payment_failed"}:
             status = PaymentStatus.failed

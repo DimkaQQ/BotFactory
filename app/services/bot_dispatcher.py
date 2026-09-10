@@ -33,6 +33,7 @@ them about money:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 import uuid
@@ -72,6 +73,18 @@ _SELF_SETTLING = {"stars", "test"}
 def _typing_delay(text: str) -> float:
     seconds = len(text) / _CHARS_PER_SECOND
     return max(_TYPING_DELAY_MIN, min(seconds, _TYPING_DELAY_MAX))
+
+
+def _money(payment) -> str:
+    """"990 RUB", "990.50 RUB", "250 ⭐".
+
+    Integer division used to build this, which turned a 990.50 ₽ product into
+    a button reading "Оплатить 990 RUB" while the card was charged 990.50 —
+    the one number in the whole dialogue the buyer is entitled to trust.
+    """
+    whole, kopecks = divmod(payment.amount_minor, 100)
+    amount = str(whole) if kopecks == 0 else f"{whole}.{kopecks:02d}"
+    return f"{amount} ⭐" if payment.currency == "XTR" else f"{amount} {payment.currency}"
 
 
 _URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
@@ -125,10 +138,13 @@ async def _send_payment_block(
 ) -> bool:
     """Send the invoice message for a payment block.
 
-    Returns True if the chain should halt here — which it does whenever a
-    payment was actually offered, because what comes next is the delivery,
-    and that is owed only once the money lands (payment_service resumes the
-    walk from the provider's callback).
+    Always returns True — the chain stops here no matter what happens.
+
+    What follows a payment block is the thing being sold, so continuing past
+    it means handing that over. That has to hold for the failure path too: an
+    unconfigured provider, a blank price or a provider outage must leave the
+    buyer without the goods, not without the paywall. The customer is told
+    something went wrong instead of being left staring at silence.
     """
     from app.services import payment_service  # local import: avoids a cycle
 
@@ -136,7 +152,7 @@ async def _send_payment_block(
     result = await db.execute(select(BotModel).where(BotModel.id == bot_id))
     bot_row = result.scalar_one_or_none()
     if bot_row is None:
-        return False
+        return True
 
     text = (content.get("text") or content.get("title") or "").strip()
     try:
@@ -144,16 +160,16 @@ async def _send_payment_block(
             db, bot=bot_row, block=block, chat_id=chat_id, telegram_user_id=telegram_user_id
         )
     except Exception:
-        # A misconfigured payment block must not swallow the rest of the
-        # dialogue: say the message it carries and walk on, rather than
-        # leaving the customer staring at silence.
         logger.exception("Could not create a payment for block %s (bot %s)", block.id, bot_id)
-        if text:
-            await bot.send_message(chat_id, text)
-        return False
+        with contextlib.suppress(Exception):
+            await bot.send_message(
+                chat_id,
+                "Не получилось открыть оплату — попробуй ещё раз чуть позже. "
+                "Если не заработает, напиши продавцу.",
+            )
+        return True
 
-    unit = "⭐" if payment.currency == "XTR" else payment.currency
-    label = (content.get("button_label") or "").strip() or f"Оплатить {payment.amount_minor // 100} {unit}"
+    label = (content.get("button_label") or "").strip() or f"Оплатить {_money(payment)}"
     rows = [[InlineKeyboardButton(text=label[:64], url=url)]]
 
     # For most providers the buyer may need to nudge a payment along, but not

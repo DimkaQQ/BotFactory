@@ -193,14 +193,28 @@ async def set_payment_settings(
         except ProviderError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    switching = (payload.provider or None) != bot.payment_provider
     bot.payment_provider = payload.provider or None
     bot.payment_is_test = payload.is_test
 
-    if payload.credentials is not None:
-        existing = payment_service.decrypt_credentials(bot.payment_credentials_encrypted)
+    # Keys belong to the provider they were issued for. Left merged, turning
+    # payments off or moving to another provider would keep live Robokassa
+    # passwords sitting in the database forever, and the settings API would
+    # go on listing them as filled.
+    existing = {} if switching else payment_service.decrypt_credentials(bot.payment_credentials_encrypted)
+
+    if payload.credentials is not None or switching:
+        supplied = {k: v for k, v in (payload.credentials or {}).items() if v.strip()}
         # Blank means "leave what's stored" — the form never receives the
         # saved secrets back, so an untouched field arrives empty.
-        merged = {**existing, **{k: v for k, v in payload.credentials.items() if v.strip()}}
+        merged = {**existing, **supplied}
+        if bot.payment_provider:
+            # Drop anything the chosen provider has no field for, so a stale
+            # key from a previous provider cannot linger.
+            allowed = {f.key for f in payment_providers.get_provider(bot.payment_provider).credential_fields}
+            merged = {k: v for k, v in merged.items() if k in allowed}
+        else:
+            merged = {}
         bot.payment_credentials_encrypted = payment_service.encrypt_credentials(merged) if merged else None
 
     await db.commit()

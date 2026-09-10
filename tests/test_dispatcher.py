@@ -151,14 +151,6 @@ async def test_a_blank_button_row_does_not_take_the_whole_block_down(db, owner, 
     assert telegram.sent() == ["Есть текст"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Известный баг: _send_payment_block возвращает False при любой ошибке создания платежа, "
-        "и _walk_chain идёт дальше — то есть выдаёт платный товар бесплатно. "
-        "Когда починим, этот тест начнёт проходить и strict=True потребует снять маркер."
-    ),
-)
 async def test_a_failed_payment_never_releases_the_goods(db, owner, make_bot, telegram):
     """The block after a payment block is the thing being sold.
 
@@ -180,3 +172,6 @@ async def test_a_failed_payment_never_releases_the_goods(db, owner, make_bot, te
     )
 
     assert "ВОТ ПЛАТНЫЙ ГАЙД" not in telegram.sent(), "товар выдан без оплаты"
+    # And the buyer is told, rather than left looking at a dialogue that
+    # simply stopped.
+    assert telegram.sent(), "покупателю ничего не сказали"

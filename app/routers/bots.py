@@ -129,6 +129,18 @@ async def publish_bot(
     if bot.status != BotStatus.draft:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Бот уже опубликован")
 
+    # The test provider's checkout page marks an order paid the moment it is
+    # opened — that is its entire purpose, and it is exactly why a live bot
+    # must not carry it: anyone who tapped the button would get the goods.
+    if bot.payment_provider == "test":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "У бота выбрана «Тестовая оплата» — она отдаёт товар без денег. "
+                "Подключи настоящую платёжную систему перед публикацией."
+            ),
+        )
+
     # Building a bot is free; putting it on the air is what's paid for.
     # A price of 0 (the default) leaves publishing open — the paywall only
     # exists once one is configured.

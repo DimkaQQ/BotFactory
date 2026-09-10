@@ -17,9 +17,9 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -71,6 +71,60 @@ def price_to_minor(value) -> int:
     whole, _, frac = text.partition(".")
     frac = (frac + "00")[:2]
     return int(whole or 0) * 100 + int(frac)
+
+
+def currency_for(provider_slug: str, requested: str | None) -> str:
+    """The currency this provider will actually charge in.
+
+    The block carries a currency and the provider supports a fixed list, and
+    the two drift apart easily: a block created before a provider was chosen
+    defaults to one currency, and the `<select>` in the editor happily shows
+    the provider's list while leaving the old value in the data. The buyer
+    would then be told "250 RUB" and charged 250 ⭐. The provider decides.
+    """
+    provider = payment_providers.get_provider(provider_slug)
+    wanted = (requested or "").strip().upper()
+    if wanted and wanted in provider.currencies:
+        return wanted
+    return provider.currencies[0]
+
+
+# How long a checkout link is offered again instead of a new one being made.
+# Long enough for someone to go and pay, short enough that a link the
+# provider has since expired is not handed out.
+_REUSE_WINDOW = timedelta(minutes=30)
+
+
+async def _open_payment(
+    db: AsyncSession,
+    *,
+    bot_id: uuid.UUID,
+    block_id: uuid.UUID,
+    chat_id: int,
+    amount_minor: int,
+    currency: str,
+) -> Payment | None:
+    """This buyer's still-open order for this exact product, if there is one."""
+    result = await db.execute(
+        select(Payment)
+        .where(
+            Payment.bot_id == bot_id,
+            Payment.block_id == block_id,
+            Payment.chat_id == chat_id,
+            Payment.kind == PaymentKind.order,
+            Payment.status == PaymentStatus.pending,
+            Payment.amount_minor == amount_minor,
+            Payment.currency == currency,
+            Payment.created_at > datetime.now(timezone.utc) - _REUSE_WINDOW,
+        )
+        .order_by(Payment.created_at.desc())
+        .limit(1)
+    )
+    payment = result.scalar_one_or_none()
+    # Without a stored link there is nothing to offer again.
+    if payment is None or not (payment.meta or {}).get("checkout_url"):
+        return None
+    return payment
 
 
 async def _create(
@@ -155,6 +209,17 @@ async def create_order_payment(
 
     settings = get_settings()
     title = (content.get("title") or "").strip() or "Оплата"
+    currency = currency_for(bot.payment_provider, content.get("currency"))
+
+    # Someone who taps /start three times is looking at one product, not
+    # three orders. Reusing the open one keeps the shop's order list honest
+    # and, for pay-by-link, stops every tap of «Я оплатил» from pinging the
+    # owner about a different row.
+    existing = await _open_payment(
+        db, bot_id=bot.id, block_id=block.id, chat_id=chat_id, amount_minor=amount_minor, currency=currency
+    )
+    if existing is not None:
+        return existing, (existing.meta or {})["checkout_url"]
     # Send the buyer back where they came from — the bot — rather than to a
     # web page of ours they have no use for.
     return_url = (
@@ -176,7 +241,7 @@ async def create_order_payment(
         credentials=decrypt_credentials(bot.payment_credentials_encrypted),
         is_test=bot.payment_is_test,
         amount_minor=amount_minor,
-        currency=(content.get("currency") or "RUB").upper(),
+        currency=currency,
         description=title,
         return_url=return_url,
         bot_id=bot.id,
@@ -409,21 +474,43 @@ async def reject_by_owner(db: AsyncSession, payment: Payment) -> None:
 
 
 async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str | None) -> bool:
-    """Returns True if this call is what flipped it to paid — webhooks get
-    redelivered, and delivering the goods twice is worse than not at all."""
-    if payment.status == PaymentStatus.paid:
+    """Flip a payment to paid, exactly once. True means *this* call did it.
+
+    The caller delivers the goods on True, so "exactly once" has to survive
+    concurrency, and it genuinely happens: Robokassa re-posts its ResultURL
+    until it gets `OK{InvId}`, ЮKassa retries on a slow response, and the
+    buyer can tap «Я оплатил» twice. Reading the status and then writing it
+    would let every one of those racers observe `pending` and deliver.
+
+    So the check and the write are one statement — `UPDATE … WHERE status
+    <> 'paid'` — and Postgres decides the winner. Exactly one caller sees a
+    row updated; the rest get zero and stay quiet.
+    """
+    now = datetime.now(timezone.utc)
+    values = {"status": PaymentStatus.paid, "paid_at": now}
+    if provider_payment_id:
+        values["provider_payment_id"] = provider_payment_id
+
+    result = await db.execute(
+        update(Payment)
+        .where(Payment.id == payment.id, Payment.status != PaymentStatus.paid)
+        .values(**values)
+    )
+    if result.rowcount == 0:
+        # Someone else got there first. Roll back rather than commit, so this
+        # call leaves no trace at all.
+        await db.rollback()
         return False
 
-    payment.status = PaymentStatus.paid
-    payment.paid_at = datetime.now(timezone.utc)
-    if provider_payment_id:
-        payment.provider_payment_id = provider_payment_id
-
     if payment.kind == PaymentKind.publication and payment.bot_id:
-        result = await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))
-        bot = result.scalar_one_or_none()
-        if bot is not None and bot.publication_paid_at is None:
-            bot.publication_paid_at = datetime.now(timezone.utc)
+        await db.execute(
+            update(BotModel)
+            .where(BotModel.id == payment.bot_id, BotModel.publication_paid_at.is_(None))
+            .values(publication_paid_at=now)
+        )
 
     await db.commit()
+    # The in-memory object was not touched by the UPDATE; refresh it so the
+    # caller (and anything it hands the payment to) sees the new state.
+    await db.refresh(payment)
     return True

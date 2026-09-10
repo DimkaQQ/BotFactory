@@ -125,6 +125,10 @@ class LifePayProvider(ProviderDefaults):
     async def _read(self, credentials: dict[str, str], number: str | None, amount_minor: int) -> WebhookResult:
         """The bill as LIFE PAY has it — the callback only says which bill to
         look at, and the buyer's "Я оплатил" asks the same question."""
+        # `GET /v1/bill/status` takes apikey and login as query parameters —
+        # that is LIFE PAY's own design, not a choice here, and moving them
+        # into a body would simply not authenticate. Worth knowing when
+        # deciding what a reverse proxy in front of us logs.
         params = self._auth(credentials)
         if not number:
             raise ProviderError("LIFE PAY: у платежа нет номера счёта")
