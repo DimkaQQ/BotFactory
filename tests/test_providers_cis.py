@@ -622,3 +622,214 @@ def test_payme_finds_the_order_by_whatever_the_cashbox_calls_it():
     ref = get_provider("payme").locate_payment(headers={}, raw_body=body, form={})
 
     assert ref.invoice_no == 4242
+
+
+# -------------------------------------------------------------- Processing.kz
+
+PROC_CREDS = {"merchant_id": "000000000000115", "terminal_id": ""}
+
+_SOAP = "http://www.w3.org/2003/05/soap-envelope"
+
+
+def proc_envelope(inner: str) -> str:
+    return (
+        f'<soap:Envelope xmlns:soap="{_SOAP}" xmlns:ns="http://kz.processing.cnp.merchant_ws/xsd">'
+        f"<soap:Body>{inner}</soap:Body></soap:Envelope>"
+    )
+
+
+def proc_start(success: str = "true", url: str = "https://pay.processing.kz/f/abc") -> str:
+    return proc_envelope(
+        "<ns:startTransactionResponse><ns:return>"
+        f"<ax:success xmlns:ax='x'>{success}</ax:success>"
+        f"<ax:redirectURL xmlns:ax='x'>{url}</ax:redirectURL>"
+        "<ax:customerReference xmlns:ax='x'>CR-778899</ax:customerReference>"
+        "<ax:errorDescription xmlns:ax='x'>Merchant not found</ax:errorDescription>"
+        "</ns:return></ns:startTransactionResponse>"
+    )
+
+
+def proc_status(status: str, amount: str = "99000") -> str:
+    return proc_envelope(
+        "<ns:getTransactionStatusResponse><ns:return>"
+        f"<ax:transactionStatus xmlns:ax='x'>{status}</ax:transactionStatus>"
+        f"<ax:amountSettled xmlns:ax='x'>{amount}</ax:amountSettled>"
+        f"<ax:amountAuthorised xmlns:ax='x'>{amount}</ax:amountAuthorised>"
+        "</ns:return></ns:getTransactionStatusResponse>"
+    )
+
+
+def proc_complete() -> str:
+    return proc_envelope(
+        "<ns:completeTransactionResponse><ns:return>true</ns:return></ns:completeTransactionResponse>"
+    )
+
+
+def proc_gateway(*statuses: str, start_ok: str = "true"):
+    """A gateway that answers the status calls in the order given, so a test
+    can say "AUTHORISED first, PAID after the capture"."""
+    remaining = list(statuses)
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        action = request.headers["content-type"].split('action="')[1].rstrip('"')
+        seen.append(action)
+        if action == "urn:startTransaction":
+            return httpx.Response(200, text=proc_start(start_ok), headers={"content-type": "application/soap+xml"})
+        if action == "urn:completeTransaction":
+            return httpx.Response(200, text=proc_complete(), headers={"content-type": "application/soap+xml"})
+        status = remaining.pop(0) if len(remaining) > 1 else remaining[0]
+        return httpx.Response(200, text=proc_status(status), headers={"content-type": "application/soap+xml"})
+
+    handler.seen = seen  # type: ignore[attr-defined]
+    return handler
+
+
+async def test_processingkz_sends_tenge_as_a_numeric_code_and_minor_units(mock_http):
+    sent: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request.content.decode())
+        return proc_gateway("PAID")(request)
+
+    with mock_http(handler):
+        checkout = await get_provider("processingkz").create_checkout(
+            checkout_request(PROC_CREDS, currency="KZT")
+        )
+
+    assert checkout.url == "https://pay.processing.kz/f/abc"
+    assert checkout.provider_payment_id == "CR-778899"
+
+    body = sent[0]
+    # The envelope is hand-built, so the first thing worth proving is that it
+    # is well-formed and every prefix it uses is actually declared — an
+    # undeclared one is refused by the service before anything else happens.
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(body)
+    assert root.tag == "{http://www.w3.org/2003/05/soap-envelope}Envelope"
+    tags = {element.tag for element in root.iter()}
+    assert "{http://kz.processing.cnp.merchant_ws/xsd}startTransaction" in tags
+    assert "{http://beans.common.cnp.processing.kz/xsd}totalAmount" in tags
+
+    # 398 is the ISO numeric code for the tenge; totalAmount is tiyn.
+    assert "<b:currencyCode>398</b:currencyCode>" in body
+    assert "<b:totalAmount>99000</b:totalAmount>" in body
+    # The gateway adds the goods list up itself and refuses an empty one.
+    assert "<b:goodsList>" in body and "<b:amount>99000</b:amount>" in body
+
+
+async def test_processingkz_reports_the_gateways_own_refusal(mock_http):
+    with mock_http(proc_gateway("PAID", start_ok="false")), pytest.raises(ProviderError, match="Merchant not found"):
+        await get_provider("processingkz").create_checkout(checkout_request(PROC_CREDS, currency="KZT"))
+
+
+async def test_processingkz_captures_an_authorised_payment_before_calling_it_paid(mock_http):
+    """AUTHORISED means the money is *blocked*, not taken. Handing over goods
+    then would be giving them away against a hold that later expires."""
+    gateway = proc_gateway("AUTHORISED", "PAID")
+
+    with mock_http(gateway):
+        result = await get_provider("processingkz").check_status(
+            credentials=PROC_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id="CR-778899", meta={},
+        )
+
+    assert result.status.value == "paid"
+    assert gateway.seen == [
+        "urn:getTransactionStatus",
+        "urn:completeTransaction",
+        "urn:getTransactionStatus",
+    ], "снять холд и перечитать — иначе продавец останется без денег"
+
+
+async def test_processingkz_does_not_deliver_when_the_capture_leaves_it_unpaid(mock_http):
+    """completeTransaction answering "true" is its own claim; the ledger is
+    what decides. If the second read still says AUTHORISED, nobody has paid."""
+    with mock_http(proc_gateway("AUTHORISED")):
+        result = await get_provider("processingkz").check_status(
+            credentials=PROC_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id="CR-778899", meta={},
+        )
+
+    assert result.status.value == "pending"
+
+
+async def test_processingkz_leaves_a_buyer_who_has_not_finished_alone(mock_http):
+    gateway = proc_gateway("PENDING_CUSTOMER_INPUT")
+
+    with mock_http(gateway):
+        result = await get_provider("processingkz").check_status(
+            credentials=PROC_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id="CR-778899", meta={},
+        )
+
+    assert result.status.value == "pending"
+    assert "urn:completeTransaction" not in gateway.seen, "нечего снимать — покупатель ещё не платил"
+
+
+async def test_processingkz_reads_a_reversed_transaction_as_failed(mock_http):
+    with mock_http(proc_gateway("REVERSED")):
+        result = await get_provider("processingkz").check_status(
+            credentials=PROC_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id="CR-778899", meta={},
+        )
+
+    assert result.status.value == "failed"
+
+
+async def test_processingkz_refuses_a_transaction_settled_for_less(mock_http):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=proc_status("PAID", amount="1000"))
+
+    with mock_http(handler), pytest.raises(ProviderError, match="сумма"):
+        await get_provider("processingkz").check_status(
+            credentials=PROC_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id="CR-778899", meta={},
+        )
+
+
+async def test_processingkz_reads_a_gateway_that_answers_in_major_units(mock_http):
+    """The reference sends minor units; a decimal point back means the other
+    convention, and both have to mean the same money."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=proc_status("PAID", amount="990.00"))
+
+    with mock_http(handler):
+        result = await get_provider("processingkz").check_status(
+            credentials=PROC_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id="CR-778899", meta={},
+        )
+
+    assert result.status.value == "paid"
+
+
+async def test_processingkz_never_believes_an_incoming_request():
+    """There is no callback and nothing is signed, so a POST to our webhook
+    address can only ever be someone guessing."""
+    with pytest.raises(ProviderError):
+        await get_provider("processingkz").verify_webhook(
+            headers={}, raw_body=b"", form={"transactionStatus": "PAID"}, credentials=PROC_CREDS,
+            amount_minor=99000, invoice_no=4242, payment_id=PAYMENT_ID, provider_payment_id="CR-778899",
+        )
+
+    assert get_provider("processingkz").uses_callback is False
+    assert get_provider("processingkz").supports_status_check is True
+
+
+async def test_processingkz_pins_which_ledger_the_transaction_lives_on(mock_http):
+    """Test and production keep separate ledgers, and the shop can flip the
+    switch while a buyer is still paying."""
+    with mock_http(proc_gateway("PAID")):
+        checkout = await get_provider("processingkz").create_checkout(
+            checkout_request(PROC_CREDS, currency="KZT")
+        )
+
+    assert checkout.meta["is_test"] is True
+
+
+async def test_processingkz_refuses_a_currency_it_has_no_code_for():
+    with pytest.raises(ProviderError, match="UZS"):
+        await get_provider("processingkz").create_checkout(
+            checkout_request(PROC_CREDS, currency="UZS")
+        )

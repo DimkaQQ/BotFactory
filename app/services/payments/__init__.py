@@ -33,6 +33,7 @@ from app.services.payments.link import LinkProvider
 from app.services.payments.liqpay import LiqPayProvider
 from app.services.payments.payme import PaymeProvider
 from app.services.payments.paymaster import PayMasterProvider
+from app.services.payments.processingkz import ProcessingKzProvider
 from app.services.payments.prodamus import ProdamusProvider
 from app.services.payments.robokassa import RobokassaProvider
 from app.services.payments.stripe import StripeProvider
@@ -57,6 +58,7 @@ PROVIDERS: dict[str, PaymentProvider] = {
         LavaTopProvider(),
         # Казахстан, Узбекистан, Кыргызстан.
         FreedomPayProvider(),
+        ProcessingKzProvider(),
         ClickProvider(),
         PaymeProvider(),
         # Украина.

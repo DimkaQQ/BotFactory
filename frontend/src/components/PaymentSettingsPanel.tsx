@@ -30,6 +30,7 @@ const SHORT: Record<string, string> = {
   lifepay: "СБП и карты РФ · онлайн-касса",
   lavatop: "карты РФ, покупатель платит из-за рубежа",
   freedompay: "Казахстан, Узбекистан, Кыргызстан",
+  processingkz: "Казахстан · через банк-эквайер",
   click: "Узбекистан · Click",
   payme: "Узбекистан · Payme",
   liqpay: "Украина · ПриватБанк",

@@ -329,7 +329,9 @@ def test_every_cis_gateway_is_offered_to_shop_owners():
 
     offered = {entry["slug"] for entry in describe_providers()}
 
-    assert {"tbank", "cloudpayments", "freedompay", "click", "payme", "liqpay"} <= offered
+    assert {
+        "tbank", "cloudpayments", "freedompay", "processingkz", "click", "payme", "liqpay",
+    } <= offered
 
 
 def test_the_uzbek_gateways_charge_in_sum_and_the_kazakh_one_in_tenge():
