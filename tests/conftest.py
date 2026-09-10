@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal, engine
 from app.main import app
+from app.services import background
 from app.models.bot import Bot as BotModel
 from app.models.bot import BotStatus
 from app.models.bot_block import BlockType, BotBlock
@@ -50,8 +51,12 @@ async def _fresh_pool() -> AsyncIterator[None]:
     the loop that opened it, and reusing (or even closing) it from the next
     test's loop raises "Event loop is closed" from deep inside asyncpg. The
     pool is not what these tests are measuring, so it is simply emptied.
+
+    Background work is stopped first: a task the request only scheduled may
+    still be holding a session, and it has to be gone before the pool is.
     """
     yield
+    await background.cancel_all()
     await engine.dispose()
 
 

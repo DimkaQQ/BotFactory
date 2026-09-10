@@ -18,7 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.models.bot import Bot as BotModel
 from app.models.bot import BotStatus
-from app.services.security import decrypt_token
+from app.database import AsyncSessionLocal
+from app.services.security import decrypt_token, webhook_secret
 from app.services.telegram_session import build_bot_session
 
 logger = logging.getLogger(__name__)
@@ -60,12 +61,36 @@ async def register_webhook(bot_id: uuid.UUID, token: str) -> None:
             # is what makes Stars work, and spelling the list out means a bot
             # stops being delivered update types nothing here reads.
             allowed_updates=["message", "callback_query", "pre_checkout_query"],
+            # Echoed back on every update, which is what lets the webhook
+            # route tell Telegram apart from anyone who guessed the URL.
+            secret_token=webhook_secret(bot_id),
         )
     except Exception:
         logger.exception("Failed to set webhook for bot %s", bot_id)
         await instance.session.close()
         raise
     put(bot_id, instance)
+
+
+async def refresh_webhook(bot_id: uuid.UUID) -> None:
+    """Re-register a live bot's webhook, so it starts sending the secret.
+
+    For bots published before secret tokens existed: their webhook is set
+    without one, and this brings them up to date on the first update they
+    deliver. Best-effort — an unreachable Telegram must not turn into a
+    failed update.
+    """
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(BotModel).where(BotModel.id == bot_id))
+        bot_row = result.scalar_one_or_none()
+        if bot_row is None or bot_row.status != BotStatus.active or not bot_row.bot_token_encrypted:
+            return
+        token = decrypt_token(bot_row.bot_token_encrypted)
+
+    try:
+        await register_webhook(bot_id, token)
+    except Exception:
+        logger.warning("Could not refresh the webhook for bot %s", bot_id, exc_info=True)
 
 
 async def remove(bot_id: uuid.UUID, token: str | None = None) -> None:

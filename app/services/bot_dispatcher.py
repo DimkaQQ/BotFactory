@@ -90,8 +90,24 @@ def _money(payment) -> str:
 _URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
 
 
+def _is_url_button(button: dict) -> bool:
+    return button.get("action_type") == "url" and bool((button.get("action_value") or "").strip())
+
+
 def _button_has_branches(content: dict) -> bool:
-    return any((b.get("target_block_id") or "").strip() for b in content.get("buttons") or [])
+    """Whether this block is a real decision point — one the dialogue can
+    actually continue from.
+
+    A URL button opens a link; Telegram sends us nothing when it is tapped,
+    so it carries no callback_data and can never advance the walk. Counting
+    one as a branch stopped the chain at a block nothing could ever move it
+    past, and the node it was wired to became unreachable — while the canvas
+    happily drew the arrow.
+    """
+    return any(
+        (button.get("target_block_id") or "").strip() and not _is_url_button(button)
+        for button in content.get("buttons") or []
+    )
 
 
 def _build_keyboard(block_id: uuid.UUID, content: dict) -> InlineKeyboardMarkup | None:
@@ -99,7 +115,6 @@ def _build_keyboard(block_id: uuid.UUID, content: dict) -> InlineKeyboardMarkup 
     rows = []
     for index, button in enumerate(buttons):
         label = (button.get("label") or "").strip()
-        action_type = button.get("action_type", "text")
         action_value = (button.get("action_value") or "").strip()
 
         # A fully blank row (added via "+ Добавить кнопку" and never filled
@@ -112,7 +127,7 @@ def _build_keyboard(block_id: uuid.UUID, content: dict) -> InlineKeyboardMarkup 
             continue
         label = label or "…"
 
-        if action_type == "url" and action_value:
+        if _is_url_button(button):
             url = action_value
             # The single most common way a URL button breaks a block: the
             # user typed "example.com" instead of "https://example.com".
@@ -220,6 +235,13 @@ async def _handle_payment_callback(
             await bot.send_message(chat_id, f"Заказ №{payment.invoice_no} отклонён.")
         return
 
+    # «Я оплатил» belongs to the person who was offered the payment. The id is
+    # unguessable, but callback_data is visible to whoever holds the message,
+    # and a claim from anyone else would ping the shop owner about an order
+    # that is not theirs.
+    if payment.chat_id is not None and chat_id != payment.chat_id:
+        return
+
     if payment.status == PaymentStatus.paid:
         await bot.send_message(chat_id, "Эта покупка уже оплачена ✅")
         return
@@ -266,11 +288,18 @@ async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
         question = (content.get("question") or "").strip()
         options = [opt.strip() for opt in content.get("options") or [] if opt and opt.strip()]
         if not question or len(options) < 2:
+            # Telegram refuses a poll with fewer than two options. Rather than
+            # letting the block vanish from the conversation with no trace,
+            # say so — the shop owner testing their own bot is the one who
+            # needs to find out.
+            logger.warning("Bot: poll block %s needs a question and at least two options — skipped", block.id)
             return
         await bot.send_poll(chat_id, question=question, options=options, is_anonymous=content.get("anonymous", True))
         return
 
-    text = content.get("text") or ""
+    # Whitespace is not content: a block holding only spaces used to pass the
+    # emptiness check and send a bubble containing "   ".
+    text = (content.get("text") or "").strip()
     media_file_id = content.get("media_file_id")
     media_type = content.get("media_type")
     keyboard = _build_keyboard(block.id, content) if block.block_type == BlockType.buttons else None
@@ -521,11 +550,19 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
     if chat_id is None:
         return
 
-    if not text.startswith("/start"):
-        return
-
     result = await db.execute(select(BotModel.start_block_id).where(BotModel.id == bot_id))
     start_block_id = result.scalar_one_or_none()
+
+    if not text.startswith("/start"):
+        # These bots answer taps, not typing. Saying nothing at all reads as
+        # broken to someone who just wrote a question into the chat, so point
+        # them back at the buttons instead of leaving them guessing.
+        if start_block_id is not None:
+            await bot.send_message(
+                chat_id,
+                "Я отвечаю на кнопки под сообщениями 🙂\nНапиши /start, чтобы начать сначала.",
+            )
+        return
 
     if start_block_id is None:
         await bot.send_message(chat_id, "Этот бот пока пуст 🤷")

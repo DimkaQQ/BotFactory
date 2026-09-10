@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.routers import auth, bots, builder, media, payments, webhook
-from app.services import bot_registry
+from app.services import background, bot_registry
 
 logging.basicConfig(level=logging.INFO)
 
@@ -16,6 +16,10 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
+    # Dialogues and deliveries scheduled off a request are still in flight;
+    # give them a moment to finish rather than dropping a buyer's goods
+    # halfway through a deploy.
+    await background.wait_for_all()
     await bot_registry.close_all()
 
 

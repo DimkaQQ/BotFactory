@@ -342,16 +342,21 @@ async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
         logger.exception("Payment %s: paid but delivery failed", payment.id)
 
 
-async def apply_result(db: AsyncSession, payment: Payment, result) -> bool:
+async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: bool = True) -> bool:
     """Turn a provider's verdict into what actually happens to the order.
 
     The single place a payment becomes paid, whatever prompted the news — a
     callback, the buyer's "Я оплатил", a Stars update, or the shop owner
     confirming by hand. Returns True if this call is what settled it.
+
+    `deliver=False` settles the payment without sending anything, for callers
+    that want to acknowledge the provider first and hand the goods over from
+    a background task — see `deliver_later`.
     """
     if result.status == PaymentStatus.paid:
         if await mark_paid(db, payment, result.provider_payment_id):
-            await resume_after_payment(db, payment)
+            if deliver:
+                await resume_after_payment(db, payment)
             return True
         return False
 
@@ -359,6 +364,28 @@ async def apply_result(db: AsyncSession, payment: Payment, result) -> bool:
         payment.status = result.status
         await db.commit()
     return False
+
+
+def deliver_later(payment_id: uuid.UUID) -> None:
+    """Hand the goods over after the current request has answered.
+
+    Delivery walks the dialogue with real typing pauses, and a provider that
+    doesn't get its acknowledgement quickly retries the callback — which is
+    exactly the duplicate confirmation `mark_paid` then has to fend off.
+    Better not to provoke it.
+    """
+    from app.services import background
+
+    async def run() -> None:
+        from app.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(Payment).where(Payment.id == payment_id))
+            payment = result.scalar_one_or_none()
+            if payment is not None:
+                await resume_after_payment(session, payment)
+
+    background.spawn(run(), name=f"deliver:{payment_id}")
 
 
 async def check_and_settle(db: AsyncSession, payment: Payment) -> PaymentStatus:

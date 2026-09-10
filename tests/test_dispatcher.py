@@ -175,3 +175,61 @@ async def test_a_failed_payment_never_releases_the_goods(db, owner, make_bot, te
     # And the buyer is told, rather than left looking at a dialogue that
     # simply stopped.
     assert telegram.sent(), "покупателю ничего не сказали"
+
+
+async def test_a_url_button_is_not_a_branch_point(db, owner, make_bot, telegram):
+    """A URL button opens a link and tells us nothing when tapped, so it can
+    never advance the walk. Treating one as a branch stopped the chain at a
+    block nothing could move it past."""
+    bot, blocks = await make_bot(
+        owner,
+        [
+            (
+                BlockType.buttons,
+                {"text": "Наш сайт", "buttons": [
+                    {"label": "Открыть", "action_type": "url", "action_value": "https://example.com",
+                     "target_block_id": None},
+                ]},
+            ),
+            (BlockType.description, {"text": "Продолжение"}),
+        ],
+    )
+    # The canvas lets an arrow be dragged from a URL button, which is what
+    # used to make the following block unreachable forever.
+    blocks[0].content = {
+        **blocks[0].content,
+        "buttons": [{**blocks[0].content["buttons"][0], "target_block_id": str(blocks[1].id)}],
+    }
+    await db.commit()
+
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+
+    assert telegram.sent() == ["Наш сайт", "Продолжение"]
+
+
+async def test_a_block_holding_only_spaces_sends_nothing(db, owner, make_bot, telegram):
+    bot, _ = await make_bot(
+        owner,
+        [(BlockType.description, {"text": "   "}), (BlockType.description, {"text": "Настоящий текст"})],
+    )
+
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+
+    assert telegram.sent() == ["Настоящий текст"]
+
+
+async def test_typing_at_the_bot_gets_an_answer(db, owner, make_bot, telegram):
+    """Saying nothing at all reads as broken to someone who just wrote a
+    question into the chat."""
+    bot, _ = await make_bot(owner, [(BlockType.welcome, {"text": "Привет!"})])
+
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "а сколько стоит?"}}, bot.id, db
+    )
+
+    assert len(telegram.sent()) == 1
+    assert "/start" in telegram.sent()[0]

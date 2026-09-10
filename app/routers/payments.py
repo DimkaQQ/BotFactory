@@ -41,7 +41,15 @@ router = APIRouter(tags=["payments"])
 
 
 async def _apply(db: AsyncSession, payment: Payment, result) -> None:
-    await payment_service.apply_result(db, payment, result)
+    """Settle now, deliver after answering.
+
+    Providers retry a callback they don't see acknowledged quickly, and
+    delivery is slow by design — so the payment is recorded inside the
+    request (which is what makes the retry harmless) and the goods go out
+    from a background task.
+    """
+    if await payment_service.apply_result(db, payment, result, deliver=False):
+        payment_service.deliver_later(payment.id)
 
 
 @router.post("/webhook/pay/{provider_slug}")
