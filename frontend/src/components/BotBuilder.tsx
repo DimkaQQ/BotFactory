@@ -21,7 +21,9 @@ import { PublishButton } from "./PublishButton";
 const AUTOSAVE_DEBOUNCE_MS = 500;
 
 type LoadState = "loading" | "ready" | "error";
-type SaveStatus = "idle" | "saving" | "saved";
+// "failed" exists so the indicator can say a save did not happen —
+// showing "Сохранено" for a request that errored is how work gets lost.
+type SaveStatus = "idle" | "saving" | "saved" | "failed";
 
 interface Props {
   botId: string;
@@ -58,8 +60,44 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   }, []);
   const markSettled = useCallback((key: string) => {
     pendingSaves.current.delete(key);
-    if (pendingSaves.current.size === 0) setSaveStatus("saved");
+    failedSaves.current.delete(key);
+    if (pendingSaves.current.size === 0) {
+      setSaveStatus(failedSaves.current.size > 0 ? "failed" : "saved");
+    }
   }, []);
+
+  // A save that did not happen must never show as "Сохранено". The whole
+  // point of an autosave indicator is that the user trusts it and closes the
+  // tab; an expired session or a restarted API would otherwise quietly eat
+  // everything typed since.
+  const failedSaves = useRef<Set<string>>(new Set());
+  const markFailed = useCallback((key: string) => {
+    failedSaves.current.add(key);
+    pendingSaves.current.delete(key);
+    if (pendingSaves.current.size === 0) setSaveStatus("failed");
+  }, []);
+
+  const retryFailedSaves = useCallback(async () => {
+    if (!bot) return;
+    setSaveStatus("saving");
+    try {
+      // Re-send the whole bot as it stands locally: what failed is whatever
+      // the server has not got, and the client's copy is the truth here.
+      await Promise.all(
+        bot.blocks.map((block) =>
+          builderApi.updateBlock(bot.id, block.id, {
+            content: block.content,
+            next_block_id: block.next_block_id,
+          }),
+        ),
+      );
+      if (bot.name) await builderApi.renameBot(bot.id, bot.name);
+      failedSaves.current.clear();
+      setSaveStatus("saved");
+    } catch {
+      setSaveStatus("failed");
+    }
+  }, [bot]);
 
   useEffect(() => {
     setLoadState("loading");
@@ -105,14 +143,13 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       saveTimers.current[blockId] = setTimeout(async () => {
         try {
           await builderApi.updateBlock(bot.id, blockId, { content });
-        } catch {
-          // best-effort autosave; a subsequent edit will retry
-        } finally {
           markSettled(blockId);
+        } catch {
+          markFailed(blockId);
         }
       }, AUTOSAVE_DEBOUNCE_MS);
     },
-    [bot, markPending, markSettled],
+    [bot, markPending, markSettled, markFailed],
   );
 
   const handleDelete = useCallback(
@@ -203,12 +240,10 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       markPending(`${blockId}:next`);
       builderApi
         .updateBlock(bot.id, blockId, { next_block_id: nextBlockId })
-        .catch(() => {
-          /* optimistic update already applied; ignore transient failures */
-        })
-        .finally(() => markSettled(`${blockId}:next`));
+        .then(() => markSettled(`${blockId}:next`))
+        .catch(() => markFailed(`${blockId}:next`));
     },
-    [bot, markPending, markSettled],
+    [bot, markPending, markSettled, markFailed],
   );
 
   const handleSetStart = useCallback(
@@ -218,12 +253,10 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       markPending("start");
       builderApi
         .setStartBlock(bot.id, blockId)
-        .catch(() => {
-          /* optimistic update already applied; ignore transient failures */
-        })
-        .finally(() => markSettled("start"));
+        .then(() => markSettled("start"))
+        .catch(() => markFailed("start"));
     },
-    [bot, markPending, markSettled],
+    [bot, markPending, markSettled, markFailed],
   );
 
   const handleSetPosition = useCallback(
@@ -249,10 +282,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       nameTimer.current = setTimeout(async () => {
         try {
           await builderApi.renameBot(bot.id, name);
-        } catch {
-          // best-effort; a subsequent edit will retry
-        } finally {
           markSettled("name");
+        } catch {
+          markFailed("name");
         }
       }, AUTOSAVE_DEBOUNCE_MS);
     },
@@ -348,7 +380,12 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               {bot.name && bot.telegram_bot_username ? ` · @${bot.telegram_bot_username}` : ""}
               {!isMiniApp && saveStatus !== "idle" && (
                 <span className={`save-status save-status--${saveStatus}`}>
-                  {saveStatus === "saving" ? " · Сохраняем…" : " · Сохранено"}
+                  {saveStatus === "saving" ? " · Сохраняем…" : saveStatus === "failed" ? "" : " · Сохранено"}
+                  {saveStatus === "failed" && (
+                    <button type="button" className="save-status__retry" onClick={retryFailedSaves}>
+                      · Не сохранено — повторить
+                    </button>
+                  )}
                 </span>
               )}
             </p>

@@ -13,7 +13,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -323,7 +323,29 @@ async def list_orders(
     bot: BotModel = Depends(get_owned_bot),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """What this bot has sold — the owner's own sales log."""
+    """What this bot has sold — the owner's own sales log.
+
+    The totals are computed in the database over *every* order, not over the
+    page of recent ones: summing only the last hundred made a busy shop's
+    reported revenue start silently going down. They are also grouped by
+    currency, because a shop selling for 990 ₽ and 250 ⭐ has not earned
+    "1240" of anything.
+    """
+    totals = await db.execute(
+        select(Payment.currency, func.count(Payment.id), func.sum(Payment.amount_minor))
+        .where(
+            Payment.bot_id == bot_id,
+            Payment.kind == PaymentKind.order,
+            Payment.status == PaymentStatus.paid,
+        )
+        .group_by(Payment.currency)
+        .order_by(func.sum(Payment.amount_minor).desc())
+    )
+    by_currency = [
+        {"currency": currency, "count": count, "total_minor": int(total or 0)}
+        for currency, count, total in totals.all()
+    ]
+
     result = await db.execute(
         select(Payment)
         .where(Payment.bot_id == bot_id, Payment.kind == PaymentKind.order)
@@ -331,7 +353,6 @@ async def list_orders(
         .limit(100)
     )
     orders = result.scalars().all()
-    paid = [o for o in orders if o.status == PaymentStatus.paid]
     return {
         "orders": [
             {
@@ -351,8 +372,11 @@ async def list_orders(
             }
             for o in orders
         ],
-        "paid_count": len(paid),
-        "paid_total_minor": sum(o.amount_minor for o in paid),
+        "totals": by_currency,
+        # Kept for an older frontend; meaningful only for a single-currency
+        # shop, which is why `totals` exists.
+        "paid_count": sum(t["count"] for t in by_currency),
+        "paid_total_minor": by_currency[0]["total_minor"] if len(by_currency) == 1 else 0,
     }
 
 

@@ -201,6 +201,21 @@
   font-size: 13px;
 }
 
+.save-status--failed {
+  color: var(--tg-destructive);
+}
+
+.save-status__retry {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--tg-destructive);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .save-status {
   display: inline-block;
   animation: save-status-in var(--dur-base) var(--ease-out);
@@ -4311,9 +4326,15 @@
 
 .orders__totals {
   display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
+  flex-wrap: wrap;
+  gap: var(--sp-4);
   padding: 2px 0 var(--sp-1);
+}
+
+.orders__total {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .orders__total-value {
@@ -4339,12 +4360,37 @@
 
 .orders__log-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
-  padding: 6px 0;
+  padding: 7px 0;
   border-bottom: 1px solid var(--tg-separator);
   font-size: 12.5px;
+}
+
+.orders__log-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.orders__log-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* An unpaid or failed order is information, not noise — but it should not
+   read as loudly as a sale. */
+.orders__log-row--pending .orders__log-amount,
+.orders__log-row--failed .orders__log-amount,
+.orders__log-row--refunded .orders__log-amount {
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.orders__log-row--refunded .orders__log-title {
+  text-decoration: line-through;
 }
 
 .orders__log-row:last-child {

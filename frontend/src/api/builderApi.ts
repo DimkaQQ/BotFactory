@@ -256,8 +256,7 @@ export const builderApi = {
       body: JSON.stringify({ provider: provider ?? null }),
     }),
   getPayment: (paymentId: string) => request<PaymentInfo>(`/payments/${paymentId}`),
-  listOrders: (botId: string) =>
-    request<{ orders: Order[]; paid_count: number; paid_total_minor: number }>(`/bots/${botId}/orders`),
+  listOrders: (botId: string) => request<OrdersReport>(`/bots/${botId}/orders`),
   confirmOrder: (botId: string, paymentId: string) =>
     request<{ status: string; delivered: boolean }>(`/bots/${botId}/orders/${paymentId}/confirm`, { method: "POST" }),
   rejectOrder: (botId: string, paymentId: string) =>
@@ -322,6 +321,15 @@ export interface PublicationMethod {
   title: string;
   price_minor: number;
   currency: string;
+}
+
+export interface OrdersReport {
+  orders: Order[];
+  /** One row per currency — a shop selling for 990 ₽ and 250 ⭐ has not
+   * earned "1240" of anything, so these are never added together. */
+  totals: { currency: string; count: number; total_minor: number }[];
+  paid_count: number;
+  paid_total_minor: number;
 }
 
 export interface Order {

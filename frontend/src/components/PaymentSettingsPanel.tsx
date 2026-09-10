@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import {
   type Order,
+  type OrdersReport,
   type PaymentProviderInfo,
   type PaymentSettings,
   ApiError,
@@ -14,6 +15,26 @@ interface Props {
   botId: string;
   onClose: () => void;
   onSaved: (settings: PaymentSettings) => void;
+}
+
+const STATUS_LABEL: Record<Order["status"], string> = {
+  paid: "оплачен",
+  // Unpaid orders matter as much as paid ones: "ten people opened checkout
+  // and nobody paid" is the most useful thing a seller can learn.
+  pending: "не оплачен",
+  failed: "не прошёл",
+  refunded: "возврат",
+};
+
+function unit(currency: string): string {
+  return currency === "XTR" ? "⭐" : currency;
+}
+
+function when(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime())
+    ? ""
+    : date.toLocaleString("ru", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 /** Per-bot payment provider setup. The form is rendered from whatever
@@ -31,7 +52,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [sales, setSales] = useState<{ count: number; totalMinor: number } | null>(null);
+  const [totals, setTotals] = useState<OrdersReport["totals"]>([]);
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,16 +65,14 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
           // must not take the settings form down with it.
           builderApi
             .listOrders(botId)
-            .catch(() => ({ orders: [] as Order[], paid_count: 0, paid_total_minor: 0 })),
+            .catch(() => ({ orders: [] as Order[], totals: [], paid_count: 0, paid_total_minor: 0 })),
         ]);
         setProviders(list.providers);
         setSettings(current);
         setSlug(current.provider ?? "");
         setIsTest(current.is_test);
         setOrders(sales.orders);
-        if ("paid_count" in sales) {
-          setSales({ count: sales.paid_count, totalMinor: sales.paid_total_minor });
-        }
+        setTotals(sales.totals ?? []);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Не удалось загрузить настройки оплаты");
       }
@@ -76,7 +95,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
       }
       const refreshed = await builderApi.listOrders(botId);
       setOrders(refreshed.orders);
-      setSales({ count: refreshed.paid_count, totalMinor: refreshed.paid_total_minor });
+      setTotals(refreshed.totals ?? []);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось обновить заказ");
     } finally {
@@ -203,29 +222,45 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                 {saving ? "Сохраняем…" : saved ? "✓ Сохранено" : "Сохранить"}
               </button>
 
-              {sales && sales.count > 0 && (
+              {(totals.length > 0 || orders.length > 0) && (
                 <div className="orders orders--summary">
                   <span className="buttons-editor__field-label">Продажи</span>
-                  <div className="orders__totals">
-                    <span className="orders__total-value">{formatAmount(sales.totalMinor)}</span>
-                    <span className="orders__total-label">
-                      за {sales.count} {sales.count === 1 ? "оплаченный заказ" : "оплаченных заказов"}
-                    </span>
-                  </div>
+
+                  {totals.length === 0 ? (
+                    <p className="orders__lead">
+                      Оплаченных заказов пока нет. Здесь появятся все продажи этого бота.
+                    </p>
+                  ) : (
+                    <div className="orders__totals">
+                      {totals.map((total) => (
+                        <span className="orders__total" key={total.currency}>
+                          <span className="orders__total-value">
+                            {formatAmount(total.total_minor)} {unit(total.currency)}
+                          </span>
+                          <span className="orders__total-label">
+                            {total.count} {total.count === 1 ? "заказ" : "заказов"}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   <ul className="orders__log">
-                    {orders
-                      .filter((o) => o.status === "paid")
-                      .slice(0, 8)
-                      .map((order) => (
-                        <li className="orders__log-row" key={order.id}>
+                    {orders.slice(0, 12).map((order) => (
+                      <li className={`orders__log-row orders__log-row--${order.status}`} key={order.id}>
+                        <span className="orders__log-main">
                           <span className="orders__log-title">
                             №{order.invoice_no} · {order.description}
                           </span>
-                          <span className="orders__log-amount">
-                            {formatAmount(order.amount_minor)} {order.currency === "XTR" ? "⭐" : order.currency}
+                          <span className="orders__log-meta">
+                            {STATUS_LABEL[order.status]} · {when(order.paid_at ?? order.created_at)}
                           </span>
-                        </li>
-                      ))}
+                        </span>
+                        <span className="orders__log-amount">
+                          {formatAmount(order.amount_minor)} {unit(order.currency)}
+                        </span>
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}

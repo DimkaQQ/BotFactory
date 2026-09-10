@@ -267,3 +267,32 @@ async def test_the_provider_catalogue_lists_every_provider(api, auth, owner):
     response = await api.get("/api/payments/providers", headers=auth(owner))
 
     assert {p["slug"] for p in response.json()["providers"]} == set(PROVIDERS)
+
+
+async def test_sales_totals_cover_every_order_and_keep_currencies_apart(api, auth, owner, make_bot, db):
+    """Summing only the page of recent orders made a busy shop's revenue
+    start silently going down; adding roubles to stars made it meaningless."""
+    from app.models.payment import Payment, PaymentKind, PaymentStatus
+
+    bot, _ = await make_bot(owner, [(BlockType.welcome, {"text": "Hi"})])
+    for amount, currency, status in [
+        (99000, "RUB", PaymentStatus.paid),
+        (49000, "RUB", PaymentStatus.paid),
+        (25000, "XTR", PaymentStatus.paid),
+        (99000, "RUB", PaymentStatus.pending),
+    ]:
+        db.add(
+            Payment(
+                kind=PaymentKind.order, status=status, provider="test", amount_minor=amount,
+                currency=currency, description="Товар", bot_id=bot.id, meta={},
+            )
+        )
+    await db.commit()
+
+    report = (await api.get(f"/api/bots/{bot.id}/orders", headers=auth(owner))).json()
+
+    totals = {t["currency"]: t for t in report["totals"]}
+    assert totals["RUB"]["total_minor"] == 148000 and totals["RUB"]["count"] == 2
+    assert totals["XTR"]["total_minor"] == 25000 and totals["XTR"]["count"] == 1
+    # The unpaid one is listed but not counted as revenue.
+    assert len(report["orders"]) == 4
