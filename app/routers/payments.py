@@ -105,6 +105,12 @@ async def payment_callback(provider_slug: str, request: Request, db: AsyncSessio
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown payment")
 
     credentials, _is_test = await payment_service.credentials_for(db, payment)
+    # Half the adapters answer a callback by calling the provider's own API,
+    # which can take tens of seconds. Let go of the pooled connection first —
+    # a retry storm from one slow provider would otherwise take the whole
+    # process down with it. Safe to commit rather than roll back:
+    # `expire_on_commit=False` keeps `payment` usable afterwards.
+    await db.commit()
     try:
         result = await provider.verify_webhook(
             headers=headers,
@@ -203,7 +209,7 @@ async def test_payment_page(payment_id: uuid.UUID, db: AsyncSession = Depends(ge
             <div style="font-size:44px">✅</div>
             <h1 style="font-size:20px;margin:12px 0 6px">Тестовая оплата прошла</h1>
             <p style="color:#83829a;font-size:14px;margin:0">
-              {payment.description} — {amount} {payment.currency}.<br>Возвращайся в Telegram, бот уже всё прислал.
+              {escape(payment.description or '')} — {amount} {escape(payment.currency)}.<br>Возвращайся в Telegram, бот уже всё прислал.
             </p>
           </div>
         </body></html>"""

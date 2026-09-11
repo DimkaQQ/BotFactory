@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from app.models.bot_block import BlockType
 from app.models.payment import Payment, PaymentStatus
-from app.services import background, bot_dispatcher
+from app.services import background, bot_dispatcher, payment_service
 
 CHAT_ID = 9090
 
@@ -341,3 +341,178 @@ def test_the_uzbek_gateways_charge_in_sum_and_the_kazakh_one_in_tenge():
     assert get_provider("payme").currencies == ("UZS",)
     assert get_provider("freedompay").currencies[0] == "KZT"
     assert "UZS" in get_provider("freedompay").currencies
+
+
+# ----------------------------------------------------- the callback route itself
+
+LAVA_CREDS = {"api_key": "lava_api_key", "buyer_email": "shop@example.com"}
+LAVA_OFFER = "11111111-2222-3333-4444-555555555555"
+LAVA_CONTRACT = "cnt-998877"
+
+
+def lava_gateway(status: str = "COMPLETED"):
+    """Invoice creation, then the read-back every verdict goes through."""
+
+    def handler(request):
+        import httpx
+
+        if request.method == "POST":
+            return httpx.Response(
+                200,
+                json={
+                    "id": LAVA_CONTRACT,
+                    "paymentUrl": "https://app.lava.top/pay/cnt-998877",
+                    "amountTotal": {"amount": 990, "currency": "RUB"},
+                },
+            )
+        return httpx.Response(200, json={"status": status, "receipt": {"amount": 990}})
+
+    return handler
+
+
+async def lava_shop(api, db, owner, make_bot, as_bot, mock_http):
+    bot, _ = await make_bot(
+        owner,
+        [
+            (
+                BlockType.payment,
+                {
+                    "text": "Гайд",
+                    "title": "Гайд",
+                    "price": "990",
+                    "currency": "RUB",
+                    "offer_id": LAVA_OFFER,
+                },
+            ),
+            (BlockType.delivery, {"text": "ВОТ ТОВАР"}),
+        ],
+        provider="lavatop",
+        is_test=False,
+        credentials=LAVA_CREDS,
+    )
+    with mock_http(lava_gateway()):
+        payment = await order(db, bot, as_bot)
+    return bot, payment
+
+
+async def test_a_stranger_cannot_refund_someone_elses_lava_payment(
+    api, db, owner, make_bot, as_bot, mock_http
+):
+    """The callback route is a public URL and the payment id travels in a
+    UTM tag and in a button's callback_data, so it is not a secret. A refund
+    used to be believed from the request body alone — and a refunded payment
+    can never be settled again, so this stranded the buyer permanently."""
+    _bot, payment = await lava_shop(api, db, owner, make_bot, as_bot, mock_http)
+    await payment_service.mark_paid(db, payment, LAVA_CONTRACT)
+    await db.refresh(payment)
+    assert payment.status == PaymentStatus.paid
+
+    forged = {
+        "eventType": "payment.refund.success",
+        "clientUtm": {"utm_content": str(payment.id)},
+        "contractId": LAVA_CONTRACT,
+    }
+    # The gateway still says the money is there; only the forged body claims
+    # otherwise, and the body is not what decides.
+    with mock_http(lava_gateway(status="COMPLETED")):
+        response = await api.post("/webhook/pay/lavatop", json=forged)
+
+    await db.refresh(payment)
+    assert payment.status == PaymentStatus.paid, "подделанный возврат не должен ничего менять"
+    assert response.status_code in (200, 400)
+
+
+async def test_a_real_refund_is_taken_from_lavas_own_answer(api, db, owner, make_bot, as_bot, mock_http):
+    """The other half: a refund the gateway itself confirms must land."""
+    _bot, payment = await lava_shop(api, db, owner, make_bot, as_bot, mock_http)
+    await payment_service.mark_paid(db, payment, LAVA_CONTRACT)
+
+    with mock_http(lava_gateway(status="REFUNDED")):
+        await api.post(
+            "/webhook/pay/lavatop",
+            json={"eventType": "payment.success", "clientUtm": {"utm_content": str(payment.id)}},
+        )
+
+    await db.refresh(payment)
+    assert payment.status == PaymentStatus.refunded
+
+
+async def test_the_ioka_callback_route_settles_only_what_the_api_confirms(
+    api, db, owner, make_bot, as_bot, mock_http
+):
+    """ioka's signature is not one we can verify, so the route has to be
+    safe without it — which is only true if the re-read is what decides."""
+    import httpx
+
+    bot, _ = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд", "title": "Гайд", "price": "990", "currency": "KZT"}),
+            (BlockType.delivery, {"text": "ВОТ ТОВАР"}),
+        ],
+        provider="ioka",
+        is_test=False,
+        credentials={"api_key": "shp_key"},
+    )
+
+    def gateway(status: str):
+        def handler(request: "httpx.Request") -> "httpx.Response":
+            body = {
+                "id": "ord_1",
+                "status": status,
+                "amount": 99000,
+                "currency": "KZT",
+                "checkout_url": "https://checkout.ioka.kz/ord_1",
+            }
+            return httpx.Response(201 if request.method == "POST" else 200, json={"order": body})
+
+        return handler
+
+    with mock_http(gateway("UNPAID")):
+        payment = await order(db, bot, as_bot)
+    as_bot.reset_mock()
+
+    forged = {"event": "PAYMENT_CAPTURED", "order": {"external_id": str(payment.id), "status": "PAID"}}
+
+    with mock_http(gateway("UNPAID")):
+        await api.post("/webhook/pay/ioka", json=forged, headers={"x-signature": "0" * 64})
+    await background.wait_for_all()
+    await db.refresh(payment)
+    assert payment.status == PaymentStatus.pending, "подпись не проверяется — решать должен API"
+    assert "ВОТ ТОВАР" not in as_bot.sent()
+
+    with mock_http(gateway("PAID")):
+        await api.post("/webhook/pay/ioka", json=forged, headers={"x-signature": "0" * 64})
+    await background.wait_for_all()
+    await db.refresh(payment)
+    assert payment.status == PaymentStatus.paid
+    assert "ВОТ ТОВАР" in as_bot.sent()
+
+
+async def test_the_test_payment_page_escapes_the_product_name(api, db, owner, make_bot, as_bot):
+    """The page is served from the app's own origin, where the web session
+    token lives in localStorage — and the product name is shop-supplied."""
+    bot, _ = await make_bot(
+        owner,
+        [
+            (
+                BlockType.payment,
+                {
+                    "text": "Гайд",
+                    "title": '<img src=x onerror="alert(1)">',
+                    "price": "990",
+                    "currency": "RUB",
+                },
+            ),
+            (BlockType.delivery, {"text": "ВОТ ТОВАР"}),
+        ],
+        provider="test",
+        is_test=True,
+    )
+    payment = await order(db, bot, as_bot)
+
+    page = await api.get(f"/webhook/pay/test/{payment.id}")
+
+    assert page.status_code == 200
+    assert "<img src=x" not in page.text
+    assert "&lt;img src=x" in page.text

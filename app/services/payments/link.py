@@ -41,6 +41,7 @@ class LinkProvider(ProviderDefaults):
     currencies = ("RUB", "KZT", "USD", "EUR", "UAH", "BYN")
     credential_fields = ()
     uses_callback = False
+    has_test_mode = False
     block_fields = (
         CredentialField(
             "link_url",

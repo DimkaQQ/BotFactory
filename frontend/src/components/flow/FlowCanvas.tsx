@@ -93,6 +93,9 @@ function Inner({
   disabled,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Shown when an action that already changed the canvas failed on the
+  // server — otherwise the canvas quietly disagrees with the database.
+  const [notice, setNotice] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   useEscape(() => setSheetOpen(false), sheetOpen);
 
@@ -269,7 +272,15 @@ function Inner({
     // grid, not a real layout algorithm; the user drags from there.
     const count = bot.blocks.length;
     const position = { x: 360 + (count % 3) * 260, y: 40 + Math.floor(count / 3) * 220 };
-    const newId = await onAdd(type, position);
+    let newId: string;
+    try {
+      newId = await onAdd(type, position);
+    } catch {
+      // The sheet has already closed, so a swallowed failure looked exactly
+      // like the click doing nothing at all.
+      setNotice("Не удалось добавить блок. Проверь соединение и попробуй ещё раз.");
+      return;
+    }
     setEditingId(newId);
     // Bring it into view: the cascade puts new nodes to the right of the
     // graph, which on a phone (and on a panned canvas) is off-screen — so
@@ -281,6 +292,14 @@ function Inner({
 
   return (
     <>
+      {notice && (
+        <div className="flow-notice" role="alert">
+          <span>{notice}</span>
+          <button type="button" aria-label="Закрыть" onClick={() => setNotice(null)}>
+            ✕
+          </button>
+        </div>
+      )}
       {!disabled && (
         <aside className="block-library" aria-label="Библиотека блоков">
           <p className="block-library__title">Добавить блок</p>

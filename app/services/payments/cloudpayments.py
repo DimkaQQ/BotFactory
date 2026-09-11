@@ -44,6 +44,7 @@ _URL_KEYS = ("Url", "PaymentUrl", "PayUrl", "url")
 #: "Authorized" is a hold on a two-stage scheme, not money taken — the goods
 #: only go out on "Completed".
 _PAID = {"completed"}
+_REFUNDED = {"refunded", "partiallyrefunded"}
 _FAILED = {"declined", "cancelled"}
 
 
@@ -187,6 +188,8 @@ class CloudPaymentsProvider(ProviderDefaults):
                 raise ProviderError(f"CloudPayments: сумма не совпадает (пришло {amount})")
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
 
+        if status in _REFUNDED:
+            return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=remote_id)
         if status in _FAILED:
             return WebhookResult(status=PaymentStatus.failed, provider_payment_id=remote_id)
         return WebhookResult(status=PaymentStatus.pending, provider_payment_id=remote_id)

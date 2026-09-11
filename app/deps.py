@@ -24,7 +24,14 @@ async def _client_from_init_data(init_data: str, db: AsyncSession) -> Client:
     except InvalidInitData as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
-    telegram_user_id = user["id"]
+    # Signed initData is proof of who Telegram says this is, not proof that
+    # the payload has the shape we expect — a missing id is a bad request to
+    # refuse, not a 500.
+    telegram_user_id = user.get("id") if isinstance(user, dict) else None
+    if telegram_user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="В данных Telegram нет идентификатора пользователя"
+        )
     full_name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")])) or None
 
     result = await db.execute(select(Client).where(Client.telegram_user_id == telegram_user_id))

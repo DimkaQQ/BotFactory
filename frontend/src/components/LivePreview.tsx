@@ -21,8 +21,15 @@ function typingDelayMs(text: string): number {
   return Math.max(MIN_DELAY_MS, Math.min(seconds * 1000, MAX_DELAY_MS));
 }
 
+/** The same rule the dispatcher applies, and for the same reason: a button
+ * that opens a URL sends Telegram nothing when it is tapped, so the real bot
+ * cannot branch on it and walks straight past. A preview that stopped there
+ * would offer a path the live bot can never take. */
 function hasBranches(block: BotBlock): boolean {
-  return block.block_type === "buttons" && (block.content.buttons ?? []).some((b) => (b.target_block_id || "").trim());
+  if (block.block_type !== "buttons") return false;
+  return (block.content.buttons ?? []).some(
+    (b) => (b.target_block_id || "").trim() && b.action_type !== "url",
+  );
 }
 
 /** Walks the same graph the real bot walks (start_block_id → next_block_id,

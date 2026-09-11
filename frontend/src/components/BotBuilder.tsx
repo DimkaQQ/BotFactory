@@ -61,7 +61,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     const observer = new ResizeObserver(apply);
     observer.observe(footer);
     return () => observer.disconnect();
-  });
+    // Both refs are stable, and the observer re-measures on its own — without
+    // this the observer was rebuilt on every render, i.e. on every keystroke.
+  }, []);
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const nameTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -186,6 +188,10 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       const affected = bot.blocks.filter(
         (b) => b.block_type === "buttons" && (b.content.buttons ?? []).some((btn) => btn.target_block_id === blockId),
       );
+      // Kept so a failed delete can be undone on the canvas instead of the
+      // block reappearing out of nowhere on the next reload.
+      const before = bot.blocks;
+      const startBefore = bot.start_block_id;
 
       setBot((prev) =>
         prev
@@ -225,10 +231,16 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           ),
         );
       } catch {
-        // block stays removed locally; a reload will resync if this failed
+        // The block is already gone from the canvas, so failing quietly here
+        // meant it silently came back on the next reload. Put it back now and
+        // say so, rather than letting the canvas and the database disagree.
+        setBot((current) =>
+          current ? { ...current, blocks: before, start_block_id: startBefore } : current,
+        );
+        markFailed(blockId);
       }
     },
-    [bot],
+    [bot, markFailed],
   );
 
   const handleAdd = useCallback(

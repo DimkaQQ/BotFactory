@@ -249,25 +249,44 @@ async def _create(
         meta={},
     )
     db.add(payment)
-    # Flushed, not committed: invoice_no is database-generated and the
-    # checkout link can't be signed without it.
-    await db.flush()
+    # Committed before the provider is called, not after. `invoice_no` is
+    # database-generated and the checkout link can't be signed without it, so
+    # the row has to exist first either way — but holding the transaction
+    # open across an outbound HTTP call with a 30-second timeout means one
+    # pooled connection per checkout in flight, and the pool is fifteen.
+    # Fifteen people opening checkout at once would stall every other request
+    # in the process, the constructor's own API included. This is the same
+    # trap `_pause` in the dispatcher was written to avoid.
+    #
+    # Committing first also closes a worse hole: the provider can no longer
+    # mint an invoice for an order that was never written down.
+    await db.commit()
 
-    checkout = await provider.create_checkout(
-        CheckoutRequest(
-            payment_id=payment.id,
-            invoice_no=payment.invoice_no,
-            amount_minor=amount_minor,
-            currency=currency.upper(),
-            description=description,
-            return_url=return_url,
-            is_test=is_test,
-            credentials=credentials,
-            extra=extra or {},
-            bot_token=bot_token,
-            telegram_user_id=telegram_user_id,
+    try:
+        checkout = await provider.create_checkout(
+            CheckoutRequest(
+                payment_id=payment.id,
+                invoice_no=payment.invoice_no,
+                amount_minor=amount_minor,
+                currency=currency.upper(),
+                description=description,
+                return_url=return_url,
+                is_test=is_test,
+                credentials=credentials,
+                extra=extra or {},
+                bot_token=bot_token,
+                telegram_user_id=telegram_user_id,
+            )
         )
-    )
+    except Exception:
+        # No checkout means no way for anyone to pay this row, and
+        # `_open_payment` skips anything without a `checkout_url` — but an
+        # inert stub would still show up in the owner's order list as a sale
+        # that never happened. Take it back out.
+        await db.delete(payment)
+        await db.commit()
+        raise
+
     # Several providers mint their own id at creation and then use only
     # that in the callback, so it is stored now, not when the money lands.
     payment.provider_payment_id = checkout.provider_payment_id
@@ -547,6 +566,29 @@ async def redeliver_undelivered(limit: int = 100) -> None:
                 await resume_after_payment(db, fresh)
 
 
+async def redeliver_forever(every_seconds: float = 600.0) -> None:
+    """Keep sweeping for paid-but-undelivered orders while the process runs.
+
+    One pass at startup only covered a restart. It left the other way of
+    losing a sale wide open: `resume_after_payment` swallows a failed send —
+    a Telegram 5xx, a rate limit, a network blip — without stamping
+    `delivered_at`, so the buyer's goods sat there until the next deploy.
+    Now the same sweep that fixes a restart also retries a bad minute.
+    """
+    import asyncio
+
+    while True:
+        await asyncio.sleep(every_seconds)
+        try:
+            await redeliver_undelivered()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # A sweep that dies takes every later sweep with it, which is the
+            # failure this loop exists to prevent.
+            logger.exception("Redelivery sweep failed; will try again")
+
+
 async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: bool = True) -> bool:
     """Turn a provider's verdict into what actually happens to the order.
 
@@ -645,6 +687,10 @@ async def check_and_settle(db: AsyncSession, payment: Payment) -> PaymentStatus:
         return payment.status
 
     credentials, _is_test = await credentials_for(db, payment)
+    # Same reason as the callback route: the read below is an outbound HTTP
+    # call, and a buyer tapping «Я оплатил» must not hold a pooled connection
+    # for its duration.
+    await db.commit()
     result = await provider.check_status(
         credentials=credentials,
         amount_minor=payment.amount_minor,

@@ -39,6 +39,7 @@ from app.services.payments.base import (
 _BASE = "https://gate.lava.top"
 _PAID = {"COMPLETED", "SUBSCRIPTION_ACTIVE"}
 _FAILED = {"FAILED", "CANCELLED"}
+_REFUNDED = {"REFUNDED", "PARTIALLY_REFUNDED", "REVERSED", "CHARGEBACK"}
 
 
 class LavaTopProvider(ProviderDefaults):
@@ -151,9 +152,12 @@ class LavaTopProvider(ProviderDefaults):
         except json.JSONDecodeError:
             event = {}
 
-        if (event.get("eventType") or "").startswith("refund"):
-            return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=provider_payment_id)
-
+        # A refund used to be believed straight from `eventType`, before any
+        # check at all — so an anonymous POST naming a payment id could mark
+        # someone's sale refunded, and that is a one-way door: a refunded
+        # payment is refused by `mark_paid` and skipped by «Я оплатил», so
+        # the buyer pays at Lava and can never be delivered to. Refunds now
+        # go through the same re-read as everything else.
         contract = str(event.get("contractId") or "") or provider_payment_id
         if not contract:
             raise ProviderError("lava.top: в уведомлении нет contractId")
@@ -193,6 +197,8 @@ class LavaTopProvider(ProviderDefaults):
             if paid is not None and abs(float(paid) - amount_minor / 100) > 0.009:
                 raise ProviderError(f"lava.top: сумма не совпадает (оплачено {paid})")
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(contract_id))
+        if status in _REFUNDED:
+            return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=str(contract_id))
         if status in _FAILED:
             return WebhookResult(status=PaymentStatus.failed, provider_payment_id=str(contract_id))
         return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(contract_id))

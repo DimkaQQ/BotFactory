@@ -65,6 +65,7 @@ class TelegramStarsProvider(ProviderDefaults):
     currencies = ("XTR",)
     credential_fields = ()
     uses_callback = False
+    has_test_mode = False
 
     async def create_checkout(self, request: CheckoutRequest) -> Checkout:
         if not request.bot_token:

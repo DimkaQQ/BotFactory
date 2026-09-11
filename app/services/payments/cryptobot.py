@@ -116,7 +116,14 @@ class CryptoBotProvider(ProviderDefaults):
         return Checkout(
             url=url,
             provider_payment_id=str(invoice_id) if invoice_id is not None else None,
-            meta={"asset": invoice.get("asset"), "crypto_amount": invoice.get("amount")},
+            meta={
+                "asset": invoice.get("asset"),
+                "crypto_amount": invoice.get("amount"),
+                # Mainnet and testnet are separate ledgers that know
+                # nothing of each other; asking the wrong one first cost a
+                # failing round trip on every single callback.
+                "is_test": request.is_test,
+            },
         )
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
@@ -176,7 +183,9 @@ class CryptoBotProvider(ProviderDefaults):
 
         # The signature says the message is theirs; the API says what it is
         # worth. Only the second one releases the goods.
-        return await self._read(credentials, str(remote_id), amount_minor, is_test=False)
+        return await self._read(
+            credentials, str(remote_id), amount_minor, is_test=bool((meta or {}).get("is_test"))
+        )
 
     async def check_status(
         self,
@@ -190,7 +199,9 @@ class CryptoBotProvider(ProviderDefaults):
     ) -> WebhookResult:
         if not provider_payment_id:
             raise ProviderError("Crypto Bot: счёт ещё не создан")
-        return await self._read(credentials, provider_payment_id, amount_minor, is_test=False)
+        return await self._read(
+            credentials, provider_payment_id, amount_minor, is_test=bool(meta.get("is_test"))
+        )
 
     async def _read(
         self, credentials: dict[str, str], invoice_id: str, amount_minor: int, *, is_test: bool
@@ -198,9 +209,11 @@ class CryptoBotProvider(ProviderDefaults):
         result = await self._call("getInvoices", credentials, is_test, invoice_ids=invoice_id, count=1)
         items = result.get("items") if isinstance(result, dict) else result
         if not items:
-            # Also try the testnet: a shop in test mode created the invoice
-            # there, and the two ledgers do not know about each other.
-            result = await self._call("getInvoices", credentials, True, invoice_ids=invoice_id, count=1)
+            # Older payments were stored before the ledger was recorded, so
+            # fall back to the other one rather than losing them.
+            result = await self._call(
+                "getInvoices", credentials, not is_test, invoice_ids=invoice_id, count=1
+            )
             items = result.get("items") if isinstance(result, dict) else result
         if not items:
             raise ProviderError(f"Crypto Bot: счёт {invoice_id} не найден")

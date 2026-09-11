@@ -5,5 +5,12 @@
 # route /builder (Mini App), /api/* and /webhook/* to the right place.
 {$DOMAIN} {
     encode gzip
+    # Mirrors what nginx sets inside the container, so the headers are
+    # present whichever entry point a deployment uses.
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
     reverse_proxy frontend:80
 }

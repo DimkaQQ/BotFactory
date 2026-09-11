@@ -9,6 +9,7 @@ nothing anywhere retries. These pin the recovery.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -125,18 +126,43 @@ async def test_redelivery_finds_an_old_order_behind_newer_delivered_ones(db, own
     order sitting behind a page of delivered ones was never found at all.
     """
     bot, _ = await sold_bot(make_bot, owner)
-    payment = await order(db, bot, as_bot)
-    await payment_service.mark_paid(db, payment, "x")
+    stranded = await order(db, bot, as_bot)
+    await payment_service.mark_paid(db, stranded, "x")
     await db.execute(
         Payment.__table__.update()
-        .where(Payment.id == payment.id)
-        .values(paid_at=payment.paid_at.replace(year=payment.paid_at.year - 1))
+        .where(Payment.id == stranded.id)
+        .values(paid_at=stranded.paid_at.replace(year=stranded.paid_at.year - 1))
     )
+    await db.commit()
+
+    # The decoys this test needs, built here rather than borrowed from
+    # whatever the database happens to hold: three *newer, delivered* orders
+    # that a "LIMIT then filter in Python" query would fill its page with,
+    # leaving the stranded one unseen. Without them the test passed either
+    # way and proved nothing.
+    for index in range(3):
+        decoy = Payment(
+            kind=stranded.kind,
+            status=PaymentStatus.paid,
+            provider="test",
+            amount_minor=stranded.amount_minor,
+            currency=stranded.currency,
+            description=f"уже выдан {index}",
+            bot_id=bot.id,
+            block_id=stranded.block_id,
+            chat_id=CHAT_ID + 100 + index,
+            # Older than the one-minute "might still be in flight" cutoff,
+            # so they really are candidates, but far newer than the
+            # stranded order — which is the whole point.
+            paid_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+            meta={"delivered_at": datetime.now(timezone.utc).isoformat()},
+        )
+        db.add(decoy)
     await db.commit()
     as_bot.reset_mock()
 
-    # A limit of one, with newer *delivered* orders that would otherwise fill
-    # the page — only the SQL-side filter can see past them.
+    # A limit of one, with three newer *delivered* orders ahead of it — only
+    # the SQL-side filter can see past them.
     await payment_service.redeliver_undelivered(limit=1)
 
     assert "ВОТ ТОВАР" in as_bot.sent()

@@ -232,7 +232,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                     );
                   })}
 
-                  {active.uses_callback && (
+                  {active.has_test_mode && (
                     <label className="payment-settings__test">
                       <input type="checkbox" checked={isTest} onChange={(e) => setIsTest(e.target.checked)} />
                       <span>

@@ -20,6 +20,7 @@ class TestProvider(ProviderDefaults):
     currencies = ("RUB", "KZT", "USD", "EUR")
     credential_fields = ()
     uses_callback = False
+    has_test_mode = False
 
     async def create_checkout(self, request: CheckoutRequest) -> Checkout:
         if not request.is_test:

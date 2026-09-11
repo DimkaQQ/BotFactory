@@ -261,12 +261,30 @@ async def test_an_update_for_an_unknown_bot_is_shrugged_off(api):
 # ------------------------------------------------------------------- catalog
 
 
-async def test_the_provider_catalogue_lists_every_provider(api, auth, owner):
-    from app.services.payments import PROVIDERS
-
+async def test_the_provider_catalogue_is_enough_to_render_the_settings_form(api, auth, owner):
+    """The catalogue is the entire contract with the frontend — the settings
+    form has no provider-specific code of its own. Comparing it back to
+    `PROVIDERS` proved nothing; what matters is that every entry carries what
+    the form needs, and that no secret comes along for the ride."""
     response = await api.get("/api/payments/providers", headers=auth(owner))
+    catalogue = response.json()["providers"]
 
-    assert {p["slug"] for p in response.json()["providers"]} == set(PROVIDERS)
+    assert len(catalogue) >= 15
+    for entry in catalogue:
+        assert entry["slug"] and entry["title"] and entry["hint"]
+        assert entry["currencies"], f"{entry['slug']} без валют — селектор будет пустым"
+        for flag in ("supports_status_check", "uses_callback", "has_test_mode"):
+            assert isinstance(entry[flag], bool), f"{entry['slug']}: {flag} должен быть булевым"
+        for field in entry["fields"] + entry["block_fields"]:
+            # A value here would be a stored secret on its way to a browser.
+            assert set(field) == {"key", "label", "hint", "secret"}
+
+    by_slug = {entry["slug"]: entry for entry in catalogue}
+    # Two spot checks that would break if the flags were wired to each other
+    # again: one provider with no callback that still has a test gateway, and
+    # one that has neither.
+    assert by_slug["processingkz"] == {**by_slug["processingkz"], "uses_callback": False, "has_test_mode": True}
+    assert by_slug["link"] == {**by_slug["link"], "uses_callback": False, "has_test_mode": False}
 
 
 async def test_sales_totals_cover_every_order_and_keep_currencies_apart(api, auth, owner, make_bot, db):

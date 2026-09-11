@@ -40,6 +40,7 @@ _CHECKOUT = f"{_HOST}/3/checkout/"
 #: What LiqPay calls a payment that went through. "sandbox" is a test-mode
 #: success and only ever appears when we asked for sandbox.
 _PAID = {"success", "sandbox"}
+_REFUNDED = {"reversed"}
 _FAILED = {"failure", "error"}
 
 
@@ -175,6 +176,8 @@ class LiqPayProvider(ProviderDefaults):
                 raise ProviderError(f"LiqPay: сумма не совпадает (пришло {amount})")
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
 
+        if status in _REFUNDED:
+            return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=remote_id)
         if status in _FAILED:
             return WebhookResult(status=PaymentStatus.failed, provider_payment_id=remote_id)
         # Everything else — 3-D Secure in progress, "wait_accept", a hold —

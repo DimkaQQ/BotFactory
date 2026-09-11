@@ -53,7 +53,12 @@ def put(bot_id: uuid.UUID, instance: Bot) -> None:
         # Replacing a cached bot without closing it leaked an aiohttp session
         # on every webhook refresh — and refresh now runs for every live bot
         # at startup.
-        asyncio.get_event_loop().create_task(_close_quietly(previous))
+        # Through `background.spawn`, which keeps a reference: a bare
+        # create_task is only weakly held by the loop and the close could be
+        # collected halfway through.
+        from app.services import background
+
+        background.spawn(_close_quietly(previous), name=f"close-session:{bot_id}")
 
 
 async def _close_quietly(instance: Bot) -> None:

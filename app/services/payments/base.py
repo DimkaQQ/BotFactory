@@ -109,6 +109,8 @@ class PaymentProvider(Protocol):
     block_fields: tuple[CredentialField, ...]
     #: Whether this provider notifies us over `/webhook/pay/{slug}` at all.
     uses_callback: bool
+    #: Whether "тестовый режим" means anything for this provider.
+    has_test_mode: bool
 
     async def create_checkout(self, request: CheckoutRequest) -> Checkout:
         """Create the payment on the provider's side and return where to
@@ -187,6 +189,12 @@ class ProviderDefaults:
     #: provider. Drives whether the settings form shows a callback address to
     #: paste into a merchant dashboard.
     uses_callback = True
+    #: Whether "тестовый режим" means anything here, and so whether the
+    #: settings form offers the switch. Kept separate from `uses_callback`:
+    #: tying the two together left Processing.kz — which has no callback but
+    #: does have its own test gateway — with no way to be switched to the
+    #: live one, since `payment_is_test` defaults to True.
+    has_test_mode = True
     block_fields: tuple[CredentialField, ...] = ()
 
     async def check_status(

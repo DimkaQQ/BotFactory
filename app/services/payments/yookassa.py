@@ -139,6 +139,12 @@ class YooKassaProvider(ProviderDefaults):
 
         payment = response.json()
         status = payment.get("status")
+        # A refund does not change `status` — ЮKassa keeps it "succeeded" and
+        # adds `refunded_amount`. Checked first, or a refunded sale would go
+        # on counting as revenue for good.
+        refunded = (payment.get("refunded_amount") or {}).get("value")
+        if status == "succeeded" and refunded not in (None, "", "0.00"):
+            return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=str(remote_id))
         if status == "succeeded" and payment.get("paid"):
             value = (payment.get("amount") or {}).get("value", "")
             if value and abs(float(value) - amount_minor / 100) > 0.009:

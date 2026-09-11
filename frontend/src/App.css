@@ -2098,6 +2098,36 @@
   font-size: 13px;
 }
 
+/* Shown over the canvas when something that already changed it failed on
+   the server, so the canvas never silently disagrees with the database. */
+.flow-notice {
+  position: absolute;
+  z-index: 12;
+  top: var(--sp-2);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: min(420px, calc(100% - 2 * var(--sp-3)));
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--tg-destructive);
+  color: #fff;
+  font-size: 13px;
+  box-shadow: var(--shadow-md);
+}
+
+.flow-notice button {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .publish-form__actions {
   display: flex;
   gap: var(--sp-2);

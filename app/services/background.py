@@ -32,11 +32,21 @@ _running: set[asyncio.Task] = set()
 _queues: dict[str, asyncio.Task] = {}
 
 
-def spawn(coro: Coroutine, *, name: str, key: str | None = None) -> None:
+# Tasks that never finish on their own — the periodic redelivery sweep is
+# the only one. They are cancelled at shutdown like everything else, but
+# `wait_for_all` must not wait for them: it would block for its whole
+# timeout every time, on every shutdown and in every test.
+_daemons: set[asyncio.Task] = set()
+
+
+def spawn(coro: Coroutine, *, name: str, key: str | None = None, daemon: bool = False) -> None:
     """Run `coro` detached from the current request.
 
     With `key`, it is chained after any work already queued under that key —
     used to keep one chat's updates in order.
+
+    With `daemon`, the task is expected to run until it is cancelled, so
+    `wait_for_all` skips it.
     """
     if key is not None:
         _spawn_chained(coro, name=name, key=key)
@@ -44,9 +54,12 @@ def spawn(coro: Coroutine, *, name: str, key: str | None = None) -> None:
 
     task = asyncio.create_task(coro, name=name)
     _running.add(task)
+    if daemon:
+        _daemons.add(task)
 
     def _finished(finished: asyncio.Task) -> None:
         _running.discard(finished)
+        _daemons.discard(finished)
         if finished.cancelled():
             return
         error = finished.exception()
@@ -100,9 +113,10 @@ def _spawn_chained(coro: Coroutine, *, name: str, key: str) -> None:
 async def wait_for_all(timeout: float = 10.0) -> None:
     """Let in-flight work finish — for shutdown, and for tests that need to
     observe the result of something the request only scheduled."""
-    if not _running:
+    waiting = set(_running) - _daemons
+    if not waiting:
         return
-    await asyncio.wait(set(_running), timeout=timeout)
+    await asyncio.wait(waiting, timeout=timeout)
 
 
 async def cancel_all() -> None:

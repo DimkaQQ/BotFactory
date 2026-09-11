@@ -25,6 +25,7 @@ from app.services.payments.base import (
 
 _BASE = "https://paymaster.ru/api/v2"
 _SETTLED = {"settled"}
+_REFUNDED = {"refunded", "partiallyrefunded", "partially_refunded"}
 _FAILED = {"cancelled", "rejected"}
 
 
@@ -149,6 +150,8 @@ class PayMasterProvider(ProviderDefaults):
             if value is not None and abs(float(value) - amount_minor / 100) > 0.009:
                 raise ProviderError(f"PayMaster: сумма не совпадает (у провайдера {value})")
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(remote_id))
+        if status in _REFUNDED:
+            return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=str(remote_id))
         if status in _FAILED:
             return WebhookResult(status=PaymentStatus.failed, provider_payment_id=str(remote_id))
         return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(remote_id))

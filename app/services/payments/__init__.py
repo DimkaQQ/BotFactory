@@ -104,6 +104,8 @@ def describe_providers() -> list[dict]:
             # or has to ask the shop owner to confirm.
             "supports_status_check": bool(provider.supports_status_check),
             "uses_callback": bool(provider.uses_callback),
+            # Whether to offer the "тестовый режим" switch at all.
+            "has_test_mode": bool(provider.has_test_mode),
         }
         for provider in PROVIDERS.values()
     ]

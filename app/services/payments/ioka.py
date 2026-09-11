@@ -50,6 +50,7 @@ _TEST = "https://stage-api.ioka.kz/v2"
 #: OrderStatusEnum, as the published client types it.
 _PAID = "PAID"
 _FAILED = {"EXPIRED"}
+_REFUNDED = {"REFUNDED", "PARTIALLY_REFUNDED", "REVERSED"}
 #: UNPAID — nobody has paid yet. ON_HOLD — money blocked but not taken; we
 #: ask for AUTO capture so it should never appear, and if it does it is
 #: still not a sale.
@@ -225,6 +226,8 @@ class IokaProvider(ProviderDefaults):
                 raise ProviderError(f"ioka: сумма не совпадает (в заказе {amount})")
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
 
+        if status in _REFUNDED:
+            return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=remote_id)
         if status in _FAILED:
             return WebhookResult(status=PaymentStatus.failed, provider_payment_id=remote_id)
         if status in _PENDING:

@@ -151,6 +151,8 @@ class StripeProvider(ProviderDefaults):
             if charged is not None and int(charged) != expected:
                 raise ProviderError(f"Stripe: сумма не совпадает (оплачено {charged}, ожидалось {expected})")
             status = PaymentStatus.paid
+        elif event_type in {"charge.refunded", "charge.refund.updated", "payment_intent.refunded"}:
+            status = PaymentStatus.refunded
         elif event_type in {"checkout.session.expired", "payment_intent.payment_failed"}:
             status = PaymentStatus.failed
         else:

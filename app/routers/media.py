@@ -37,6 +37,12 @@ _IMAGE_MAGIC: dict[str, bytes] = {
     "image/png": b"\x89PNG\r\n\x1a\n",
     "image/gif": b"GIF8",
 }
+#: WebP is a RIFF container: "RIFF", four bytes of length, then "WEBP". Left
+#: unsniffed, it was the one image type that accepted arbitrary bytes — and
+#: these files are served from the app's own origin.
+_RIFF_MAGIC: dict[str, tuple[bytes, bytes]] = {
+    "image/webp": (b"RIFF", b"WEBP"),
+}
 _ALLOWED: dict[str, tuple[str, str]] = {
     "image/jpeg": (".jpg", "photo"),
     "image/png": (".png", "photo"),
@@ -77,6 +83,10 @@ async def upload_media(
 
     magic = _IMAGE_MAGIC.get(content_type)
     if magic and not data.startswith(magic):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Файл не похож на заявленный формат")
+
+    riff = _RIFF_MAGIC.get(content_type)
+    if riff and not (data.startswith(riff[0]) and data[8:12] == riff[1]):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Файл не похож на заявленный формат")
 
     upload_dir = Path(settings.media_upload_dir)

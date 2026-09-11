@@ -21,6 +21,9 @@ async def lifespan(app: FastAPI):
     # Anything a previous run was paid for but never handed over — the
     # provider was already acknowledged, so nothing else would ever retry.
     background.spawn(payment_service.redeliver_undelivered(), name="redeliver-undelivered")
+    # And keep looking: a delivery can also fail mid-flight (Telegram 5xx, a
+    # rate limit), and until this existed the only retry was the next deploy.
+    background.spawn(payment_service.redeliver_forever(), name="redeliver-forever", daemon=True)
     yield
     # Dialogues and deliveries scheduled off a request are still in flight;
     # give them a moment to finish rather than dropping a buyer's goods

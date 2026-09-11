@@ -279,6 +279,7 @@ export interface PaymentProviderInfo {
   /** Whether this provider posts to our callback URL at all — Stars and
    * pay-by-link don't, so there is no address to paste anywhere. */
   uses_callback: boolean;
+  has_test_mode: boolean;
 }
 
 export interface PaymentField {
