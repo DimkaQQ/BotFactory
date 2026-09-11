@@ -18,8 +18,11 @@
   /* Measured against the painted pixels, #83829a came out at 3.65:1 on
      the off-white ground — under the 4.5:1 floor for text this size, and
      this token carries "Привет, …", "Черновик" and every field hint.
-     #6b6a80 measures 5.0:1 and still reads as secondary. */
-  --tg-hint: var(--tg-theme-hint-color, #6b6a80);
+     It has to clear that floor on *both* light surfaces, not just the
+     page: #6b6a80 measured 5.13:1 on the background but 4.47:1 on the
+     tinted card, which is where "Черновик" and the block count live.
+     #63627a clears both and still reads as secondary. */
+  --tg-hint: var(--tg-theme-hint-color, #63627a);
   --tg-link: var(--tg-theme-link-color, #4338ca);
   --tg-button: var(--tg-theme-button-color, #4338ca);
   --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
@@ -34,6 +37,13 @@
      under AA. 72% clears it without flattening the hierarchy. */
   --text-secondary: color-mix(in srgb, var(--tg-text) 72%, transparent);
   --text-tertiary: var(--tg-hint);
+  /* The brand colour *as text on a surface*, which is a different job
+     from --tg-button. That one is a fill that carries white text, so in
+     dark mode it has to be dark — and every place that borrowed it for
+     an accent label went unreadable there (2.65:1 on the preview button,
+     2.82:1 on the landing badge). This role has to stay legible against
+     the page in both themes, which is exactly what --tg-link already is. */
+  --accent-on-surface: var(--tg-link);
 
   /* 8pt spacing scale */
   --sp-1: 4px;

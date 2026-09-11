@@ -148,13 +148,20 @@
 }
 
 .back-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  /* 27px tall is under every touch-target minimum there is, and this is the
+     way out of the builder — the one control you reach for when something
+     has gone wrong. The padding is asymmetric so the label still sits flush
+     with the header text above it. */
+  min-height: 44px;
+  margin-top: calc(var(--sp-2) * -1);
   border: none;
   background: transparent;
   color: var(--tg-link);
   font-size: 14px;
   font-weight: 500;
-  padding: 0 0 var(--sp-2);
+  padding: 0 var(--sp-2) 0 0;
   cursor: pointer;
 }
 
@@ -1007,7 +1014,7 @@
   border-radius: var(--radius-md);
   border: none;
   background: color-mix(in srgb, var(--tg-button) 12%, transparent);
-  color: var(--tg-button);
+  color: var(--accent-on-surface);
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
@@ -1045,7 +1052,7 @@
   height: 22px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--tg-button) 16%, transparent);
-  color: var(--tg-button);
+  color: var(--accent-on-surface);
   font-size: 16px;
   font-weight: 700;
 }
@@ -2664,8 +2671,8 @@
      white text, so in dark mode it is chosen to be dark — and reusing it as
      a text colour on a dark ground measured 2.82:1. --tg-link is the token
      that already has to be legible as text in both themes. */
-  color: var(--tg-link);
-  border: 1px solid color-mix(in srgb, var(--tg-link) 28%, transparent);
+  color: var(--accent-on-surface);
+  border: 1px solid color-mix(in srgb, var(--accent-on-surface) 28%, transparent);
   border-radius: var(--radius-full);
   padding: 6px 14px;
   font-size: 12.5px;
@@ -2860,7 +2867,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--tg-button);
+  color: var(--accent-on-surface);
 }
 
 .landing-section__title {
@@ -3352,7 +3359,7 @@
 .landing-cta__button {
   border: none;
   background: #fff;
-  color: var(--tg-button);
+  color: var(--accent-on-surface);
   font-weight: 700;
   font-size: 15px;
   padding: 14px 28px;
@@ -4326,7 +4333,7 @@
 .payment-settings__none--active {
   border-style: solid;
   border-color: var(--tg-button);
-  color: var(--tg-button);
+  color: var(--accent-on-surface);
   background: color-mix(in srgb, var(--tg-button) 8%, transparent);
 }
 
@@ -4703,7 +4710,7 @@
   flex: 0 0 auto;
   font-size: 14px;
   font-weight: 700;
-  color: var(--tg-button);
+  color: var(--accent-on-surface);
 }
 
 .paywall__waiting {
