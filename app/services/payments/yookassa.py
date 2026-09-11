@@ -23,6 +23,7 @@ from app.services.payments.base import (
     ProviderError,
     WebhookResult,
     minor_to_major,
+    same_currency,
 )
 
 _BASE = "https://api.yookassa.ru/v3"
@@ -103,6 +104,7 @@ class YooKassaProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         try:
             event = json.loads(raw_body or b"{}")
@@ -111,7 +113,7 @@ class YooKassaProvider(ProviderDefaults):
         remote_id = provider_payment_id or (event.get("object") or {}).get("id")
         if not remote_id:
             raise ProviderError("ЮKassa: не удалось определить платёж")
-        return await self._read(credentials, str(remote_id), amount_minor)
+        return await self._read(credentials, str(remote_id), amount_minor, currency)
 
     async def check_status(
         self,
@@ -122,12 +124,15 @@ class YooKassaProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
         if not provider_payment_id:
             raise ProviderError("ЮKassa: платёж ещё не создан")
-        return await self._read(credentials, provider_payment_id, amount_minor)
+        return await self._read(credentials, provider_payment_id, amount_minor, currency)
 
-    async def _read(self, credentials: dict[str, str], remote_id: str, amount_minor: int) -> WebhookResult:
+    async def _read(
+        self, credentials: dict[str, str], remote_id: str, amount_minor: int, currency: str = ""
+    ) -> WebhookResult:
         """The single source of truth for this provider: what the shop's own
         API says about the payment. Both the callback and the buyer's "Я
         оплатил" tap end up here."""
@@ -149,6 +154,7 @@ class YooKassaProvider(ProviderDefaults):
             value = (payment.get("amount") or {}).get("value", "")
             if value and abs(float(value) - amount_minor / 100) > 0.009:
                 raise ProviderError(f"ЮKassa: сумма не совпадает (в кассе {value})")
+            same_currency(self.title, (payment.get("amount") or {}).get("currency"), currency)
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(remote_id))
 
         if status == "canceled":

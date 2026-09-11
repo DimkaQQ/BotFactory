@@ -32,6 +32,7 @@ from app.services.payments.base import (
     ProviderDefaults,
     ProviderError,
     WebhookResult,
+    same_currency,
 )
 
 _BASE = "https://api.cloudpayments.ru"
@@ -125,6 +126,7 @@ class CloudPaymentsProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         _public_id, secret = self._auth(credentials)
 
@@ -138,7 +140,7 @@ class CloudPaymentsProvider(ProviderDefaults):
         # The header proves who sent it; this proves what it says. Both,
         # because a Pay-notification is fire-and-forget and we would rather
         # ask than assume.
-        result = await self._find(credentials, payment_id, amount_minor)
+        result = await self._find(credentials, payment_id, amount_minor, currency)
         # Anything but {"code":0} is read as "resend this later".
         return WebhookResult(
             status=result.status,
@@ -156,10 +158,13 @@ class CloudPaymentsProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
-        return await self._find(credentials, payment_id, amount_minor)
+        return await self._find(credentials, payment_id, amount_minor, currency)
 
-    async def _find(self, credentials: dict[str, str], payment_id: uuid.UUID, amount_minor: int) -> WebhookResult:
+    async def _find(
+        self, credentials: dict[str, str], payment_id: uuid.UUID, amount_minor: int, currency: str = ""
+    ) -> WebhookResult:
         # Checked here, outside the try: a shop that has not filled in its
         # keys must hear about it, not be told nobody has paid.
         self._auth(credentials)
@@ -186,6 +191,7 @@ class CloudPaymentsProvider(ProviderDefaults):
                 mismatch = True
             if mismatch:
                 raise ProviderError(f"CloudPayments: сумма не совпадает (пришло {amount})")
+            same_currency(self.title, model.get("Currency"), currency)
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
 
         if status in _REFUNDED:

@@ -197,6 +197,7 @@ class ProcessingKzProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         raise ProviderError("Processing.kz не присылает уведомлений — статус запрашиваем сами")
 
@@ -209,6 +210,7 @@ class ProcessingKzProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
         merchant = self._merchant(credentials)
         if not provider_payment_id:

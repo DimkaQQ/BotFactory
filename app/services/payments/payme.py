@@ -167,6 +167,7 @@ class PaymeProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         _merchant, key, _field = self._keys(credentials)
         call = _parse(raw_body)

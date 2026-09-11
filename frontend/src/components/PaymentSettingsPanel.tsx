@@ -25,7 +25,7 @@ const SHORT: Record<string, string> = {
   tbank: "карты РФ и СБП · нужно ИП/ООО",
   cloudpayments: "карты РФ и Казахстана",
   prodamus: "карты РФ · для самозанятых",
-  robokassa: "карты РФ и KZT",
+  robokassa: "карты РФ · счёт в валюте магазина",
   paymaster: "карты РФ",
   lifepay: "СБП и карты РФ · онлайн-касса",
   lavatop: "карты РФ, покупатель платит из-за рубежа",

@@ -136,6 +136,7 @@ class PaymentProvider(Protocol):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         """Check the callback's authenticity and say what it means.
 
@@ -160,6 +161,7 @@ class PaymentProvider(Protocol):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
         """Ask the provider where this payment stands, with no callback
         involved — what the buyer's "Я оплатил" tap runs.
@@ -206,6 +208,7 @@ class ProviderDefaults:
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
         raise ProviderError(f"{getattr(self, 'title', 'Провайдер')}: статус платежа так не проверяется")
 
@@ -222,6 +225,20 @@ class ProviderDefaults:
         """
         return None
 
+
+
+def same_currency(provider_title: str, charged, ordered: str) -> None:
+    """Refuse a payment taken in a currency we did not ask for.
+
+    Every adapter checks the amount; none of them checked the unit. "990"
+    is a very different sale in roubles, tenge and dollars, and the number
+    alone matches all three. Only checked when both sides say — a provider
+    that reports no currency is left alone rather than guessed at.
+    """
+    if not charged or not ordered:
+        return
+    if str(charged).strip().upper() != ordered.strip().upper():
+        raise ProviderError(f"{provider_title}: оплачено в {charged}, а заказ был в {ordered}")
 
 def minor_to_major(amount_minor: int) -> str:
     """990_00 -> "990.00" — the string form providers expect in a signature,

@@ -151,12 +151,23 @@ def currency_for(provider_slug: str, requested: str | None) -> str:
     defaults to one currency, and the `<select>` in the editor happily shows
     the provider's list while leaving the old value in the data. The buyer
     would then be told "250 RUB" and charged 250 ⭐. The provider decides.
+
+    But only where the block never said. Substituting silently in *both*
+    cases meant a shop that had deliberately priced something at 990 ₸ and
+    then switched to a rouble-only provider started charging 990 ₽ — five
+    times the money, with nothing anywhere saying so. An explicit currency
+    the provider cannot charge is now a refusal the owner can read.
     """
     provider = payment_providers.get_provider(provider_slug)
     wanted = (requested or "").strip().upper()
-    if wanted and wanted in provider.currencies:
+    if not wanted:
+        return provider.currencies[0]
+    if wanted in provider.currencies:
         return wanted
-    return provider.currencies[0]
+    raise ProviderError(
+        f"{provider.title} не принимает {wanted}. Поменяй валюту в блоке оплаты "
+        f"(доступно: {', '.join(provider.currencies)}) или выбери другого провайдера."
+    )
 
 
 # How long a checkout link is offered again instead of a new one being made.
@@ -165,15 +176,22 @@ def currency_for(provider_slug: str, requested: str | None) -> str:
 _REUSE_WINDOW = timedelta(minutes=30)
 
 
-def block_fingerprint(content: dict) -> str:
+def block_fingerprint(content: dict, next_block_id=None) -> str:
     """What the buyer would be sent to, boiled down.
 
     An open order is offered again rather than re-created, but only while it
     is still an order for the same thing: if the shop has since edited the
     link a "pay by link" block points at, or swapped the Lava offer, the
     stored checkout URL now leads somewhere else entirely.
+
+    `next_block_id` is in here because the delivery target is pinned onto the
+    payment when it is created. Rewiring the arrow while an order is open
+    used to keep handing over the *old* goods for the rest of the reuse
+    window — the owner changed what they sell and the bot went on selling
+    the previous thing for half an hour.
     """
     watched = {k: content.get(k) for k in ("title", "link_url", "offer_id", "button_label")}
+    watched["deliver_from"] = str(next_block_id) if next_block_id else None
     return json.dumps(watched, ensure_ascii=False, sort_keys=True)
 
 
@@ -320,7 +338,7 @@ async def create_order_payment(
     # three orders. Reusing the open one keeps the shop's order list honest
     # and, for pay-by-link, stops every tap of «Я оплатил» from pinging the
     # owner about a different row.
-    fingerprint = block_fingerprint(content)
+    fingerprint = block_fingerprint(content, block.next_block_id)
     existing = await _open_payment(
         db, bot_id=bot.id, block_id=block.id, chat_id=chat_id, amount_minor=amount_minor,
         currency=currency, fingerprint=fingerprint,
@@ -698,6 +716,7 @@ async def check_and_settle(db: AsyncSession, payment: Payment) -> PaymentStatus:
         payment_id=payment.id,
         provider_payment_id=payment.provider_payment_id,
         meta=payment.meta or {},
+        currency=payment.currency,
     )
     await apply_result(db, payment, result)
     return result.status

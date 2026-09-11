@@ -22,6 +22,7 @@ from app.services.payments.base import (
     ProviderError,
     WebhookResult,
     minor_to_major,
+    same_currency,
 )
 from app.services.payments.click import ClickProvider
 from app.services.payments.cloudpayments import CloudPaymentsProvider
@@ -124,4 +125,5 @@ __all__ = [
     "describe_providers",
     "get_provider",
     "minor_to_major",
+    "same_currency",
 ]

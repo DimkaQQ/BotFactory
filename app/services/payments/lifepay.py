@@ -108,6 +108,7 @@ class LifePayProvider(ProviderDefaults):
         payment_id,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         return await self._read(credentials, provider_payment_id, amount_minor)
 
@@ -120,6 +121,7 @@ class LifePayProvider(ProviderDefaults):
         payment_id,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
         return await self._read(credentials, provider_payment_id, amount_minor)
 

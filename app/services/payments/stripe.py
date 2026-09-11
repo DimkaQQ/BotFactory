@@ -25,6 +25,7 @@ from app.services.payments.base import (
     ProviderDefaults,
     ProviderError,
     WebhookResult,
+    same_currency,
 )
 
 _API_URL = "https://api.stripe.com/v1/checkout/sessions"
@@ -105,6 +106,7 @@ class StripeProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         secret = (credentials.get("webhook_secret") or "").strip()
         if not secret:
@@ -146,10 +148,11 @@ class StripeProvider(ProviderDefaults):
             # the goods go; Stripe gets the same treatment rather than being
             # trusted purely because the signature held.
             charged = obj.get("amount_total")
-            currency = (obj.get("currency") or "").upper()
-            expected = amount_minor // 100 if currency in _ZERO_DECIMAL else amount_minor
+            charged_currency = (obj.get("currency") or "").upper()
+            expected = amount_minor // 100 if charged_currency in _ZERO_DECIMAL else amount_minor
             if charged is not None and int(charged) != expected:
                 raise ProviderError(f"Stripe: сумма не совпадает (оплачено {charged}, ожидалось {expected})")
+            same_currency(self.title, charged_currency, currency)
             status = PaymentStatus.paid
         elif event_type in {"charge.refunded", "charge.refund.updated", "payment_intent.refunded"}:
             status = PaymentStatus.refunded

@@ -164,6 +164,7 @@ class CryptoBotProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         token = self._token(credentials)
         if not self._signature_ok(token, raw_body, headers.get("crypto-pay-api-signature", "")):
@@ -196,6 +197,7 @@ class CryptoBotProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
         if not provider_payment_id:
             raise ProviderError("Crypto Bot: счёт ещё не создан")

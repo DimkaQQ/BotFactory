@@ -122,6 +122,7 @@ async def payment_callback(provider_slug: str, request: Request, db: AsyncSessio
             payment_id=payment.id,
             provider_payment_id=payment.provider_payment_id,
             meta=payment.meta or {},
+            currency=payment.currency,
         )
     except ProviderError as exc:
         logger.warning("Rejected %s callback for payment %s: %s", provider_slug, payment.id, exc)
@@ -260,9 +261,14 @@ async def get_payment_settings(
         is_test=bot.payment_is_test,
         # Which keys are filled in, never the keys themselves.
         filled_fields=sorted(k for k, v in credentials.items() if str(v).strip()),
-        callback_url=f"{get_settings().public_base_url.rstrip('/')}/webhook/pay/{bot.payment_provider}"
-        if bot.payment_provider
-        else None,
+        # Only for providers that actually notify us. Stars, pay-by-link and
+        # Processing.kz never call this address, and offering it invited a
+        # shop owner to paste something into a dashboard that does nothing.
+        callback_url=(
+            f"{get_settings().public_base_url.rstrip('/')}/webhook/pay/{bot.payment_provider}"
+            if bot.payment_provider and payment_providers.get_provider(bot.payment_provider).uses_callback
+            else None
+        ),
     )
 
 

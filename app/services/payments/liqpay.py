@@ -32,6 +32,7 @@ from app.services.payments.base import (
     ProviderError,
     WebhookResult,
     minor_to_major,
+    same_currency,
 )
 
 _HOST = "https://www.liqpay.ua/api"
@@ -119,6 +120,7 @@ class LiqPayProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         _public, private = self._keys(credentials)
         data = (form.get("data") or "").strip()
@@ -128,7 +130,7 @@ class LiqPayProvider(ProviderDefaults):
         if received != _sign(private, data):
             raise ProviderError("LiqPay: подпись уведомления не совпала")
 
-        return self._verdict(_decode(data), amount_minor)
+        return self._verdict(_decode(data), amount_minor, currency)
 
     async def check_status(
         self,
@@ -139,6 +141,7 @@ class LiqPayProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
         public, private = self._keys(credentials)
         params = {"version": "3", "action": "status", "public_key": public, "order_id": str(payment_id)}
@@ -159,9 +162,9 @@ class LiqPayProvider(ProviderDefaults):
         # telling the buyer their money is missing.
         if payload.get("result") == "error" or payload.get("status") == "error":
             raise ProviderError(f"LiqPay: {payload.get('err_description') or payload.get('err_code') or 'ошибка'}")
-        return self._verdict(payload, amount_minor)
+        return self._verdict(payload, amount_minor, currency)
 
-    def _verdict(self, payload: dict, amount_minor: int) -> WebhookResult:
+    def _verdict(self, payload: dict, amount_minor: int, currency: str = "") -> WebhookResult:
         status = str(payload.get("status") or "").lower()
         remote_id = payload.get("payment_id")
         remote_id = str(remote_id) if remote_id is not None else None
@@ -174,6 +177,7 @@ class LiqPayProvider(ProviderDefaults):
                 mismatch = True
             if mismatch:
                 raise ProviderError(f"LiqPay: сумма не совпадает (пришло {amount})")
+            same_currency(self.title, payload.get("currency"), currency)
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
 
         if status in _REFUNDED:

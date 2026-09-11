@@ -137,6 +137,7 @@ class ClickProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         service_id, _merchant_id, secret = self._keys(credentials)
 

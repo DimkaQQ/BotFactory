@@ -146,6 +146,7 @@ class LavaTopProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         try:
             event = json.loads(raw_body or b"{}")
@@ -177,6 +178,7 @@ class LavaTopProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
         if not provider_payment_id:
             raise ProviderError("lava.top: счёт ещё не создан")

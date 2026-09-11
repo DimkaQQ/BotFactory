@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
-from app.models.bot_block import BlockType
+from app.models.bot_block import BlockType, BotBlock
 from app.models.payment import Payment, PaymentStatus
 from app.services import bot_dispatcher, payment_service
 from app.services.payments import get_provider
@@ -125,10 +125,24 @@ async def test_the_button_shows_the_amount_that_will_be_charged(db, owner, make_
 async def test_the_currency_comes_from_the_provider_not_the_stale_block(db, owner, make_bot):
     """A block still holding RUB while the provider charges stars would say
     "250 RUB" and take 250 ⭐."""
-    assert payment_service.currency_for("stars", "RUB") == "XTR"
-    assert payment_service.currency_for("yookassa", "KZT") == "RUB"
     # A currency the provider does support is left alone.
-    assert payment_service.currency_for("robokassa", "USD") == "USD"
+    assert payment_service.currency_for("yookassa", "RUB") == "RUB"
+    assert payment_service.currency_for("liqpay", "USD") == "USD"
+    # A block that never said anything takes whatever the provider charges.
+    assert payment_service.currency_for("stars", None) == "XTR"
+    assert payment_service.currency_for("cryptobot", "") == payment_service.currency_for("cryptobot", None)
+
+
+async def test_a_currency_the_provider_cannot_charge_is_refused_not_swapped(db, owner, make_bot):
+    """Swapping silently is how a product deliberately priced at 990 ₸ starts
+    selling for 990 ₽ — five times the money, with nothing saying so. The
+    owner gets a sentence they can act on instead."""
+    from app.services.payments import ProviderError
+
+    with pytest.raises(ProviderError, match="KZT"):
+        payment_service.currency_for("yookassa", "KZT")
+    with pytest.raises(ProviderError, match="RUB"):
+        payment_service.currency_for("stars", "RUB")
 
 
 # ------------------------------------------------------- one order per buyer
@@ -354,3 +368,82 @@ async def test_a_refunded_order_cannot_be_paid_again(db, owner, make_bot, as_bot
     await db.refresh(payment)
     assert payment.status == PaymentStatus.refunded
     assert as_bot.sent() == []
+
+
+async def test_a_payment_taken_in_the_wrong_currency_is_refused(db, owner, make_bot):
+    """Every adapter checked the amount and none of them checked the unit —
+    and "990" is a very different sale in roubles, tenge and dollars."""
+    import httpx
+
+    from app.services.payments import ProviderError, get_provider
+
+    def gateway(currency: str):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "status": "succeeded",
+                    "paid": True,
+                    "id": "2c9-abc",
+                    "amount": {"value": "990.00", "currency": currency},
+                },
+            )
+
+        return handler
+
+    from app.services.payments.base import same_currency
+
+    # The helper itself, independent of any one adapter.
+    same_currency("ЮKassa", "RUB", "RUB")
+    with pytest.raises(ProviderError, match="KZT"):
+        same_currency("ЮKassa", "KZT", "RUB")
+    # A provider that reports nothing is left alone rather than guessed at.
+    same_currency("ЮKassa", None, "RUB")
+    same_currency("ЮKassa", "RUB", "")
+
+    # And through an adapter, end to end.
+    real = httpx.AsyncClient
+
+    def install(handler):
+        httpx.AsyncClient = lambda *a, **kw: real(*a, **{**kw, "transport": httpx.MockTransport(handler)})
+
+    try:
+        install(gateway("RUB"))
+        ok = await get_provider("yookassa").check_status(
+            credentials={"shop_id": "1", "secret_key": "k"}, amount_minor=99000, invoice_no=1,
+            payment_id=uuid.uuid4(), provider_payment_id="2c9-abc", meta={}, currency="RUB",
+        )
+        assert ok.status.value == "paid"
+
+        install(gateway("KZT"))
+        with pytest.raises(ProviderError, match="KZT"):
+            await get_provider("yookassa").check_status(
+                credentials={"shop_id": "1", "secret_key": "k"}, amount_minor=99000, invoice_no=1,
+                payment_id=uuid.uuid4(), provider_payment_id="2c9-abc", meta={}, currency="RUB",
+            )
+    finally:
+        httpx.AsyncClient = real
+
+
+async def test_rewiring_the_delivery_arrow_starts_a_new_order(db, owner, make_bot, telegram):
+    """The delivery target is pinned onto the payment when it is created, so
+    an order reused after the arrow moved would hand over the *old* goods —
+    for up to half an hour after the shop changed what it sells."""
+    bot, blocks = await paid_bot(make_bot, owner)
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+
+    other = BotBlock(bot_id=bot.id, block_type=BlockType.delivery, content={"text": "ДРУГОЙ ТОВАР"}, order_index=9)
+    db.add(other)
+    await db.flush()
+    blocks[0].next_block_id = other.id
+    await db.commit()
+
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+
+    orders = (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalars().all()
+    assert len(orders) == 2, "после перевода стрелки это уже другой заказ"
+    assert {str(other.id)} <= {(o.meta or {}).get("deliver_from") for o in orders}

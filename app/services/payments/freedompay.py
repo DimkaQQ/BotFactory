@@ -135,6 +135,7 @@ class FreedomPayProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         _merchant, secret = self._keys(credentials)
 

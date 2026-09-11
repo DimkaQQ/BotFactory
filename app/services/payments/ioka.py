@@ -42,6 +42,7 @@ from app.services.payments.base import (
     ProviderDefaults,
     ProviderError,
     WebhookResult,
+    same_currency,
 )
 
 _PROD = "https://api.ioka.kz/v2"
@@ -173,11 +174,12 @@ class IokaProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         # Nothing in the request body is trusted — not the status, not the
         # amount. The order is re-read and only that answer counts.
         return await self._read(
-            credentials, payment_id, provider_payment_id, amount_minor, (meta or {}).get("is_test")
+            credentials, payment_id, provider_payment_id, amount_minor, (meta or {}).get("is_test"), currency
         )
 
     async def check_status(
@@ -189,9 +191,10 @@ class IokaProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
         return await self._read(
-            credentials, payment_id, provider_payment_id, amount_minor, meta.get("is_test")
+            credentials, payment_id, provider_payment_id, amount_minor, meta.get("is_test"), currency
         )
 
     async def _read(
@@ -201,6 +204,7 @@ class IokaProvider(ProviderDefaults):
         order_id: str | None,
         amount_minor: int,
         is_test,
+        currency: str = "",
     ) -> WebhookResult:
         api_key = self._key(credentials)
         # Which ledger the order lives on is decided when it is created, so it
@@ -224,6 +228,7 @@ class IokaProvider(ProviderDefaults):
             amount = order.get("amount")
             if not isinstance(amount, int) or amount != amount_minor:
                 raise ProviderError(f"ioka: сумма не совпадает (в заказе {amount})")
+            same_currency(self.title, order.get("currency"), currency)
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
 
         if status in _REFUNDED:

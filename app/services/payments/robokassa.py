@@ -30,8 +30,11 @@ _CHECKOUT_URL = "https://auth.robokassa.ru/Merchant/Index.aspx"
 class RobokassaProvider(ProviderDefaults):
     slug = "robokassa"
     title = "Robokassa"
-    hint = "Логин магазина и оба пароля — в личном кабинете Robokassa, раздел «Технические настройки». Там же укажи Result URL, который мы покажем ниже, и метод отправки POST."
-    currencies = ("RUB", "USD", "EUR", "KZT")
+    hint = (
+        "Логин магазина и оба пароля — в личном кабинете Robokassa, раздел «Технические настройки». "
+        "Там же укажи Result URL, который мы покажем ниже, и метод отправки POST. Счёт выставляется в валюте твоего магазина Robokassa — для тенге удобнее Freedom Pay, ioka или CloudPayments."
+    )
+    currencies = ("RUB",)
     credential_fields = (
         CredentialField("merchant_login", "Идентификатор магазина", "MerchantLogin из кабинета", secret=False),
         CredentialField("password1", "Пароль #1", "Используется для подписи ссылки на оплату"),
@@ -57,9 +60,17 @@ class RobokassaProvider(ProviderDefaults):
             "Encoding": "utf-8",
             "SuccessURL2": request.return_url,
         }
-        # Robokassa charges in the shop's own currency unless told otherwise.
-        if request.currency.upper() != "RUB":
-            params["OutSumCurrency"] = request.currency.upper()
+        # `OutSumCurrency` is deliberately not sent. With it, Robokassa
+        # converts and then reports ResultURL's OutSum in the shop's *base*
+        # currency — which no longer matches the block price, so the amount
+        # check below would reject every callback forever while Robokassa
+        # retried, and the buyer would never be delivered to. Without it,
+        # both sides speak the shop's base currency and the check holds.
+        #
+        # That is why `currencies` is roubles only: a shop whose Robokassa
+        # account is in tenge is better served by Freedom Pay, ioka or
+        # CloudPayments, all of which say outright which currency they are
+        # charging. Guessing here is how a 990 ₸ product gets sold for 990 ₽.
         if request.is_test:
             params["IsTest"] = "1"
 
@@ -84,6 +95,7 @@ class RobokassaProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         password2 = (credentials.get("password2") or "").strip()
         if not password2:

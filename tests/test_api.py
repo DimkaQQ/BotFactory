@@ -314,3 +314,31 @@ async def test_sales_totals_cover_every_order_and_keep_currencies_apart(api, aut
     assert totals["XTR"]["total_minor"] == 25000 and totals["XTR"]["count"] == 1
     # The unpaid one is listed but not counted as revenue.
     assert len(report["orders"]) == 4
+
+
+async def test_a_provider_with_no_callback_can_still_be_switched_off_test_mode(api, auth, owner, make_bot):
+    """Processing.kz has no callback but does have its own test gateway, and
+    `payment_is_test` defaults to True. While the test switch was tied to
+    `uses_callback` the settings form never offered it, so the one provider
+    aimed at bank-acquired Kazakh merchants could not take real money at all."""
+    bot, _ = await make_bot(owner, [])
+
+    saved = await api.put(
+        f"/api/bots/{bot.id}/payment-settings",
+        headers=auth(owner),
+        json={
+            "provider": "processingkz",
+            "is_test": False,
+            "credentials": {"merchant_id": "000000000000115"},
+        },
+    )
+
+    assert saved.status_code == 200
+    assert saved.json()["is_test"] is False
+    # No callback, so no address is offered to paste anywhere.
+    assert saved.json()["callback_url"] is None
+
+    from app.services.payments import get_provider
+
+    assert get_provider("processingkz").uses_callback is False
+    assert get_provider("processingkz").has_test_mode is True

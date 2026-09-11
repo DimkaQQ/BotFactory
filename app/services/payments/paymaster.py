@@ -21,6 +21,7 @@ from app.services.payments.base import (
     ProviderDefaults,
     ProviderError,
     WebhookResult,
+    same_currency,
 )
 
 _BASE = "https://paymaster.ru/api/v2"
@@ -110,6 +111,7 @@ class PayMasterProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         try:
             event = json.loads(raw_body or b"{}")
@@ -118,7 +120,7 @@ class PayMasterProvider(ProviderDefaults):
         remote_id = provider_payment_id or event.get("id")
         if not remote_id:
             raise ProviderError("PayMaster: не удалось определить платёж")
-        return await self._read(credentials, str(remote_id), amount_minor)
+        return await self._read(credentials, str(remote_id), amount_minor, currency)
 
     async def check_status(
         self,
@@ -129,12 +131,15 @@ class PayMasterProvider(ProviderDefaults):
         payment_id: uuid.UUID,
         provider_payment_id: str | None,
         meta: dict,
+        currency: str = "",
     ) -> WebhookResult:
         if not provider_payment_id:
             raise ProviderError("PayMaster: платёж ещё не создан")
-        return await self._read(credentials, provider_payment_id, amount_minor)
+        return await self._read(credentials, provider_payment_id, amount_minor, currency)
 
-    async def _read(self, credentials: dict[str, str], remote_id: str, amount_minor: int) -> WebhookResult:
+    async def _read(
+        self, credentials: dict[str, str], remote_id: str, amount_minor: int, currency: str = ""
+    ) -> WebhookResult:
         """What PayMaster itself says about the payment — the only thing
         believed here, whether prompted by a callback or by the buyer."""
         api_headers = self._headers(credentials)
@@ -149,6 +154,7 @@ class PayMasterProvider(ProviderDefaults):
             value = (payment.get("amount") or {}).get("value")
             if value is not None and abs(float(value) - amount_minor / 100) > 0.009:
                 raise ProviderError(f"PayMaster: сумма не совпадает (у провайдера {value})")
+            same_currency(self.title, (payment.get("amount") or {}).get("currency"), currency)
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(remote_id))
         if status in _REFUNDED:
             return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=str(remote_id))

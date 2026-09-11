@@ -43,5 +43,6 @@ class TestProvider(ProviderDefaults):
         payment_id=None,
         provider_payment_id: str | None = None,
         meta: dict | None = None,
+        currency: str = "",
     ) -> WebhookResult:
         return WebhookResult(status=PaymentStatus.paid, provider_payment_id=f"test-{invoice_no}")
