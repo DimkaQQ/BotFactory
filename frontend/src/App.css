@@ -48,6 +48,20 @@
     margin-bottom: 0;
   }
 
+  /* On a short phone that "whatever is left" was 180px of 640 — the help
+     paragraph alone took more room than the canvas it was explaining. It is
+     a first-run hint, not permanent chrome, so below this height it goes and
+     the graph gets the screen. */
+  @media (max-height: 720px) {
+    .screen--builder > .app-hint {
+      display: none;
+    }
+
+    .screen--builder .flow-canvas {
+      min-height: 300px;
+    }
+  }
+
   /* Everything above the canvas keeps its natural height. */
   .screen--builder > .app-header,
   .screen--builder > .app-hint,
@@ -2515,7 +2529,11 @@
     position: static;
     background: none;
     padding: 0;
+    /* Capped so a full-width "Опубликовать" doesn't look absurd on a 1920
+       screen — but centred, because left-aligned under a canvas twice its
+       width it just looked like the two had come apart. */
     max-width: 560px;
+    margin-inline: auto;
   }
 
   .screen--builder .miniapp-banner,
@@ -2642,8 +2660,12 @@
   gap: 6px;
   align-self: center;
   background: color-mix(in srgb, var(--tg-button) 12%, var(--tg-bg));
-  color: var(--tg-button);
-  border: 1px solid color-mix(in srgb, var(--tg-button) 22%, transparent);
+  /* --tg-link, not --tg-button: the button token is a *fill* that carries
+     white text, so in dark mode it is chosen to be dark — and reusing it as
+     a text colour on a dark ground measured 2.82:1. --tg-link is the token
+     that already has to be legible as text in both themes. */
+  color: var(--tg-link);
+  border: 1px solid color-mix(in srgb, var(--tg-link) 28%, transparent);
   border-radius: var(--radius-full);
   padding: 6px 14px;
   font-size: 12.5px;
@@ -3622,6 +3644,7 @@
   box-shadow: var(--shadow-card);
   border-radius: var(--radius-md);
   overflow: hidden;
+  border: 1px solid var(--tg-separator);
   /* Off the bottom-left corner, where they landed on top of whichever node
      the graph happened to put there — on a phone they covered a block's
      title and half its button. */
@@ -3646,6 +3669,17 @@
 
 .flow-canvas .react-flow__controls-button svg {
   fill: currentColor;
+}
+
+/* Moving the controls to the bottom-right stopped them covering the node the
+   graph put bottom-left; it did not stop them covering the node it puts
+   bottom-right. On touch there is nothing to fix that placement-wise — but
+   there is also no reason for +/− to be there at all, because pinch zooms.
+   Leaving only "fit to screen" takes the footprint from 36x108 to 36x36. */
+@media (hover: none) and (pointer: coarse) {
+  .flow-canvas .react-flow__controls-button:not(:last-child) {
+    display: none;
+  }
 }
 
 .flow-canvas .react-flow__edge-path {

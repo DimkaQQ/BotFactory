@@ -15,7 +15,11 @@
      premium products almost never use it edge to edge). */
   --tg-bg: var(--tg-theme-bg-color, #fdfcfe);
   --tg-text: var(--tg-theme-text-color, #14121f);
-  --tg-hint: var(--tg-theme-hint-color, #83829a);
+  /* Measured against the painted pixels, #83829a came out at 3.65:1 on
+     the off-white ground — under the 4.5:1 floor for text this size, and
+     this token carries "Привет, …", "Черновик" and every field hint.
+     #6b6a80 measures 5.0:1 and still reads as secondary. */
+  --tg-hint: var(--tg-theme-hint-color, #6b6a80);
   --tg-link: var(--tg-theme-link-color, #4338ca);
   --tg-button: var(--tg-theme-button-color, #4338ca);
   --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
@@ -26,7 +30,9 @@
 
   /* Text hierarchy via opacity of the base text color. */
   --text-primary: var(--tg-text);
-  --text-secondary: color-mix(in srgb, var(--tg-text) 62%, transparent);
+  /* 62% of the body colour measured 3.99:1 on the landing lead — just
+     under AA. 72% clears it without flattening the hierarchy. */
+  --text-secondary: color-mix(in srgb, var(--tg-text) 72%, transparent);
   --text-tertiary: var(--tg-hint);
 
   /* 8pt spacing scale */
@@ -101,7 +107,11 @@
     --tg-text: var(--tg-theme-text-color, #f2f0fa);
     --tg-hint: var(--tg-theme-hint-color, #9997ad);
     --tg-link: var(--tg-theme-link-color, #a5b4fc);
-    --tg-button: var(--tg-theme-button-color, #6366f1);
+    /* #6366f1 measured 3.84:1 for the brand badge and 4.47:1 for white
+       text on the primary button — both just under AA on this ground.
+       #4f46e5 is darker behind white text (5.4:1) and the badge now
+       takes --tg-link, which was already light enough. */
+    --tg-button: var(--tg-theme-button-color, #4f46e5);
     --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
     --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #1a1826);
     --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
