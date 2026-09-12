@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import uuid
 
@@ -127,7 +128,10 @@ class LiqPayProvider(ProviderDefaults):
         received = (form.get("signature") or "").strip()
         if not data or not received:
             raise ProviderError("LiqPay: уведомление без data или signature")
-        if received != _sign(private, data):
+        # compare_digest, like every other adapter here — a plain `!=` short-
+        # circuits on the first differing byte. Not a practical attack over
+        # HTTP, but there is no reason for this one to be the odd one out.
+        if not hmac.compare_digest(received, _sign(private, data)):
             raise ProviderError("LiqPay: подпись уведомления не совпала")
 
         return self._verdict(_decode(data), amount_minor, currency)

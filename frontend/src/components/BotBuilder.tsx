@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   type BlockType,
@@ -52,18 +52,40 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const footerRef = useRef<HTMLDivElement | null>(null);
   const screenRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
+  // Measured, never guessed — and re-measured on *every* render, because the
+  // things being measured change without resizing anything: the footer swaps
+  // between a publish button, an expanded token form and a paywall. Two
+  // different `.app-footer` elements share this ref, so a ResizeObserver
+  // attached once at mount ended up watching a detached node and `--footer-h`
+  // sat at a stale 110px while the real footer was 52px — which is how the
+  // publish confirm button ended up below the fold on every laptop.
+  const measure = useCallback(() => {
     const footer = footerRef.current;
     const screen = screenRef.current;
     if (!footer || !screen) return;
-    const apply = () => screen.style.setProperty("--footer-h", `${Math.ceil(footer.offsetHeight)}px`);
-    apply();
-    const observer = new ResizeObserver(apply);
-    observer.observe(footer);
-    return () => observer.disconnect();
-    // Both refs are stable, and the observer re-measures on its own — without
-    // this the observer was rebuilt on every render, i.e. on every keystroke.
+    screen.style.setProperty("--footer-h", `${Math.ceil(footer.getBoundingClientRect().height)}px`);
+    const canvas = screen.querySelector<HTMLElement>(".flow-canvas");
+    if (canvas) {
+      const above = canvas.getBoundingClientRect().top - screen.getBoundingClientRect().top;
+      screen.style.setProperty("--above-h", `${Math.ceil(Math.max(above, 0))}px`);
+    }
   }, []);
+
+  useLayoutEffect(measure);
+
+  // And once more for the changes React never hears about — a web font
+  // landing, the browser chrome collapsing on scroll.
+  useEffect(() => {
+    const footer = footerRef.current;
+    if (!footer) return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(footer);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [measure]);
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const nameTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -401,7 +423,19 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
               />
             ) : (
-              <h1 className="app-header__name" onClick={() => setEditingName(true)}>
+              <h1
+                className="app-header__name"
+                role="button"
+                tabIndex={0}
+                aria-label="Переименовать бота"
+                onClick={() => setEditingName(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setEditingName(true);
+                  }
+                }}
+              >
                 <span className="app-header__name-text">
                   {bot.name || (bot.telegram_bot_username ? `@${bot.telegram_bot_username}` : "Новый бот")}
                 </span>
@@ -466,10 +500,17 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         </div>
       ) : (
         !isMiniApp && (
-          <p className="app-hint">
-            Блоки добавляются кнопкой «+ Добавить блок» под холстом (на большом экране — из списка слева).
-            Нажми на блок, чтобы изменить его; потяни от кружка снизу или от кнопки — чтобы решить, что дальше.
-          </p>
+          <>
+            {/* Two versions on purpose. On a phone the long one ran to four
+                lines — 80px of the 844 the canvas is fighting for — and half
+                of it described a block library that only exists on a big
+                screen. */}
+            <p className="app-hint app-hint--wide">
+              Блоки добавляются кнопкой «+ Добавить блок» под холстом (на большом экране — из списка слева).
+              Нажми на блок, чтобы изменить его; потяни от кружка снизу или от кнопки — чтобы решить, что дальше.
+            </p>
+            <p className="app-hint app-hint--narrow">Нажми на блок, чтобы изменить. Потяни от кружка — что дальше.</p>
+          </>
         )
       )}
 

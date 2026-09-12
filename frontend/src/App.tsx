@@ -35,6 +35,41 @@ export default function App() {
   const [clientName, setClientName] = useState<string | undefined>();
   const [screen, setScreen] = useState<Screen>({ name: "list" });
 
+  // Browser Back used to leave the product. The builder and the list shared
+  // one URL, so the only entry in history was whatever page came before —
+  // and on Android, where Back is the primary gesture, that meant the app
+  // closed mid-edit. Opening a bot now pushes a state; Back pops it and
+  // returns to the list, and the URL says which bot you are looking at, so a
+  // reload or a shared link lands in the right place.
+  useEffect(() => {
+    const onPop = (event: PopStateEvent) => {
+      const botId = (event.state as { botId?: string } | null)?.botId;
+      setScreen(botId ? { name: "builder", botId } : { name: "list" });
+    };
+    window.addEventListener("popstate", onPop);
+
+    // A reload on /bot/<id> should reopen that bot rather than the list.
+    const match = window.location.pathname.match(/^\/bot\/([0-9a-f-]{36})$/i);
+    if (match) setScreen({ name: "builder", botId: match[1] });
+
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const openBot = (botId: string) => {
+    window.history.pushState({ botId }, "", `/bot/${botId}`);
+    setScreen({ name: "builder", botId });
+  };
+
+  const showList = () => {
+    // `back()` when we got here by pushState, so the history stack does not
+    // grow a dead entry for every open/close round trip.
+    if ((window.history.state as { botId?: string } | null)?.botId) window.history.back();
+    else {
+      window.history.replaceState(null, "", "/");
+      setScreen({ name: "list" });
+    }
+  };
+
   // Bootstrap: inside Telegram, trust initData outright. Outside it (plain
   // browser), restore a saved web session or fall back to the login screen.
   useEffect(() => {
@@ -129,15 +164,18 @@ export default function App() {
             <BotBuilder
               botId={screen.botId}
               isMiniApp={isMiniApp}
-              onBack={() => setScreen({ name: "list" })}
-              onDeleted={() => setScreen({ name: "list" })}
+              onBack={showList}
+              onDeleted={() => {
+              window.history.replaceState(null, "", "/");
+              setScreen({ name: "list" });
+            }}
             />
           </Suspense>
         ) : (
           <BotList
             greetingName={clientName}
             isMiniApp={isMiniApp}
-            onOpen={(botId) => setScreen({ name: "builder", botId })}
+            onOpen={openBot}
           />
         )}
       </motion.div>

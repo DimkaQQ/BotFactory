@@ -38,6 +38,7 @@ from app.services.payments.base import (
     ProviderError,
     WebhookResult,
     minor_to_major,
+    same_currency,
 )
 
 _BASE = "https://api.freedompay.money"
@@ -161,6 +162,7 @@ class FreedomPayProvider(ProviderDefaults):
             mismatch = True
         if mismatch:
             raise ProviderError(f"Freedom Pay: сумма не совпадает (пришло {amount})")
+        same_currency(self.title, form.get("pg_currency"), currency)
 
         return WebhookResult(
             status=PaymentStatus.paid,

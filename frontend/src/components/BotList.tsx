@@ -49,7 +49,15 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
       setBots(list);
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось загрузить ботов");
+      // The raw server `detail` is written for a log, not for a person — it
+      // has said things like "boom" — so only the shape of the failure is
+      // shown, and the detail goes to the console for whoever is debugging.
+      if (err instanceof ApiError) console.error("listBots failed:", err.message);
+      setError("Не удалось загрузить ботов. Проверь соединение и попробуй ещё раз.");
+      // Without this the list stayed at `null` forever and three skeleton
+      // cards kept pulsing behind the error, as if something were still
+      // loading. Nothing was.
+      setBots((current) => current ?? []);
     }
   }, []);
 
@@ -166,7 +174,22 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
         )}
       </header>
 
-      {error && <p className="publish-form__error" style={{ marginBottom: "var(--sp-3)" }}>{error}</p>}
+      {error && (
+        <div className="list-error" role="alert">
+          <p className="publish-form__error">{error}</p>
+          <button
+            type="button"
+            className="list-error__retry"
+            onClick={() => {
+              setError(null);
+              setBots(null);
+              refresh();
+            }}
+          >
+            Повторить
+          </button>
+        </div>
+      )}
 
       {bots === null ? (
         <div className="bot-list" aria-hidden="true">

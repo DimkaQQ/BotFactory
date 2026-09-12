@@ -219,18 +219,23 @@ class ProcessingKzProvider(ProviderDefaults):
         # created; test and production keep separate ledgers.
         endpoint = self._endpoint(bool(meta.get("is_test")))
 
-        status, amount = await self._read(endpoint, merchant, provider_payment_id)
+        status, amount, charged = await self._read(endpoint, merchant, provider_payment_id)
 
         if status == _AUTHORISED:
             # Money held, not taken. Capture it, then believe only the second
             # read — `completeTransaction` returning true is its own claim,
             # and the ledger is what decides whether the shop gets paid.
             await self._complete(endpoint, merchant, provider_payment_id)
-            status, amount = await self._read(endpoint, merchant, provider_payment_id)
+            status, amount, charged = await self._read(endpoint, merchant, provider_payment_id)
 
         if status == _PAID:
             if amount is not None and amount != amount_minor:
                 raise ProviderError(f"Processing.kz: сумма не совпадает (в шлюзе {amount})")
+            # Compared as the numeric code we would have sent for the
+            # currency this order was placed in.
+            expected = _NUMERIC.get((currency or "").upper())
+            if charged and expected is not None and str(charged).strip() != str(expected):
+                raise ProviderError(f"Processing.kz: оплачено в валюте {charged}, а заказ был в {currency}")
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=provider_payment_id)
         if status in _FAILED:
             return WebhookResult(status=PaymentStatus.failed, provider_payment_id=provider_payment_id)
@@ -238,7 +243,7 @@ class ProcessingKzProvider(ProviderDefaults):
         # has not finished yet.
         return WebhookResult(status=PaymentStatus.pending, provider_payment_id=provider_payment_id)
 
-    async def _read(self, endpoint: str, merchant: str, reference: str) -> tuple[str, int | None]:
+    async def _read(self, endpoint: str, merchant: str, reference: str) -> tuple[str, int | None, str]:
         returned = await self._call(
             endpoint,
             "getTransactionStatus",
@@ -250,7 +255,10 @@ class ProcessingKzProvider(ProviderDefaults):
         status = (_text(_find(returned, "transactionStatus")) or "").upper()
         settled = _amount(_text(_find(returned, "amountSettled")))
         authorised = _amount(_text(_find(returned, "amountAuthorised")))
-        return status, settled if settled else authorised
+        # The gateway reports which currency it actually took, as the same
+        # ISO numeric code we asked in.
+        charged = _text(_find(returned, "transactionCurrencyCode"))
+        return status, settled if settled else authorised, charged
 
     async def _complete(self, endpoint: str, merchant: str, reference: str) -> None:
         await self._call(

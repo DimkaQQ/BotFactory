@@ -34,6 +34,7 @@ from app.services.payments.base import (
     ProviderDefaults,
     ProviderError,
     WebhookResult,
+    same_currency,
 )
 
 _BASE = "https://gate.lava.top"
@@ -167,7 +168,7 @@ class LavaTopProvider(ProviderDefaults):
         # in their dashboard, which we cannot see — so the notification only
         # tells us *which* invoice to look at, and the answer comes from
         # reading that invoice back with our own API key.
-        return await self._read(credentials, contract, amount_minor)
+        return await self._read(credentials, contract, amount_minor, currency)
 
     async def check_status(
         self,
@@ -182,9 +183,11 @@ class LavaTopProvider(ProviderDefaults):
     ) -> WebhookResult:
         if not provider_payment_id:
             raise ProviderError("lava.top: счёт ещё не создан")
-        return await self._read(credentials, provider_payment_id, amount_minor)
+        return await self._read(credentials, provider_payment_id, amount_minor, currency)
 
-    async def _read(self, credentials: dict[str, str], contract_id: str, amount_minor: int) -> WebhookResult:
+    async def _read(
+        self, credentials: dict[str, str], contract_id: str, amount_minor: int, currency: str = ""
+    ) -> WebhookResult:
         headers = self._headers(credentials)
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(f"{_BASE}/api/v1/invoices/{contract_id}", headers=headers)
@@ -198,6 +201,7 @@ class LavaTopProvider(ProviderDefaults):
             paid = (invoice.get("receipt") or {}).get("amount")
             if paid is not None and abs(float(paid) - amount_minor / 100) > 0.009:
                 raise ProviderError(f"lava.top: сумма не совпадает (оплачено {paid})")
+            same_currency(self.title, (invoice.get("receipt") or {}).get("currency"), currency)
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(contract_id))
         if status in _REFUNDED:
             return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=str(contract_id))

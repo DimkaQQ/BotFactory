@@ -25,10 +25,16 @@ const START_POSITION = { x: 40, y: 40 };
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 110;
 
-// `minZoom` matters as much as `maxZoom`: fitting a six-block graph into a
-// phone-sized canvas produced a 50% zoom where the node text was ~6px and
-// unreadable. Better to show part of the graph legibly and let the user pan.
-const FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 1, minZoom: 0.7 };
+// `maxZoom: 1` keeps a two-block bot from being blown up to fill the canvas.
+//
+// `minZoom` used to be 0.7 here, for a good reason — a six-block graph
+// squeezed into a phone canvas hit ~50% zoom and the node text went to 6px.
+// But it was also the floor React Flow clamps *fitView* to, so on a real
+// seventeen-node template the fit was already at 0.7 and "Вписать в экран"
+// returned a byte-identical transform: the one button whose whole job is to
+// frame the graph did nothing at all, on every screen size. Framing the graph
+// is what the button is for; reading the text is what zooming in is for.
+const FIT_VIEW_OPTIONS = { padding: 0.15, maxZoom: 1, minZoom: 0.2 };
 
 /** Which model field a dropped/deleted arrow maps back to — carried on the
  * edge itself so onConnect/onEdgesDelete don't need to re-derive it from

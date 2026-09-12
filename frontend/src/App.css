@@ -167,8 +167,10 @@
 
 .bot-delete-button {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  /* 36px on a control that deletes a whole bot. The dot stays
+     small; the target does not. */
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -659,8 +661,10 @@
 
 .bot-card__delete {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  /* 36px on a control that deletes a whole bot. The dot stays
+     small; the target does not. */
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2518,11 +2522,12 @@
      narrow chat-shaped strip. */
 
   .screen--builder .flow-canvas {
-    /* Sized against the viewport rather than a flat 74vh: the header, hint
-       and preview button above it take ~270px, so a fixed fraction ran the
-       builder past the fold — the zoom controls were cut in half and the
-       last node sat below it. */
-    height: calc(100dvh - 360px - var(--footer-h));
+    /* Sized against what is actually above and below it, both measured at
+       runtime (see BotBuilder). The flat 360px this used to subtract was a
+       guess, and the real chrome overran it by 32px — which put the publish
+       confirm button below the fold on every laptop and desktop. The extra
+       --sp-4 is the canvas's own bottom margin. */
+    height: calc(100dvh - var(--above-h, 360px) - var(--footer-h) - var(--sp-4));
     min-height: 200px;
     box-shadow: var(--shadow-elevated);
   }
@@ -3301,7 +3306,10 @@
   border-radius: 999px;
   font-weight: 700;
   background: color-mix(in srgb, var(--tpl-accent) 14%, transparent);
-  color: var(--tpl-accent);
+  /* The bare accent measured 4.04:1 and 4.38:1 here — these are 11.5px bold,
+     which is not "large text", so they need the full 4.5. Pulling the accent
+     towards the body colour keeps the hue and clears the floor. */
+  color: color-mix(in srgb, var(--tpl-accent) 70%, var(--tg-text));
 }
 
 /* Shared accent palette for both the landing cards and the in-app picker. */
@@ -3358,8 +3366,12 @@
 
 .landing-cta__button {
   border: none;
+  /* Fixed white in both themes, because it sits on the brand gradient — so
+     the label cannot use --accent-on-surface, which flips *light* in dark
+     mode and measured 1.99:1 here. The pill is its own surface; its text
+     colour has to be pinned to it, not to the page. */
   background: #fff;
-  color: var(--accent-on-surface);
+  color: #4338ca;
   font-weight: 700;
   font-size: 15px;
   padding: 14px 28px;
@@ -3456,11 +3468,15 @@
   }
 
   .landing-features {
-    grid-template-columns: repeat(4, 1fr);
+    /* Nine cards: four columns strand one on its own in the last row at
+       every width. Three divide evenly. */
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .landing-templates {
-    grid-template-columns: repeat(4, 1fr);
+    /* Nine cards: four columns strand one on its own in the last row at
+       every width. Three divide evenly. */
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .landing-steps {
@@ -3647,6 +3663,44 @@
   color: color-mix(in srgb, var(--tg-text) 10%, transparent);
 }
 
+.list-error {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+
+.list-error__retry {
+  min-height: 44px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-md);
+  background: var(--tg-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.list-error__retry:hover {
+  background: var(--tg-secondary-bg);
+}
+
+.app-hint--narrow {
+  display: none;
+}
+
+@media (max-width: 959px) {
+  .app-hint--wide {
+    display: none;
+  }
+
+  .app-hint--narrow {
+    display: block;
+  }
+}
+
 /* Canvas controls live in their own strip above the graph — see the comment
    in FlowCanvas.tsx. Nothing here can sit on top of a block. */
 .flow-canvas__tools {
@@ -3682,6 +3736,22 @@
 
 .flow-canvas__tool:hover {
   background: var(--tg-secondary-bg);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Zoom is a pinch here, so −/+ are 88px of a phone's height spent on
+     something the fingers already do. Only "вписать в экран" earns its place. */
+  .flow-canvas__tool:not(.flow-canvas__tool--wide) {
+    display: none;
+  }
+
+  .flow-canvas__tools {
+    margin-bottom: var(--sp-1);
+  }
+
+  .flow-canvas__tool--wide {
+    min-height: 36px;
+  }
 }
 
 .flow-canvas .react-flow__edge-path {

@@ -35,6 +35,7 @@ from app.services.payments.base import (
     ProviderDefaults,
     ProviderError,
     WebhookResult,
+    same_currency,
 )
 
 _MAINNET = "https://pay.crypt.bot/api"
@@ -185,7 +186,7 @@ class CryptoBotProvider(ProviderDefaults):
         # The signature says the message is theirs; the API says what it is
         # worth. Only the second one releases the goods.
         return await self._read(
-            credentials, str(remote_id), amount_minor, is_test=bool((meta or {}).get("is_test"))
+            credentials, str(remote_id), amount_minor, is_test=bool((meta or {}).get("is_test")), currency=currency
         )
 
     async def check_status(
@@ -202,11 +203,17 @@ class CryptoBotProvider(ProviderDefaults):
         if not provider_payment_id:
             raise ProviderError("Crypto Bot: счёт ещё не создан")
         return await self._read(
-            credentials, provider_payment_id, amount_minor, is_test=bool(meta.get("is_test"))
+            credentials, provider_payment_id, amount_minor, is_test=bool(meta.get("is_test")), currency=currency
         )
 
     async def _read(
-        self, credentials: dict[str, str], invoice_id: str, amount_minor: int, *, is_test: bool
+        self,
+        credentials: dict[str, str],
+        invoice_id: str,
+        amount_minor: int,
+        *,
+        is_test: bool,
+        currency: str = "",
     ) -> WebhookResult:
         result = await self._call("getInvoices", credentials, is_test, invoice_ids=invoice_id, count=1)
         items = result.get("items") if isinstance(result, dict) else result
@@ -227,6 +234,9 @@ class CryptoBotProvider(ProviderDefaults):
             paid = invoice.get("amount")
             if paid is not None and abs(float(paid) - amount_minor / 100) > 0.0000001:
                 raise ProviderError(f"Crypto Bot: сумма не совпадает (оплачено {paid})")
+            # Crypto Bot calls it an asset, not a currency, but it is the same
+            # question: 990 USDT and 990 TON are very different sales.
+            same_currency(self.title, invoice.get("asset"), currency)
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(invoice_id))
         if status == "expired":
             return WebhookResult(status=PaymentStatus.failed, provider_payment_id=str(invoice_id))
