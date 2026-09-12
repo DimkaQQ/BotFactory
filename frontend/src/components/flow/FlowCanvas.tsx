@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
-  Controls,
   type Edge,
   type Node,
   ReactFlow,
@@ -146,7 +145,7 @@ function Inner({
   // have been fetched. On a phone that left the viewport fitted to an empty
   // canvas and the nodes half off-screen, showing slivers of white cards
   // with no text. Fit again the first time there is something to fit to.
-  const { fitView, setCenter } = useReactFlow();
+  const { fitView, setCenter, zoomIn, zoomOut } = useReactFlow();
   const hasFitted = useRef(false);
   useEffect(() => {
     if (hasFitted.current || bot.blocks.length === 0) return;
@@ -317,6 +316,37 @@ function Inner({
         </aside>
       )}
 
+      {/* Outside the canvas on purpose. React Flow's own <Controls> float over
+          the graph, so whichever corner they are parked in, the node that
+          happens to be there ends up underneath them — measured at 36x108 in
+          the bottom-left, then 38x27 after moving to the bottom-right. A strip
+          above the canvas cannot overlap anything by construction. */}
+      <div className="flow-canvas__tools">
+        <button
+          type="button"
+          className="flow-canvas__tool"
+          aria-label="Отдалить"
+          onClick={() => zoomOut({ duration: 200 })}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className="flow-canvas__tool"
+          aria-label="Приблизить"
+          onClick={() => zoomIn({ duration: 200 })}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          className="flow-canvas__tool flow-canvas__tool--wide"
+          onClick={() => fitView({ ...FIT_VIEW_OPTIONS, duration: 300 })}
+        >
+          Вписать в экран
+        </button>
+      </div>
+
       <div className="flow-canvas">
         <FlowActionsContext.Provider value={actions}>
           <ReactFlow
@@ -336,7 +366,6 @@ function Inner({
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={24} size={1.5} />
-            <Controls showInteractive={false} />
           </ReactFlow>
         </FlowActionsContext.Provider>
 

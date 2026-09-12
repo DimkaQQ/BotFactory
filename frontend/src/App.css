@@ -3647,46 +3647,41 @@
   color: color-mix(in srgb, var(--tg-text) 10%, transparent);
 }
 
-.flow-canvas .react-flow__controls {
-  box-shadow: var(--shadow-card);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+/* Canvas controls live in their own strip above the graph — see the comment
+   in FlowCanvas.tsx. Nothing here can sit on top of a block. */
+.flow-canvas__tools {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+  margin-bottom: var(--sp-2);
+}
+
+.flow-canvas__tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 44px so it is a real target on touch, where this strip matters most. */
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
   border: 1px solid var(--tg-separator);
-  /* Off the bottom-left corner, where they landed on top of whichever node
-     the graph happened to put there — on a phone they covered a block's
-     title and half its button. */
-  inset: auto var(--sp-3) var(--sp-3) auto !important;
-  /* Slightly translucent so a node underneath is still readable. */
-  background: color-mix(in srgb, var(--tg-bg) 88%, transparent);
-}
-
-.flow-canvas .react-flow__controls-button {
-  /* React Flow ships 26px buttons; on touch that is well under the 44px
-     minimum, and zoom is the control people reach for most on a phone. */
-  width: 36px;
-  height: 36px;
+  border-radius: var(--radius-md);
   background: var(--tg-bg);
-  border-bottom: 1px solid var(--tg-separator);
   color: var(--text-secondary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-smooth);
 }
 
-.flow-canvas .react-flow__controls-button:hover {
+.flow-canvas__tool--wide {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.flow-canvas__tool:hover {
   background: var(--tg-secondary-bg);
-}
-
-.flow-canvas .react-flow__controls-button svg {
-  fill: currentColor;
-}
-
-/* Moving the controls to the bottom-right stopped them covering the node the
-   graph put bottom-left; it did not stop them covering the node it puts
-   bottom-right. On touch there is nothing to fix that placement-wise — but
-   there is also no reason for +/− to be there at all, because pinch zooms.
-   Leaving only "fit to screen" takes the footprint from 36x108 to 36x36. */
-@media (hover: none) and (pointer: coarse) {
-  .flow-canvas .react-flow__controls-button:not(:last-child) {
-    display: none;
-  }
 }
 
 .flow-canvas .react-flow__edge-path {
