@@ -112,6 +112,7 @@ class PaymeProvider(ProviderDefaults):
         "Поле «Идентификатор заказа» оставь как order_id, если не менял его в кассе."
     )
     currencies = ("UZS",)
+    region = "ca"
     credential_fields = (
         CredentialField("merchant_id", "ID кассы", "он же Merchant ID из кабинета", secret=False),
         CredentialField("key", "Ключ кассы", "тот, что для продакшена"),

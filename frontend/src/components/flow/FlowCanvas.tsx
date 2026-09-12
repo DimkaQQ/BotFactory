@@ -12,6 +12,7 @@ import "@xyflow/react/dist/style.css";
 
 import type { BlockType, BotBlock, BotWithBlocks, PaymentProviderInfo } from "../../api/builderApi";
 import { useEscape } from "../../hooks/useEscape";
+import { confirmDialog } from "../../confirm";
 import { BLOCK_TYPES, BLOCK_TYPE_BY_ID } from "../../blockTypes";
 import { BlockEditPanel } from "./BlockEditPanel";
 import { BlockNode, type BlockNodeData } from "./BlockNode";
@@ -53,6 +54,12 @@ interface Props {
   paymentCurrencies: string[];
   paymentProviderInfo: PaymentProviderInfo | null;
   onOpenPaymentSettings: () => void;
+  /** Opens the "как в реальности" chat preview. Rendered inside the canvas
+   * tool strip rather than as its own full-width row above it: two stacked
+   * 44px bars cost 56px of canvas on every screen, and both are canvas
+   * controls anyway. Absent while the bot has no blocks — there is nothing
+   * to preview yet. */
+  onPreview?: () => void;
   disabled?: boolean;
 }
 
@@ -95,6 +102,7 @@ function Inner({
   paymentCurrencies,
   paymentProviderInfo,
   onOpenPaymentSettings,
+  onPreview,
   disabled,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -206,13 +214,19 @@ function Inner({
 
   const handleEdit = useCallback((blockId: string) => setEditingId(blockId), []);
   const handleDelete = useCallback(
-    (blockId: string) => {
+    async (blockId: string) => {
       // There is no undo, and a deleted block takes every arrow into and out
       // of it. The ✕ that does this sits beside the ✕ that merely closes the
       // panel, so one misread is enough to lose work.
       const block = bot.blocks.find((b) => b.id === blockId);
       const name = BLOCK_TYPE_BY_ID[block?.block_type ?? "description"]?.label ?? "блок";
-      if (!window.confirm(`Удалить блок «${name}»? Связи с другими блоками тоже пропадут.`)) return;
+      // confirmDialog, not window.confirm: inside the Mini App a native
+      // browser confirm is a foreign grey box (and on some Telegram
+      // WebViews it does not appear at all, which would make this delete
+      // silently unconfirmable). Every other destructive action in the app
+      // already goes through it.
+      const confirmed = await confirmDialog(`Удалить блок «${name}»? Связи с другими блоками тоже пропадут.`);
+      if (!confirmed) return;
       setEditingId((cur) => (cur === blockId ? null : cur));
       onDelete(blockId);
     },
@@ -351,6 +365,19 @@ function Inner({
         >
           Вписать в экран
         </button>
+        {onPreview && (
+          <button
+            type="button"
+            className="flow-canvas__tool flow-canvas__tool--preview"
+            onClick={onPreview}
+          >
+            {/* Two labels, one shown at a time by CSS — the long form pushed
+                this strip onto a second row on a 390px phone, costing more
+                canvas than folding it in here had just saved. */}
+            ▶ <span className="flow-canvas__tool-long">Смотреть, как в реальности</span>
+            <span className="flow-canvas__tool-short">Как в чате</span>
+          </button>
+        )}
       </div>
 
       <div className="flow-canvas">

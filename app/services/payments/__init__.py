@@ -82,6 +82,20 @@ def get_provider(slug: str) -> PaymentProvider:
     return provider
 
 
+#: Catalogue sections, in the order the constructor shows them. The slug is
+#: what each adapter carries in `region`; the title is what the settings form
+#: prints above the group. Kept here rather than on the frontend so the two
+#: cannot drift — a new adapter picks a region and appears in the right place
+#: without touching any TypeScript.
+REGIONS: tuple[tuple[str, str], ...] = (
+    ("global", "Работают везде"),
+    ("ru", "Россия"),
+    ("ca", "Казахстан, Узбекистан, Кыргызстан"),
+    ("ua", "Украина"),
+    ("manual", "Без подключения кассы"),
+)
+
+
 def describe_providers() -> list[dict]:
     """The provider catalogue the constructor renders its settings form
     from — no provider-specific code on the frontend."""
@@ -91,6 +105,7 @@ def describe_providers() -> list[dict]:
             "title": provider.title,
             "hint": provider.hint,
             "currencies": list(provider.currencies),
+            "region": provider.region,
             "fields": [
                 {"key": f.key, "label": f.label, "hint": f.hint, "secret": f.secret}
                 for f in provider.credential_fields
@@ -121,6 +136,7 @@ __all__ = [
     "PaymentRef",
     "PROVIDERS",
     "ProviderError",
+    "REGIONS",
     "WebhookResult",
     "describe_providers",
     "get_provider",

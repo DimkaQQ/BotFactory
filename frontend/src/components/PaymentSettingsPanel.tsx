@@ -4,6 +4,7 @@ import {
   type Order,
   type OrdersReport,
   type PaymentProviderInfo,
+  type PaymentRegion,
   type PaymentSettings,
   ApiError,
   builderApi,
@@ -76,6 +77,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
   useEscape(onClose);
 
   const [providers, setProviders] = useState<PaymentProviderInfo[] | null>(null);
+  const [regions, setRegions] = useState<PaymentRegion[]>([]);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [slug, setSlug] = useState<string>("");
   const [isTest, setIsTest] = useState(true);
@@ -100,6 +102,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
             .catch(() => ({ orders: [] as Order[], totals: [], paid_count: 0, paid_total_minor: 0 })),
         ]);
         setProviders(list.providers);
+        setRegions(list.regions ?? []);
         setSettings(current);
         setSlug(current.provider ?? "");
         setIsTest(current.is_test);
@@ -112,6 +115,17 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
   }, [botId]);
 
   const active = providers?.find((p) => p.slug === slug) ?? null;
+
+  // Nineteen gateways in one flat grid is a wall to scan, and the only
+  // question anyone brings here is "which of these works for my country".
+  // Sections come from the server (see payments/__init__.py) and are dropped
+  // when empty, so this stays correct as gateways are added or moved.
+  const grouped = (regions.length ? regions : [{ slug: "global", title: "" }])
+    .map((region) => ({
+      ...region,
+      items: (providers ?? []).filter((p) => (p.region || "global") === region.slug),
+    }))
+    .filter((group) => group.items.length > 0);
   // Orders where the buyer says they paid on a provider nothing can verify —
   // these are stuck until the owner says yes or no, so they go on top.
   const awaiting = orders.filter((o) => o.needs_confirmation);
@@ -182,23 +196,28 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
 
               <div className="buttons-editor__field">
                 <span className="buttons-editor__field-label">Платёжная система</span>
-                <div className="payment-settings__providers">
-                  {providers.map((provider) => (
-                    <button
-                      key={provider.slug}
-                      type="button"
-                      className={`payment-settings__provider ${slug === provider.slug ? "payment-settings__provider--active" : ""}${
-                        provider.slug === "test" ? " payment-settings__provider--test" : ""
-                      }`}
-                      onClick={() => setSlug(provider.slug)}
-                    >
-                      <span className="payment-settings__provider-title">{provider.title}</span>
-                      {SHORT[provider.slug] && (
-                        <span className="payment-settings__provider-note">{SHORT[provider.slug]}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                {grouped.map((group) => (
+                  <div key={group.slug} className="payment-settings__region">
+                    {group.title && <p className="payment-settings__region-title">{group.title}</p>}
+                    <div className="payment-settings__providers">
+                      {group.items.map((provider) => (
+                        <button
+                          key={provider.slug}
+                          type="button"
+                          className={`payment-settings__provider ${slug === provider.slug ? "payment-settings__provider--active" : ""}${
+                            provider.slug === "test" ? " payment-settings__provider--test" : ""
+                          }`}
+                          onClick={() => setSlug(provider.slug)}
+                        >
+                          <span className="payment-settings__provider-title">{provider.title}</span>
+                          {SHORT[provider.slug] && (
+                            <span className="payment-settings__provider-note">{SHORT[provider.slug]}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
                 <button
                   type="button"
                   className={`payment-settings__none ${slug === "" ? "payment-settings__none--active" : ""}`}

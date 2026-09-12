@@ -33,15 +33,6 @@ export function useTelegramWebApp() {
   return { webApp, ready, initData, user };
 }
 
-/** Native-feeling confirm dialog — Telegram's own popup when available, browser confirm() as a fallback for dev outside Telegram. */
-export function confirmDialog(message: string): Promise<boolean> {
-  const webApp = window.Telegram?.WebApp;
-  if (webApp?.showConfirm) {
-    return new Promise((resolve) => webApp.showConfirm!(message, resolve));
-  }
-  return Promise.resolve(window.confirm(message));
-}
-
 /** Open a URL in the system browser — used to hand the user off from the
  * Mini App "dashboard" to the full web constructor. `Telegram.WebApp.openLink`
  * leaves the Mini App (unlike a plain <a>, which Telegram would open in its
@@ -66,6 +57,10 @@ declare global {
         ready: () => void;
         expand: () => void;
         close: () => void;
+        /** "light" | "dark" — Telegram's own resolved theme, used by src/theme.ts. */
+        colorScheme?: "light" | "dark";
+        onEvent?: (event: string, cb: () => void) => void;
+        offEvent?: (event: string, cb: () => void) => void;
         MainButton: {
           text: string;
           show: () => void;

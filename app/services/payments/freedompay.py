@@ -64,6 +64,7 @@ class FreedomPayProvider(ProviderDefaults):
         "Принимает карты Казахстана, Узбекистана, Кыргызстана и России."
     )
     currencies = ("KZT", "UZS", "KGS", "RUB", "USD", "EUR")
+    region = "ca"
     credential_fields = (
         CredentialField("merchant_id", "Merchant ID", "номер магазина из кабинета", secret=False),
         CredentialField("secret_key", "Секретный ключ", "секретный ключ мерчанта"),

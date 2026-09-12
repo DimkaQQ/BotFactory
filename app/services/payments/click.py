@@ -92,6 +92,7 @@ class ClickProvider(ProviderDefaults):
         "Click вызывает его дважды и оба раза мы отвечаем сами."
     )
     currencies = ("UZS",)
+    region = "ca"
     credential_fields = (
         CredentialField("service_id", "Service ID", "номер сервиса из кабинета", secret=False),
         CredentialField("merchant_id", "Merchant ID", "номер мерчанта", secret=False),

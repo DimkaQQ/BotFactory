@@ -27,7 +27,7 @@
     flex-wrap: wrap;
   }
 
-  .app-header__actions {
+  .app-header__top > .app-header__actions {
     width: 100%;
     justify-content: flex-end;
   }
@@ -67,7 +67,7 @@
   .screen--builder > .app-hint,
   .screen--builder > .miniapp-banner,
   .screen--builder > .published-banner,
-  .screen--builder > .chat-canvas__preview-btn {
+  .screen--builder > .flow-canvas__tools {
     flex: 0 0 auto;
   }
 }
@@ -112,6 +112,17 @@
   margin-bottom: var(--sp-4);
 }
 
+/* Toolbar row: the way out on the left, the tools on the right. */
+.app-header__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.app-header__bar .app-header__actions {
+  margin-left: auto;
+}
+
 .app-header__top {
   display: flex;
   align-items: center;
@@ -150,12 +161,15 @@
 .back-link {
   display: inline-flex;
   align-items: center;
+  /* Never the control that gives way when the bar runs out of room — it is
+     the only way back to the bot list. */
+  flex-shrink: 0;
+  white-space: nowrap;
   /* 27px tall is under every touch-target minimum there is, and this is the
      way out of the builder — the one control you reach for when something
      has gone wrong. The padding is asymmetric so the label still sits flush
      with the header text above it. */
   min-height: 44px;
-  margin-top: calc(var(--sp-2) * -1);
   border: none;
   background: transparent;
   color: var(--tg-link);
@@ -198,6 +212,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  /* It looks like a heading but behaves as a button (it opens the rename
+     field), and at its natural 29px it was the smallest target on the
+     screen. */
+  min-height: 44px;
   min-width: 0;
   cursor: pointer;
 }
@@ -284,7 +302,7 @@
 }
 
 .save-status--saved {
-  color: var(--accent-success);
+  color: var(--accent-success-ink);
 }
 
 .app-hint {
@@ -393,7 +411,7 @@
 }
 
 .published-banner__title strong {
-  color: var(--accent-success);
+  color: var(--accent-success-ink);
 }
 
 .published-banner__hint {
@@ -652,7 +670,7 @@
 }
 
 .bot-card__status--active {
-  color: var(--accent-success);
+  color: var(--accent-success-ink);
 }
 
 .bot-card__dot {
@@ -1005,26 +1023,6 @@
   color: var(--tg-button-text);
 }
 
-/* "Watch it play out" trigger, above the canvas */
-
-.chat-canvas__preview-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  margin-bottom: var(--sp-3);
-  padding: 10px;
-  border-radius: var(--radius-md);
-  border: none;
-  background: color-mix(in srgb, var(--tg-button) 12%, transparent);
-  color: var(--accent-on-surface);
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background var(--dur-base) var(--ease-smooth);
-}
-
 /* Composer-style "add message" bar */
 
 .chat-composer {
@@ -1183,8 +1181,12 @@
 
 .sheet__close {
   flex-shrink: 0;
+  /* 32px drawn, 44px tappable — see the ::after below. Sizing the circle up
+     to 44 instead would make a dismiss control shout louder than the sheet's
+     own title. */
   width: 32px;
   height: 32px;
+  position: relative;
   border: none;
   border-radius: 999px;
   background: var(--tg-secondary-bg);
@@ -1791,7 +1793,7 @@
 
 .buttons-editor__target-label {
   font-weight: 700;
-  color: var(--accent-success);
+  color: var(--accent-success-ink);
 }
 
 .buttons-editor__target--empty {
@@ -2137,8 +2139,8 @@
   max-width: min(420px, calc(100% - 2 * var(--sp-3)));
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--radius-md);
-  background: var(--tg-destructive);
-  color: #fff;
+  background: var(--danger-fill);
+  color: var(--danger-on-fill);
   font-size: 13px;
   box-shadow: var(--shadow-md);
 }
@@ -2161,6 +2163,9 @@
 
 .publish-form__actions button {
   flex: 1;
+  /* This pair is the moment a bot goes live, next to the one that abandons
+     the token just typed. */
+  min-height: 44px;
   padding: var(--sp-3);
   border-radius: 12px;
   border: none;
@@ -2307,7 +2312,8 @@
     color: var(--tg-button-text);
     font-size: 14.5px;
     font-weight: 600;
-    padding: 12px 20px;
+    min-height: 44px;
+    padding: 0 20px;
     border-radius: var(--radius-md);
     cursor: pointer;
     box-shadow: 0 8px 20px color-mix(in srgb, var(--tg-button) 35%, transparent);
@@ -2414,7 +2420,7 @@
   /* ----- Bot builder → two-pane shell with a persistent block library ----- */
 
   .screen--builder {
-    max-width: var(--shell-max);
+    max-width: var(--shell-max-canvas);
     margin: 0 auto;
     display: grid;
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
@@ -2439,7 +2445,9 @@
   .screen--builder > .miniapp-banner,
   .screen--builder > .published-banner,
   .screen--builder > .app-hint,
-  .screen--builder > .chat-canvas__preview-btn,
+  /* Explicit rather than relying on auto-placement skipping the sidebar
+     cell — that only happens to work while the library spans those rows. */
+  .screen--builder > .flow-canvas__tools,
   .screen--builder > .flow-canvas,
   .screen--builder > .flow-canvas__composer,
   .screen--builder > .app-footer {
@@ -2448,6 +2456,9 @@
 
   .screen--builder > .app-header {
     margin: 0;
+    /* The shared 1440px cap would re-indent the header inside the wider
+       canvas shell; here the grid column already sets the width. */
+    max-width: none;
   }
 
   .block-library {
@@ -3347,7 +3358,13 @@
   width: calc(100% - 2 * var(--sp-3));
   padding: var(--sp-7) var(--sp-4);
   border-radius: var(--radius-xl);
-  background: linear-gradient(135deg, var(--tg-button), color-mix(in srgb, var(--accent-description) 75%, var(--tg-button)));
+  /* The violet stop is pinned rather than taken from --accent-description:
+     that token is lifted to #a78bfa in dark mode, because its job there is to
+     read as an accent *on* a dark page. As a fill under white text it is the
+     wrong end of the scale — the far end of this gradient measured 3.34:1 for
+     the lead line. Both stops have to stay dark, in both themes, because the
+     text on them is always white. */
+  background: linear-gradient(135deg, var(--tg-button), color-mix(in srgb, #6d28d9 75%, var(--tg-button)));
   color: #fff;
   box-shadow: var(--shadow-elevated);
 }
@@ -3567,6 +3584,7 @@
   flex-shrink: 0;
   width: 32px;
   height: 32px;
+  position: relative;
   border-radius: 999px;
   border: none;
   background: var(--tg-secondary-bg);
@@ -3705,9 +3723,39 @@
    in FlowCanvas.tsx. Nothing here can sit on top of a block. */
 .flow-canvas__tools {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-2);
   justify-content: flex-end;
   margin-bottom: var(--sp-2);
+}
+
+/* "Смотреть, как в реальности" — the one control here that is about the bot
+   rather than about the view, so it is tinted and sits at the far end. */
+.flow-canvas__tool--preview {
+  margin-right: auto;
+  order: -1;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tg-button) 12%, transparent);
+  color: var(--accent-on-surface);
+  font-size: 13.5px;
+}
+
+.flow-canvas__tool-short {
+  display: none;
+}
+
+@media (max-width: 599px) {
+  .flow-canvas__tool-long {
+    display: none;
+  }
+
+  .flow-canvas__tool-short {
+    display: inline;
+  }
+}
+
+.flow-canvas__tool--preview:hover {
+  background: color-mix(in srgb, var(--tg-button) 20%, transparent);
 }
 
 .flow-canvas__tool {
@@ -3741,7 +3789,7 @@
 @media (hover: none) and (pointer: coarse) {
   /* Zoom is a pinch here, so −/+ are 88px of a phone's height spent on
      something the fingers already do. Only "вписать в экран" earns its place. */
-  .flow-canvas__tool:not(.flow-canvas__tool--wide) {
+  .flow-canvas__tool:not(.flow-canvas__tool--wide):not(.flow-canvas__tool--preview) {
     display: none;
   }
 
@@ -3750,7 +3798,10 @@
   }
 
   .flow-canvas__tool--wide {
-    min-height: 36px;
+    /* −/+ are hidden here, so this is the only canvas control a thumb can
+       reach; shaving it to 36px saved eight pixels of page and cost the
+       one target that mattered. */
+    min-height: 44px;
   }
 }
 
@@ -3864,7 +3915,7 @@
   padding: 2px 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-success) 16%, transparent);
-  color: var(--accent-success);
+  color: var(--accent-success-ink);
   font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -4109,8 +4160,12 @@
 .edit-panel__delete,
 .edit-panel__close {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  /* 40px visible, 44px tappable via the ::after below. These two sit side
+     by side and do opposite things — one closes the panel, the other
+     destroys the block — so a thumb-sized target is not decoration. */
+  width: 40px;
+  height: 40px;
+  position: relative;
   /* Centred properly: an emoji and a ✕ have different intrinsic baselines,
      so left to inline layout they sat at visibly different heights inside
      identical circles. */
@@ -4123,8 +4178,15 @@
   border: none;
   background: var(--tg-secondary-bg);
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: 15px;
   cursor: pointer;
+}
+
+.edit-panel__delete::after,
+.edit-panel__close::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
 }
 
 /* Delete is destructive and sits next to "close"; it should not look like
@@ -4336,6 +4398,21 @@
   gap: var(--sp-2);
 }
 
+/* One section per region. The heading is what turns nineteen tiles from a
+   wall into a list you can skip through. */
+.payment-settings__region + .payment-settings__region {
+  margin-top: var(--sp-4);
+}
+
+.payment-settings__region-title {
+  margin: 0 0 var(--sp-2);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
 .payment-settings__provider {
   display: flex;
   flex-direction: column;
@@ -4363,6 +4440,65 @@
   flex: 0 0 auto;
 }
 
+/* ---- Theme switch (light / dark / follow the system) ---- */
+
+.theme-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  /* 44px minimum on every side — this is a header control that gets
+     tapped with a thumb. */
+  min-width: 44px;
+  height: 44px;
+  padding: 0 10px;
+  border: 1.5px solid var(--tg-separator);
+  border-radius: var(--radius-md);
+  background: var(--tg-bg);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-smooth), background var(--dur-fast) var(--ease-smooth);
+}
+
+.theme-toggle:hover {
+  border-color: color-mix(in srgb, var(--tg-button) 45%, var(--tg-separator));
+}
+
+.theme-toggle:active {
+  background: var(--tg-secondary-bg);
+}
+
+.theme-toggle__glyph {
+  /* Emoji render a shade differently across platforms; a fixed box keeps
+     the button from resizing by a pixel or two as the state cycles. */
+  display: inline-block;
+  width: 18px;
+  text-align: center;
+}
+
+.theme-toggle__auto {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* On the landing there is no header to sit in. */
+.theme-toggle--floating {
+  position: fixed;
+  top: max(var(--sp-3), env(safe-area-inset-top));
+  right: max(var(--sp-3), env(safe-area-inset-right));
+  z-index: 30;
+  background: color-mix(in srgb, var(--tg-bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-card);
+}
+
 .payment-settings__provider-title {
   font-weight: 600;
 }
@@ -4384,6 +4520,7 @@
 
 .payment-settings__none {
   width: 100%;
+  min-height: 44px;
   margin-top: var(--sp-2);
   padding: 10px;
   border-radius: 12px;
@@ -4416,7 +4553,7 @@
 }
 
 .payment-settings__filled {
-  color: var(--accent-success);
+  color: var(--accent-success-ink);
   font-weight: 700;
 }
 
@@ -4456,6 +4593,7 @@
 
 .payment-settings__save {
   width: 100%;
+  min-height: 44px;
   padding: 12px;
   border: none;
   border-radius: var(--radius-md);
@@ -4543,7 +4681,7 @@
 .orders__total-value {
   font-size: 24px;
   font-weight: 700;
-  color: var(--accent-success);
+  color: var(--accent-success-ink);
   letter-spacing: -0.02em;
 }
 
@@ -4650,7 +4788,10 @@
 
 .bot-payments-button {
   flex-shrink: 0;
-  padding: 9px 14px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
   border-radius: var(--radius-md);
   border: 1.5px solid var(--tg-separator);
   background: var(--tg-bg);
@@ -4661,10 +4802,27 @@
   white-space: nowrap;
 }
 
+.bot-payments-button__short {
+  display: none;
+}
+
+/* Below this the bar cannot hold the long label, the theme control's "авто"
+   badge and a readable "← Мои боты" at once — measured, not guessed. */
+@media (max-width: 599px) {
+  .bot-payments-button__long,
+  .theme-toggle__auto {
+    display: none;
+  }
+
+  .bot-payments-button__short {
+    display: inline;
+  }
+}
+
 .bot-payments-button--on {
   border-color: color-mix(in srgb, var(--accent-success) 45%, transparent);
   background: color-mix(in srgb, var(--accent-success) 10%, transparent);
-  color: var(--accent-success);
+  color: var(--accent-success-ink);
 }
 
 /* ---- Publication paywall ---- */
@@ -4789,4 +4947,83 @@
   font-size: 13px;
   color: var(--text-secondary);
   text-align: center;
+}
+
+
+/* =========================================================================
+   Confirmation dialog (src/confirm.ts)
+
+   The web fallback for Telegram's native confirm sheet. A <dialog> in the
+   top layer, so it needs no z-index of its own and cannot be trapped under
+   the canvas or an edit panel.
+   ========================================================================= */
+
+.confirm-dialog {
+  width: min(360px, calc(100vw - 2 * var(--sp-4)));
+  padding: var(--sp-5);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--tg-bg);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-elevated);
+  /* A <dialog> does not inherit from body — without this it falls back to
+     the UA serif/Times stack. */
+  font-family: inherit;
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(10, 9, 16, 0.45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.confirm-dialog__text {
+  margin: 0 0 var(--sp-5);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.confirm-dialog__button {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 var(--sp-4);
+  border: 1.5px solid var(--tg-separator);
+  border-radius: var(--radius-md);
+  background: var(--tg-bg);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-smooth);
+}
+
+.confirm-dialog__button:hover {
+  background: var(--tg-secondary-bg);
+}
+
+/* The destructive choice is coloured but not pre-focused — see confirm.ts. */
+.confirm-dialog__button--danger {
+  border-color: transparent;
+  background: var(--danger-fill);
+  color: var(--danger-on-fill);
+}
+
+.confirm-dialog__button--danger:hover {
+  background: color-mix(in srgb, var(--danger-fill) 85%, #000000);
+}
+
+
+/* The dismiss controls stay visually small — they are not the point of the
+   sheet they sit on — but the finger gets its 44px either way. */
+.sheet__close::after,
+.live-preview__close::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
 }

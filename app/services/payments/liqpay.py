@@ -61,6 +61,7 @@ class LiqPayProvider(ProviderDefaults):
         "в кабинете его указывать не нужно."
     )
     currencies = ("UAH", "USD", "EUR")
+    region = "ua"
     supports_status_check = True
     credential_fields = (
         CredentialField("public_key", "public_key", "начинается с i… или sandbox_i…", secret=False),

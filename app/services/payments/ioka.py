@@ -70,6 +70,7 @@ class IokaProvider(ProviderDefaults):
         "спросит статус сам. Принимает тенге, рубли и доллары."
     )
     currencies = ("KZT", "RUB", "USD")
+    region = "ca"
     supports_status_check = True
     credential_fields = (CredentialField("api_key", "API-ключ", "секретный ключ магазина"),)
 

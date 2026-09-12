@@ -244,7 +244,7 @@ export const builderApi = {
     }),
 
   // ---- Payments ----
-  listPaymentProviders: () => request<{ providers: PaymentProviderInfo[] }>("/payments/providers"),
+  listPaymentProviders: () => request<PaymentProviderCatalogue>("/payments/providers"),
   getPaymentSettings: (botId: string) => request<PaymentSettings>(`/bots/${botId}/payment-settings`),
   savePaymentSettings: (botId: string, payload: { provider: string | null; is_test: boolean; credentials?: Record<string, string> }) =>
     request<PaymentSettings>(`/bots/${botId}/payment-settings`, { method: "PUT", body: JSON.stringify(payload) }),
@@ -263,11 +263,25 @@ export const builderApi = {
     request<{ status: string }>(`/bots/${botId}/orders/${paymentId}/reject`, { method: "POST" }),
 };
 
+export interface PaymentRegion {
+  slug: string;
+  title: string;
+}
+
+export interface PaymentProviderCatalogue {
+  providers: PaymentProviderInfo[];
+  /** Section headings for the provider grid, in display order. Comes from
+   * the server so a new gateway needs no frontend change. */
+  regions: PaymentRegion[];
+}
+
 export interface PaymentProviderInfo {
   slug: string;
   title: string;
   hint: string;
   currencies: string[];
+  /** Which `PaymentRegion` this gateway is filed under. */
+  region: string;
   /** Asked once per shop, in the settings panel. */
   fields: PaymentField[];
   /** Asked per product, on the payment block itself — Lava's offerId, the

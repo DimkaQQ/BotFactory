@@ -58,6 +58,7 @@ class CryptoBotProvider(ProviderDefaults):
     )
     # Assets the Crypto Pay API issues invoices in.
     currencies = ("USDT", "TON", "BTC", "ETH", "USDC", "BUSD")
+    region = "global"
     supports_status_check = True
     credential_fields = (CredentialField("token", "Токен приложения", "из @CryptoBot → Crypto Pay → Create App"),)
 

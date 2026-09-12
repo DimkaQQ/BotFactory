@@ -35,6 +35,7 @@ class RobokassaProvider(ProviderDefaults):
         "Там же укажи Result URL, который мы покажем ниже, и метод отправки POST. Счёт выставляется в валюте твоего магазина Robokassa — для тенге удобнее Freedom Pay, ioka или CloudPayments."
     )
     currencies = ("RUB",)
+    region = "ru"
     credential_fields = (
         CredentialField("merchant_login", "Идентификатор магазина", "MerchantLogin из кабинета", secret=False),
         CredentialField("password1", "Пароль #1", "Используется для подписи ссылки на оплату"),

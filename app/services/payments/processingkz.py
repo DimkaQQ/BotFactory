@@ -78,6 +78,7 @@ class ProcessingKzProvider(ProviderDefaults):
         "спрашивает статус, когда покупатель жмёт «Я оплатил» — адрес в кабинете указывать не нужно."
     )
     currencies = ("KZT", "RUB", "USD", "EUR")
+    region = "ca"
     supports_status_check = True
     # Nothing is ever posted to `/webhook/pay/processingkz`: the gateway has
     # no notification of its own, so the settings form has no address to show.

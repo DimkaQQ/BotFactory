@@ -39,6 +39,7 @@ class LifePayProvider(ProviderDefaults):
         "По умолчанию оплата идёт через СБП."
     )
     currencies = ("RUB",)
+    region = "ru"
     supports_status_check = True
     credential_fields = (
         CredentialField("login", "Логин (телефон администратора)", "7XXXXXXXXXX", secret=False),

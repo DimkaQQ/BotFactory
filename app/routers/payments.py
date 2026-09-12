@@ -247,7 +247,13 @@ async def payment_done() -> HTMLResponse:
 
 @router.get("/api/payments/providers")
 async def list_providers(_client: Client = Depends(get_current_client)) -> dict:
-    return {"providers": payment_providers.describe_providers()}
+    return {
+        "providers": payment_providers.describe_providers(),
+        # The section headings, in display order. Sent alongside rather than
+        # hardcoded in the constructor so adding a gateway is a backend-only
+        # change — see payments/__init__.py.
+        "regions": [{"slug": slug, "title": title} for slug, title in payment_providers.REGIONS],
+    }
 
 
 @router.get("/api/bots/{bot_id}/payment-settings", response_model=PaymentSettingsOut)

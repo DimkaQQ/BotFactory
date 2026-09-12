@@ -5,6 +5,7 @@ import { BLOCK_TYPES } from "../blockTypes";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
 import { HeroMockup } from "./HeroMockup";
 import { LandingDemo } from "./LandingDemo";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface Props {
   onLoggedIn: () => void;
@@ -149,6 +150,10 @@ export function LoginScreen({ onLoggedIn }: Props) {
 
   return (
     <div className="screen screen--login">
+      {/* The landing has no header bar to hang it off, so the theme control
+          floats in the corner — the one place it is reachable before login. */}
+      <ThemeToggle className="theme-toggle--floating" />
+
       {/* ===== Hero ===== */}
       <section className="landing-hero" ref={heroRef}>
         <div className="login-hero">

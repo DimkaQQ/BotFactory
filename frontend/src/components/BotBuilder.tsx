@@ -10,13 +10,15 @@ import {
   ApiError,
   builderApi,
 } from "../api/builderApi";
-import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
+import { confirmDialog } from "../confirm";
+import { openExternal } from "../hooks/useTelegramWebApp";
 import { BLOCK_TYPE_BY_ID } from "../blockTypes";
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { LivePreview } from "./LivePreview";
 import { PaymentSettingsPanel } from "./PaymentSettingsPanel";
 import { PublishPaywall } from "./PublishPaywall";
 import { PublishButton } from "./PublishButton";
+import { ThemeToggle } from "./ThemeToggle";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
 
@@ -404,9 +406,42 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     // "+ Добавить блок" bar and no block can be added on a phone.
     <div ref={screenRef} className="screen screen--builder">
       <header className="app-header">
-        <button type="button" className="back-link" onClick={onBack}>
-          ← Мои боты
-        </button>
+        {/* One bar for "out of here" and the tools. On a phone these used to
+            be two stacked 44px rows above the title — 56px of the canvas
+            spent on a layout accident. */}
+        <div className="app-header__bar">
+          <button type="button" className="back-link" onClick={onBack}>
+            ← Мои боты
+          </button>
+          <div className="app-header__actions">
+            {!isMiniApp && <ThemeToggle />}
+            {!isMiniApp && (
+              <button
+                type="button"
+                className={`bot-payments-button ${paymentSettings?.provider ? "bot-payments-button--on" : ""}`}
+                onClick={() => setPaymentPanelOpen(true)}
+                title="Платёжная система, через которую бот принимает деньги"
+              >
+                {/* Two labels, one shown at a time by CSS: on a 390px phone
+                    this bar also carries "← Мои боты", and the long form
+                    squeezed the way out of the builder to 49px. */}
+                💳 <span className="bot-payments-button__long">
+                  {paymentSettings?.provider ? "Касса подключена" : "Подключить кассу"}
+                </span>
+                <span className="bot-payments-button__short">Касса</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="bot-delete-button"
+              onClick={handleDeleteBot}
+              disabled={deleting}
+              aria-label="Удалить бота"
+            >
+              🗑
+            </button>
+          </div>
+        </div>
         <div className="app-header__top">
           <div className="app-header__icon" aria-hidden="true">
             🛠
@@ -459,21 +494,6 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               )}
             </p>
           </div>
-          <div className="app-header__actions">
-          {!isMiniApp && (
-            <button
-              type="button"
-              className={`bot-payments-button ${paymentSettings?.provider ? "bot-payments-button--on" : ""}`}
-              onClick={() => setPaymentPanelOpen(true)}
-              title="Платёжная система, через которую бот принимает деньги"
-            >
-              💳 {paymentSettings?.provider ? "Касса подключена" : "Подключить кассу"}
-            </button>
-          )}
-          <button type="button" className="bot-delete-button" onClick={handleDeleteBot} disabled={deleting} aria-label="Удалить бота">
-            🗑
-          </button>
-          </div>
         </div>
       </header>
 
@@ -514,12 +534,6 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         )
       )}
 
-      {bot.blocks.length > 0 && (
-        <button type="button" className="chat-canvas__preview-btn" onClick={() => setPreviewOpen(true)}>
-          ▶ Смотреть, как в реальности
-        </button>
-      )}
-
       <FlowCanvas
         bot={bot}
         onChangeContent={handleChangeContent}
@@ -531,6 +545,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         paymentProvider={paymentSettings?.provider ?? null}
         paymentCurrencies={paymentProviders.find((p) => p.slug === paymentSettings?.provider)?.currencies ?? []}
         paymentProviderInfo={paymentProviders.find((p) => p.slug === paymentSettings?.provider) ?? null}
+        onPreview={bot.blocks.length > 0 ? () => setPreviewOpen(true) : undefined}
         onOpenPaymentSettings={() => setPaymentPanelOpen(true)}
         disabled={isMiniApp}
       />

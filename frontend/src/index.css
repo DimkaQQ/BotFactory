@@ -30,6 +30,14 @@
   --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
   --tg-separator: var(--tg-theme-section-separator-color, rgba(20, 18, 31, 0.1));
   --tg-destructive: var(--tg-theme-destructive-text-color, #dc2626);
+  /* Destructive as a *fill* behind white text, which is a different job from
+     --tg-destructive. That one has to stay legible as text on the page, so
+     in dark mode it is a light red (#f87171) — and white on #f87171 measured
+     2.77:1 on the "Удалить" button of the confirm dialog. This one is fixed
+     across both themes: white on it is 4.83:1, and it is 3.91:1 against the
+     dark page, so the button's own edge stays visible too. */
+  --danger-fill: #dc2626;
+  --danger-on-fill: #ffffff;
 
   /* Text hierarchy via opacity of the base text color. */
   --text-primary: var(--tg-text);
@@ -81,10 +89,24 @@
   --accent-delivery: #047857;
   --accent-delay: #475569;
   --accent-success: #059669;
+  /* The same green as *text*. #059669 is chosen to read as a fill/dot on the
+     off-white page; set as a label on its own 16% tint — the "START" badge on
+     the start block — it measured 3.68:1, under AA for a 9.5px bold label.
+     A darker ink clears it at 6.2:1 and still reads as the same green. In
+     dark mode the accent is already light enough to double as ink. */
+  --accent-success-ink: #065f46;
 
   /* Desktop shell (web constructor only — the Mini App never reaches
-     these widths). */
-  --shell-max: 1180px;
+     these widths).
+
+     Two widths, because the two screens want different things. The bot
+     list is a card grid that reads better with a limit — past ~1440px the
+     cards either stretch into letterboxes or the eye has to travel too far
+     across a row. The builder is a *canvas*: at 1920 the old shared 1180px
+     limit left 740px of empty page while the graph sat squeezed into an
+     876px column, which is the opposite of what a diagram wants. */
+  --shell-max: 1440px;
+  --shell-max-canvas: 1760px;
   --sidebar-w: 272px;
 
   /* Motion system — a small, consistent vocabulary instead of ad-hoc
@@ -101,51 +123,61 @@
 }
 
 /* Dark theme for the web constructor.
-   `color-scheme: light dark` above already tells the browser to draw native
-   widgets — selects, scrollbars, autofill — dark for a viewer who prefers
-   it, so without this block those widgets appeared dark on a page that
-   stayed stubbornly light.
 
-   Only the six source tokens are redefined; everything else in the palette
-   is derived from them, so the whole app follows. These are *fallbacks*
+   Keyed on the *resolved* theme attribute rather than a
+   `prefers-color-scheme` media query. src/theme.ts (and the inline
+   bootstrap in index.html, which runs before first paint) always writes
+   `data-theme="light"` or `"dark"` onto <html> — from the stored
+   preference when there is one, otherwise from Telegram's colorScheme or
+   the OS. That keeps this palette in exactly one place: a media query
+   would have to be repeated for the manual switch, and two copies of
+   twenty colour tokens drift.
+
+   Only the source tokens are redefined; everything else in the palette is
+   derived from them, so the whole app follows. These are *fallbacks*
    inside `var(--tg-theme-*, …)`, which means the Mini App is untouched:
    when Telegram injects its own theme, its values win here exactly as they
    do in light mode. */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --tg-bg: var(--tg-theme-bg-color, #0f0e16);
-    --tg-text: var(--tg-theme-text-color, #f2f0fa);
-    --tg-hint: var(--tg-theme-hint-color, #9997ad);
-    --tg-link: var(--tg-theme-link-color, #a5b4fc);
-    /* #6366f1 measured 3.84:1 for the brand badge and 4.47:1 for white
-       text on the primary button — both just under AA on this ground.
-       #4f46e5 is darker behind white text (5.4:1) and the badge now
-       takes --tg-link, which was already light enough. */
-    --tg-button: var(--tg-theme-button-color, #4f46e5);
-    --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
-    --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #1a1826);
-    --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
-    --tg-separator: var(--tg-theme-section-separator-color, rgba(242, 240, 250, 0.12));
-    --tg-destructive: var(--tg-theme-destructive-text-color, #f87171);
+:root[data-theme="light"] {
+  color-scheme: light;
+}
 
-    /* Shadows are mixed from --tg-text, which is now nearly white — left
-       alone they would light the cards up instead of lifting them. On a
-       dark ground depth comes from a darker shadow, not a softer one. */
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.36);
-    --shadow-elevated: 0 2px 4px rgba(0, 0, 0, 0.45), 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+:root[data-theme="dark"] {
+  color-scheme: dark;
 
-    /* The jewel tones are chosen to sit on off-white; at these depths they
-       disappear into a dark background. Same hues, lifted. */
-    --accent-welcome: #818cf8;
-    --accent-description: #a78bfa;
-    --accent-image: #e879f9;
-    --accent-video: #fb7185;
-    --accent-buttons: #fbbf24;
-    --accent-poll: #22d3ee;
-    --accent-delivery: #34d399;
-    --accent-delay: #94a3b8;
-    --accent-success: #34d399;
-  }
+  --tg-bg: var(--tg-theme-bg-color, #0f0e16);
+  --tg-text: var(--tg-theme-text-color, #f2f0fa);
+  --tg-hint: var(--tg-theme-hint-color, #9997ad);
+  --tg-link: var(--tg-theme-link-color, #a5b4fc);
+  /* #6366f1 measured 3.84:1 for the brand badge and 4.47:1 for white
+     text on the primary button — both just under AA on this ground.
+     #4f46e5 is darker behind white text (5.4:1) and the badge now
+     takes --tg-link, which was already light enough. */
+  --tg-button: var(--tg-theme-button-color, #4f46e5);
+  --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
+  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #1a1826);
+  --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
+  --tg-separator: var(--tg-theme-section-separator-color, rgba(242, 240, 250, 0.12));
+  --tg-destructive: var(--tg-theme-destructive-text-color, #f87171);
+
+  /* Shadows are mixed from --tg-text, which is now nearly white — left
+     alone they would light the cards up instead of lifting them. On a
+     dark ground depth comes from a darker shadow, not a softer one. */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.36);
+  --shadow-elevated: 0 2px 4px rgba(0, 0, 0, 0.45), 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+
+  /* The jewel tones are chosen to sit on off-white; at these depths they
+     disappear into a dark background. Same hues, lifted. */
+  --accent-welcome: #818cf8;
+  --accent-description: #a78bfa;
+  --accent-image: #e879f9;
+  --accent-video: #fb7185;
+  --accent-buttons: #fbbf24;
+  --accent-poll: #22d3ee;
+  --accent-delivery: #34d399;
+  --accent-delay: #94a3b8;
+  --accent-success: #34d399;
+  --accent-success-ink: #34d399;
 }
 
 @media (prefers-reduced-motion: reduce) {

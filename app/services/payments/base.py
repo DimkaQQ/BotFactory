@@ -98,6 +98,11 @@ class PaymentProvider(Protocol):
     hint: str
     #: Currencies the adapter is known to handle, uppercase ISO codes.
     currencies: tuple[str, ...]
+    #: Which of `REGIONS` this gateway belongs to. Purely a catalogue
+    #: concern — nothing in the payment flow reads it — but a flat list of
+    #: nineteen providers is a wall, and "which of these works for a shop in
+    #: Almaty" is the first question anyone actually has.
+    region: str
     credential_fields: tuple[CredentialField, ...]
     #: True when `check_status` can ask the provider outright whether a
     #: payment went through. Drives the "Я оплатил" button in the bot: with a
@@ -197,6 +202,9 @@ class ProviderDefaults:
     #: does have its own test gateway — with no way to be switched to the
     #: live one, since `payment_is_test` defaults to True.
     has_test_mode = True
+    #: Most providers are country-specific and say so; "works everywhere" is
+    #: the safe default for the handful that genuinely do.
+    region = "global"
     block_fields: tuple[CredentialField, ...] = ()
 
     async def check_status(

@@ -67,6 +67,7 @@ class TBankProvider(ProviderDefaults):
         "который мы покажем ниже."
     )
     currencies = ("RUB",)
+    region = "ru"
     supports_status_check = True
     credential_fields = (
         CredentialField("terminal_key", "Terminal Key", "идентификатор терминала", secret=False),

@@ -38,6 +38,7 @@ class YooKassaProvider(ProviderDefaults):
         "укажи в кабинете («Интеграция → HTTP-уведомления», событие payment.succeeded)."
     )
     currencies = ("RUB",)
+    region = "ru"
     supports_status_check = True
     credential_fields = (
         CredentialField("shop_id", "shopId", "идентификатор магазина", secret=False),

@@ -39,6 +39,7 @@ class LinkProvider(ProviderDefaults):
         "заказ — в боте или в списке заказов — и бот сразу выдаёт товар."
     )
     currencies = ("RUB", "KZT", "USD", "EUR", "UAH", "BYN")
+    region = "manual"
     credential_fields = ()
     uses_callback = False
     has_test_mode = False

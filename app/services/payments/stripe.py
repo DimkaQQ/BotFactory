@@ -42,6 +42,7 @@ class StripeProvider(ProviderDefaults):
     title = "Stripe"
     hint = "Secret key (sk_live_… или sk_test_…) — в Stripe Dashboard → Developers → API keys. Webhook secret (whsec_…) появится, когда добавишь наш URL в Developers → Webhooks на событие checkout.session.completed."
     currencies = ("USD", "EUR", "GBP", "KZT", "PLN", "TRY", "AED")
+    region = "global"
     credential_fields = (
         CredentialField("secret_key", "Secret key", "sk_live_… или sk_test_…"),
         CredentialField("webhook_secret", "Webhook signing secret", "whsec_… из настроек вебхука"),

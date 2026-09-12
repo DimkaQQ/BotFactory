@@ -38,6 +38,7 @@ class PayMasterProvider(ProviderDefaults):
         "сайтов. Адрес уведомления мы передаём в самом счёте, отдельно настраивать не нужно."
     )
     currencies = ("RUB",)
+    region = "ru"
     supports_status_check = True
     credential_fields = (
         CredentialField("merchant_id", "merchantId", "UUID сайта в PayMaster", secret=False),

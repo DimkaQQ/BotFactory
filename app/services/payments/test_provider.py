@@ -18,6 +18,7 @@ class TestProvider(ProviderDefaults):
     title = "Тестовая оплата (без денег)"
     hint = "Ничего не подключает: страница оплаты сразу отмечает заказ оплаченным. Нужна, чтобы проверить сценарий целиком — блок оплаты, выдачу после неё — до подключения настоящего провайдера."
     currencies = ("RUB", "KZT", "USD", "EUR")
+    region = "manual"
     credential_fields = ()
     uses_callback = False
     has_test_mode = False

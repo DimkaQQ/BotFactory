@@ -63,6 +63,7 @@ class TelegramStarsProvider(ProviderDefaults):
         "Звёзды выводятся через Fragment примерно через 21 день после оплаты."
     )
     currencies = ("XTR",)
+    region = "global"
     credential_fields = ()
     uses_callback = False
     has_test_mode = False

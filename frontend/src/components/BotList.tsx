@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { type Bot, ApiError, builderApi } from "../api/builderApi";
-import { confirmDialog, openExternal } from "../hooks/useTelegramWebApp";
+import { confirmDialog } from "../confirm";
+import { openExternal } from "../hooks/useTelegramWebApp";
 import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
 import { useEscape } from "../hooks/useEscape";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
+import { ThemeToggle } from "./ThemeToggle";
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
@@ -77,16 +79,31 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
       }
       // Sequential on purpose — order_index falls back to "append", so
       // blocks must land in template order, not race each other.
-      // Laid out as a column, stepping right after a buttons block so its
-      // branch arrow reads as a branch instead of looping back on itself.
+      //
+      // Laid out along whichever axis the canvas has room in, because the
+      // first thing anyone sees is the whole graph framed by fitView, and a
+      // graph laid out across the short axis opens illegibly small. The
+      // seven-block template measured 540x1211 as a column: 0.39 zoom on a
+      // laptop, where block titles are a blur. The same chain as a row is
+      // about 1760x420, which frames at 0.61 there and 0.79 on a 1920
+      // screen. Below 960px the trade flips — that canvas is taller than it
+      // is wide, and a row would open at 0.20 — so narrow screens keep the
+      // column. 960px is the same breakpoint the desktop shell uses.
+      // Either way the step perpendicular to the flow after a buttons block
+      // makes its branch read as a branch instead of a loop back.
+      const acrossTheWidth = window.innerWidth >= 960;
       const created = [];
-      let x = 80;
       // Clear of the "▶ Старт" pseudo-node, which sits at (40, 40).
+      let x = 80;
       let y = 170;
       for (const [index, block] of template.blocks.entries()) {
-        if (template.blocks[index - 1]?.block_type === "buttons") x += 280;
+        if (template.blocks[index - 1]?.block_type === "buttons") {
+          if (acrossTheWidth) y += 220;
+          else x += 280;
+        }
         created.push(await builderApi.createBlock(bot.id, block.block_type, block.content, { x, y }));
-        y += 190;
+        if (acrossTheWidth) x += 300;
+        else y += 190;
       }
 
       // Then wire them into an actual chain. A template arriving as a pile
@@ -160,11 +177,14 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
             <h1>Мои боты</h1>
             {greetingName && <p className="app-header__greeting">Привет, {greetingName}!</p>}
           </div>
-          {!isMiniApp && (
-            <button type="button" className="header-create-button" onClick={handleCreateClick}>
-              + Новый бот
-            </button>
-          )}
+          <div className="app-header__actions">
+            {!isMiniApp && <ThemeToggle />}
+            {!isMiniApp && (
+              <button type="button" className="header-create-button" onClick={handleCreateClick}>
+                + Новый бот
+              </button>
+            )}
+          </div>
         </div>
         {isMiniApp && (
           <p className="app-hint" style={{ marginTop: "var(--sp-3)" }}>

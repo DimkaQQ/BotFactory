@@ -63,6 +63,31 @@ def test_every_provider_satisfies_the_interface():
             assert set(field) == {"key", "label", "hint", "secret"}
 
 
+def test_every_provider_is_filed_under_a_real_region():
+    """The settings form groups the catalogue by region and drops sections
+    with nothing in them. A provider carrying a region that is not in
+    REGIONS would therefore vanish from the UI entirely — installed,
+    configurable through the API, and invisible to the only people who can
+    configure it."""
+    from app.services.payments import PROVIDERS, REGIONS, describe_providers
+
+    known = {slug for slug, _title in REGIONS}
+    assert len(known) == len(REGIONS), "в REGIONS повторяется slug"
+
+    for slug, provider in PROVIDERS.items():
+        assert provider.region in known, f"{slug}: неизвестный регион {provider.region!r}"
+
+    # And the catalogue actually carries it — grouping reads this field, not
+    # the Python attribute.
+    for entry in describe_providers():
+        assert entry["region"] in known
+
+    # Every section that exists has something in it, or the heading would
+    # be dead weight the form has to hide.
+    used = {p.region for p in PROVIDERS.values()}
+    assert used == known, f"пустые разделы: {known - used}"
+
+
 # ------------------------------------------------------------------- Prodamus
 
 

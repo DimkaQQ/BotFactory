@@ -267,7 +267,8 @@ async def test_the_provider_catalogue_is_enough_to_render_the_settings_form(api,
     `PROVIDERS` proved nothing; what matters is that every entry carries what
     the form needs, and that no secret comes along for the ride."""
     response = await api.get("/api/payments/providers", headers=auth(owner))
-    catalogue = response.json()["providers"]
+    body = response.json()
+    catalogue = body["providers"]
 
     assert len(catalogue) >= 15
     for entry in catalogue:
@@ -285,6 +286,16 @@ async def test_the_provider_catalogue_is_enough_to_render_the_settings_form(api,
     # one that has neither.
     assert by_slug["processingkz"] == {**by_slug["processingkz"], "uses_callback": False, "has_test_mode": True}
     assert by_slug["link"] == {**by_slug["link"], "uses_callback": False, "has_test_mode": False}
+
+    # The form draws a section per region and skips empty ones, so every
+    # provider has to land in a section the response also describes —
+    # otherwise it is configurable over the API and invisible in the UI.
+    regions = body["regions"]
+    assert regions, "без разделов форма отрисует один безымянный список"
+    known = {r["slug"] for r in regions}
+    assert all(r["title"] for r in regions), "раздел без заголовка"
+    for entry in catalogue:
+        assert entry["region"] in known, f"{entry['slug']} в неизвестном разделе"
 
 
 async def test_sales_totals_cover_every_order_and_keep_currencies_apart(api, auth, owner, make_bot, db):

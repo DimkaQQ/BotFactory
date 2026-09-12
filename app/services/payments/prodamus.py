@@ -123,6 +123,7 @@ class ProdamusProvider(ProviderDefaults):
         "(urlNotification) мы подставляем сами, отдельно в кабинете его прописывать не нужно."
     )
     currencies = ("RUB",)
+    region = "ru"
     credential_fields = (
         CredentialField("shop_domain", "Домен платёжной формы", "myshop.payform.ru", secret=False),
         CredentialField("secret_key", "Секретный ключ", "из раздела «Интеграции» в кабинете"),

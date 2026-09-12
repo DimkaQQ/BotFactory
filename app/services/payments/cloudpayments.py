@@ -58,6 +58,7 @@ class CloudPaymentsProvider(ProviderDefaults):
         "Работает с рублями и тенге."
     )
     currencies = ("RUB", "KZT", "USD", "EUR", "UAH")
+    region = "ru"
     supports_status_check = True
     credential_fields = (
         CredentialField("public_id", "Public ID", "pk_… из кабинета", secret=False),

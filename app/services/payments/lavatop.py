@@ -53,6 +53,7 @@ class LavaTopProvider(ProviderDefaults):
         "товар выдаёт бот, а не Lava. Адрес для вебхуков задаётся в ЛК, там же включи авторизацию."
     )
     currencies = ("RUB", "USD", "EUR")
+    region = "ru"
     supports_status_check = True
     credential_fields = (
         CredentialField("api_key", "API-ключ", "заголовок X-Api-Key из настроек аккаунта"),
