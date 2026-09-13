@@ -8,7 +8,14 @@ from sqlalchemy import engine_from_config, pool
 sys.path.insert(0, os.getcwd())
 
 from app.database import Base  # noqa: E402
-from app.models import Bot, BotBlock, Client  # noqa: E402,F401  (register models on Base.metadata)
+from app.models import (  # noqa: E402,F401  (register models on Base.metadata)
+    Bot,
+    BotBlock,
+    BotSubscriber,
+    Client,
+    ScheduledStep,
+    Subscription,
+)
 
 config = context.config
 

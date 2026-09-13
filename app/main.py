@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.routers import auth, bots, builder, media, payments, webhook
-from app.services import background, bot_registry, payment_service
+from app.services import background, bot_registry, payment_service, scheduler, subscription_service
 
 logging.basicConfig(level=logging.INFO)
 
@@ -24,6 +24,16 @@ async def lifespan(app: FastAPI):
     # And keep looking: a delivery can also fail mid-flight (Telegram 5xx, a
     # rate limit), and until this existed the only retry was the next deploy.
     background.spawn(payment_service.redeliver_forever(), name="redeliver-forever", daemon=True)
+    # Conversations that were told to continue later — a long "Пауза", a
+    # renewal reminder. Run once at boot before the loop starts, because
+    # everything that came due while the process was down is due *now*.
+    background.spawn(scheduler.run_due(), name="scheduled-steps-catchup")
+    background.spawn(scheduler.run_forever(), name="scheduled-steps", daemon=True)
+    # And close out periods that ran out while nobody was watching. Separate
+    # from the queue above on purpose: access must end when the period ends
+    # even if no step survived to say so.
+    background.spawn(subscription_service.expire_due(), name="subscriptions-catchup")
+    background.spawn(subscription_service.expire_forever(), name="subscriptions-expiry", daemon=True)
     yield
     # Dialogues and deliveries scheduled off a request are still in flight;
     # give them a moment to finish rather than dropping a buyer's goods

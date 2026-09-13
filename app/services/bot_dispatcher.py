@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bot import Bot as BotModel
 from app.models.bot_block import BlockType, BotBlock
+from app.services import scheduler, subscribers
 
 logger = logging.getLogger(__name__)
 
@@ -339,17 +340,24 @@ async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
         await bot.send_message(chat_id, text or "…", reply_markup=keyboard)
 
 
-async def _walk_chain(
+async def walk_chain(
     bot: Bot,
     chat_id: int,
     start_block_id: uuid.UUID,
     bot_id: uuid.UUID,
     db: AsyncSession,
     telegram_user_id: int | None = None,
+    subscription_id: uuid.UUID | None = None,
 ) -> None:
     """Send `start_block_id` and keep following next_block_id, pausing for
     typing/delay between steps, until the chain ends or hits a branch
-    point (a buttons block with at least one connected button)."""
+    point (a buttons block with at least one connected button).
+
+    A long "Пауза" ends the walk too — the rest of the chain is handed to
+    the scheduler and resumes from here, in a later process, whenever the
+    pause is up. `subscription_id` rides along so that everything queued
+    downstream stays attached to the subscription that started it and can
+    be withdrawn in one go when it lapses."""
 
     next_id: uuid.UUID | None = start_block_id
     visited: set[uuid.UUID] = set()
@@ -388,12 +396,30 @@ async def _walk_chain(
                     return
             elif block.block_type == BlockType.delay:
                 # A bare pause — no message of its own, just stretches the
-                # gap before the next block. Clamped defensively: the
-                # webhook request stays open for this long, and both
-                # Telegram and a reverse proxy in front of us have their
-                # own patience limits.
-                seconds = (block.content or {}).get("seconds", 2)
-                await _pause(db, max(0.0, min(float(seconds), 15.0)))
+                # gap before the next block.
+                #
+                # Short pauses are simply waited out here: they are pacing,
+                # and a round trip to the scheduler would cost more than the
+                # pause itself. Anything longer hands the rest of the chain
+                # to the scheduler and ends this walk — the webhook request
+                # is held open for an inline pause, and neither Telegram nor
+                # a reverse proxy will wait a week. That single branch is
+                # what turns "Пауза" from a typing-rhythm effect into the
+                # thing a subscription needs: the next video, next Tuesday.
+                seconds = max(0.0, float((block.content or {}).get("seconds", 2) or 0))
+                if seconds > scheduler.INLINE_PAUSE_SECONDS:
+                    await scheduler.schedule(
+                        db,
+                        bot_id=bot_id,
+                        block_id=block.next_block_id,
+                        chat_id=chat_id,
+                        telegram_user_id=telegram_user_id,
+                        delay_seconds=seconds,
+                        reason="delay",
+                        subscription_id=subscription_id,
+                    )
+                    return
+                await _pause(db, seconds)
             else:
                 if not first:
                     text = (block.content or {}).get("text") or ""
@@ -466,7 +492,7 @@ async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UU
         return
 
     tapped_by = (callback_query.get("from") or {}).get("id")
-    await _walk_chain(bot, chat_id, target_id, bot_id, db, telegram_user_id=tapped_by)
+    await walk_chain(bot, chat_id, target_id, bot_id, db, telegram_user_id=tapped_by)
 
 
 async def _handle_pre_checkout(bot: Bot, query: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
@@ -537,15 +563,78 @@ async def _handle_successful_payment(bot: Bot, message: dict, bot_id: uuid.UUID,
             charge_id=str(payload.get("telegram_payment_charge_id") or ""),
             total_amount=int(payload.get("total_amount") or 0),
             amount_minor=payment.amount_minor,
+            # A monthly Stars renewal arrives here: same invoice payload,
+            # thirty days later, with nobody having tapped anything. These
+            # flags are how it is told apart from the first charge.
+            is_recurring=bool(payload.get("is_recurring")),
+            is_first_recurring=bool(payload.get("is_first_recurring")),
+            subscription_expiration=payload.get("subscription_expiration_date"),
         )
     except ProviderError as exc:
         logger.error("Bot %s: refusing Stars payment %s — %s", bot_id, payment_id, exc)
         return
 
+    if payload.get("is_recurring") and not payload.get("is_first_recurring"):
+        # A renewal, not a purchase. `apply_result` would find the payment
+        # already `paid` and do nothing at all — including not extending the
+        # period, which is the only thing this update exists to do.
+        from app.services import subscription_service
+
+        await payment_service._remember(db, payment, verdict)
+        subscription = await subscription_service.start_or_extend(db, payment)
+        if subscription is None:
+            logger.warning("Bot %s: Stars renewal for payment %s has no subscription", bot_id, payment_id)
+        else:
+            await _tell_them_renewed(bot, subscription)
+        return
+
     await payment_service.apply_result(db, payment, verdict)
 
 
+async def _tell_them_renewed(bot: Bot, subscription) -> None:
+    """A charge nobody initiated should still be announced — silence after
+    money leaves an account is how a subscription becomes a complaint."""
+    until = subscription.current_period_end.strftime("%d.%m.%Y")
+    with contextlib.suppress(Exception):
+        await bot.send_message(
+            subscription.chat_id,
+            f"🔁 Подписка «{subscription.title}» продлена — доступ открыт до {until}.",
+        )
+
+
+def _sender_and_chat(update: dict) -> tuple[dict | None, int | None]:
+    """The person and the chat behind any of the update shapes we handle."""
+    for key in ("message", "callback_query", "pre_checkout_query", "poll_answer"):
+        payload = update.get(key)
+        if not payload:
+            continue
+        user = payload.get("from") or payload.get("user")
+        chat = payload.get("chat") or (payload.get("message") or {}).get("chat") or {}
+        chat_id = chat.get("id")
+        # A pre-checkout query carries no chat of its own; in a private
+        # conversation the user id is the chat id, which is the only case
+        # a bot's own updates can be in.
+        if chat_id is None and user:
+            chat_id = user.get("id")
+        return user, chat_id
+    return None, None
+
+
 async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
+    # Before anything is answered: record who this is. Every later capability
+    # — naming the buyer in the sales log, sending next week's video, kicking
+    # a lapsed subscriber out of a group — needs a person to attach to, and
+    # the update is the only place that information ever appears.
+    user, sender_chat_id = _sender_and_chat(update)
+    if user is not None:
+        await subscribers.remember(
+            db,
+            bot_id=bot_id,
+            telegram_user_id=user.get("id"),
+            chat_id=sender_chat_id,
+            user=user,
+        )
+
     callback_query = update.get("callback_query")
     if callback_query:
         await _handle_callback_query(bot, callback_query, bot_id, db)
@@ -588,4 +677,4 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
         await bot.send_message(chat_id, "Этот бот пока пуст 🤷")
         return
 
-    await _walk_chain(bot, chat_id, start_block_id, bot_id, db, telegram_user_id=sender_id)
+    await walk_chain(bot, chat_id, start_block_id, bot_id, db, telegram_user_id=sender_id)

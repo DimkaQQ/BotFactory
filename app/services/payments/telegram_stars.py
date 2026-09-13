@@ -40,6 +40,12 @@ from app.services.telegram_session import build_bot_session
 _MIN_STARS = 1
 _MAX_STARS = 100_000
 
+#: Telegram accepts exactly one subscription period today: 30 days. Named
+#: rather than inlined so the day it accepts more, there is one place to look.
+SUBSCRIPTION_PERIOD_SECONDS = 2592000
+#: Subscriptions are capped lower than one-off invoices by Telegram itself.
+_MAX_SUBSCRIPTION_STARS = 2500
+
 
 def stars_from_minor(amount_minor: int) -> int:
     """Prices are stored in minor units throughout, so 250 stars is held as
@@ -74,6 +80,18 @@ class TelegramStarsProvider(ProviderDefaults):
         stars = stars_from_minor(request.amount_minor)
 
         title = (request.description or "Покупка").strip()[:32]
+        # A subscription invoice differs from a one-off one by a single
+        # argument — and that argument is the whole difference between a
+        # product that charges once and one that charges every month, with
+        # Telegram doing the charging and the subscriber able to cancel from
+        # inside Telegram. Of the twenty providers here it is the only one
+        # that can take money a second time on its own.
+        period = SUBSCRIPTION_PERIOD_SECONDS if request.extra.get("subscription") else None
+        if period is not None and stars > _MAX_SUBSCRIPTION_STARS:
+            raise ProviderError(
+                f"Telegram Stars: подписка не может стоить дороже {_MAX_SUBSCRIPTION_STARS} ⭐ за месяц"
+            )
+
         bot = Bot(token=request.bot_token, session=build_bot_session())
         try:
             url = await bot.create_invoice_link(
@@ -87,13 +105,14 @@ class TelegramStarsProvider(ProviderDefaults):
                 payload=str(request.payment_id),
                 currency="XTR",
                 prices=[LabeledPrice(label=title, amount=stars)],
+                subscription_period=period,
             )
         except Exception as exc:  # aiogram raises its own family of errors
             raise ProviderError(f"Telegram Stars: {exc}") from exc
         finally:
             await bot.session.close()
 
-        return Checkout(url=url, meta={"stars": stars})
+        return Checkout(url=url, meta={"stars": stars, "subscription_period": period})
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
         # Stars never call our payment webhook — the money lands as a
@@ -117,15 +136,36 @@ class TelegramStarsProvider(ProviderDefaults):
         raise ProviderError("Telegram Stars: оплата подтверждается через webhook самого бота, не здесь")
 
 
-def settled(charge_id: str, total_amount: int, amount_minor: int) -> WebhookResult:
+def settled(
+    charge_id: str,
+    total_amount: int,
+    amount_minor: int,
+    *,
+    is_recurring: bool = False,
+    is_first_recurring: bool = False,
+    subscription_expiration: int | None = None,
+) -> WebhookResult:
     """What the dispatcher turns a `successful_payment` into.
 
     Telegram vouched for this update by delivering it on the bot's own
     webhook, so there is no signature to check — but the amount is still
     compared, because a stale invoice link for a since-lowered price would
     otherwise unlock the current product.
+
+    The recurrence flags are passed through rather than interpreted here: a
+    renewal arrives as an ordinary `successful_payment` on the same payload,
+    thirty days later and with nobody having tapped anything, and it is the
+    subscription layer's job to decide what that means.
     """
     expected = amount_minor // 100
     if total_amount != expected:
         raise ProviderError(f"Telegram Stars: оплачено {total_amount} ⭐ вместо {expected} ⭐")
-    return WebhookResult(status=PaymentStatus.paid, provider_payment_id=charge_id)
+    return WebhookResult(
+        status=PaymentStatus.paid,
+        provider_payment_id=charge_id,
+        meta={
+            "is_recurring": bool(is_recurring),
+            "is_first_recurring": bool(is_first_recurring),
+            "subscription_expiration": subscription_expiration,
+        },
+    )

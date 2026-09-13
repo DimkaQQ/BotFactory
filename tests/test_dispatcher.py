@@ -120,7 +120,7 @@ async def test_a_cycle_in_the_graph_stops_itself(db, owner, make_bot, telegram):
     await db.commit()
 
     await asyncio.wait_for(
-        bot_dispatcher._walk_chain(telegram, CHAT_ID, loop_a.id, bot.id, db), timeout=10
+        bot_dispatcher.walk_chain(telegram, CHAT_ID, loop_a.id, bot.id, db), timeout=10
     )
 
     assert len(telegram.sent()) <= bot_dispatcher._MAX_CHAIN_STEPS

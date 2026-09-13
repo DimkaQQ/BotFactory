@@ -491,7 +491,7 @@ async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
 
         await bot_instance.send_message(payment.chat_id, "✅ Оплата получена, спасибо!")
         if target:
-            await bot_dispatcher._walk_chain(
+            await bot_dispatcher.walk_chain(
                 bot_instance,
                 payment.chat_id,
                 uuid.UUID(str(target)),
@@ -622,8 +622,20 @@ async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: b
 
     if result.status == PaymentStatus.paid:
         if await mark_paid(db, payment, result.provider_payment_id):
+            # Before delivery, not after: a Stars renewal arrives as an
+            # ordinary successful_payment on the original invoice, and the
+            # period has to be pushed out even if the goods themselves fail
+            # to send. Losing a month of paid access to a Telegram hiccup is
+            # not a trade worth making.
+            from app.services import subscription_service
+
+            try:
+                await subscription_service.start_or_extend(db, payment)
+            except Exception:
+                logger.exception("Payment %s settled but the subscription could not be updated", payment.id)
             if deliver:
                 await resume_after_payment(db, payment)
+            await _notify_owner_of_sale(db, payment)
             return True
         return False
 
@@ -776,6 +788,72 @@ async def _notify_owner_of_claim(db: AsyncSession, payment: Payment) -> None:
         )
     except Exception:
         logger.info("Could not notify the owner about claimed payment %s", payment.id, exc_info=True)
+
+
+async def _owner_of(db: AsyncSession, bot_id) -> tuple[int, object] | None:
+    """(owner's telegram id, bot instance) for pinging the shop owner."""
+    from app.models.client import Client
+    from app.services import bot_registry
+
+    bot_row = (await db.execute(select(BotModel).where(BotModel.id == bot_id))).scalar_one_or_none()
+    if bot_row is None or bot_row.client_id is None:
+        return None
+    owner = (await db.execute(select(Client).where(Client.id == bot_row.client_id))).scalar_one_or_none()
+    if owner is None or not owner.telegram_user_id:
+        return None
+    instance = await bot_registry.get_or_create(bot_id, db)
+    if instance is None:
+        return None
+    return owner.telegram_user_id, instance
+
+
+async def _notify_owner_of_sale(db: AsyncSession, payment: Payment) -> None:
+    """Tell the shop owner that someone bought something, and who.
+
+    There was no such message: a card payment settled, the goods went out,
+    and the owner learned about it only by reloading a panel inside the
+    constructor. For a coach taking bookings that meant refreshing a web page
+    to find out somebody had booked a slot — which is exactly the job a bot
+    is supposed to be doing for them.
+
+    Best-effort by construction: a bot may only message people who have
+    written to it first, so this quietly does nothing when the owner has
+    never opened their own bot, and nothing here is allowed to raise into the
+    payment path.
+    """
+    from app.services import subscribers, subscription_service
+
+    if payment.kind != PaymentKind.order:
+        return
+    try:
+        found = await _owner_of(db, payment.bot_id)
+        if found is None:
+            return
+        owner_id, instance = found
+
+        buyer = await subscribers.get(db, payment.bot_id, payment.telegram_user_id)
+        who = buyer.title if buyer is not None else f"id {payment.telegram_user_id}"
+        amount = payment_providers.minor_to_major(payment.amount_minor)
+
+        subscription = await subscription_service.find_for_payment(db, payment)
+        if subscription is not None and subscription.periods_paid > 1:
+            headline = f"🔁 Продление №{subscription.periods_paid}"
+        elif subscription is not None:
+            headline = "🎉 Новая подписка"
+        else:
+            headline = "💰 Оплачен заказ"
+
+        lines = [
+            f"{headline} №{payment.invoice_no}",
+            f"«{payment.description}» — {amount} {payment.currency}",
+            f"Покупатель: {who}",
+        ]
+        if subscription is not None:
+            until = subscription.current_period_end.strftime("%d.%m.%Y")
+            lines.append(f"Доступ оплачен до {until}")
+        await instance.send_message(owner_id, "\n".join(lines))
+    except Exception:
+        logger.info("Could not notify the owner about paid order %s", payment.id, exc_info=True)
 
 
 async def confirm_by_owner(db: AsyncSession, payment: Payment, *, deliver: bool = True) -> bool:

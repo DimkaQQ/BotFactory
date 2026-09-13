@@ -1,0 +1,276 @@
+"""Conversations that continue later.
+
+The engine used to run a chain to its end inside the update that started it,
+which capped "Пауза" at fifteen seconds and made the one thing every
+subscription product needs — the next video, next week — unbuildable with
+any combination of blocks.
+
+What is pinned here is the seam: where a walk stops and becomes a row, that
+the row resumes the *same* chain, that two sweeps cannot both send it, and
+that entitlement is re-read at send time rather than trusted from when the
+work was queued.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from sqlalchemy import select
+
+from app.models.bot_block import BlockType, BotBlock
+from app.models.scheduled_step import ScheduledStep, StepStatus
+from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
+from app.services import bot_dispatcher, scheduler
+
+CHAT_ID = 777
+USER_ID = 424242
+
+
+async def steps_of(db, bot_id) -> list[ScheduledStep]:
+    # The sweep runs in its own session, so this one still holds whatever it
+    # loaded earlier — the app sets `expire_on_commit=False` deliberately,
+    # which means a plain re-SELECT hands back the stale identity-mapped copy
+    # and reports every step as still pending. `populate_existing` overwrites
+    # those instances from the result instead. (Expiring the whole session
+    # would do it too, and then blow up on the first lazy load outside a
+    # greenlet.)
+    result = await db.execute(
+        select(ScheduledStep)
+        .where(ScheduledStep.bot_id == bot_id)
+        .order_by(ScheduledStep.created_at)
+        .execution_options(populate_existing=True)
+    )
+    return list(result.scalars().all())
+
+
+async def drip_bot(db, owner, make_bot, *, pause_seconds: int):
+    """welcome → pause → video. The shape of every "материал придёт позже" bot."""
+    bot, blocks = await make_bot(
+        owner,
+        [
+            (BlockType.welcome, {"text": "Добро пожаловать в клуб!"}),
+            (BlockType.delay, {"seconds": pause_seconds}),
+            (BlockType.description, {"text": "Тренировка №2"}),
+        ],
+    )
+    return bot, blocks
+
+
+# --------------------------------------------------------------- the seam
+
+
+async def test_a_short_pause_is_still_just_a_pause(db, owner, make_bot, telegram):
+    """Below the inline ceiling nothing is queued — a two-second pause is
+    pacing, and a database round trip would cost more than the wait."""
+    bot, _ = await drip_bot(db, owner, make_bot, pause_seconds=2)
+
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+
+    assert telegram.sent() == ["Добро пожаловать в клуб!", "Тренировка №2"]
+    assert await steps_of(db, bot.id) == []
+
+
+async def test_a_long_pause_stops_the_walk_and_queues_the_rest(db, owner, make_bot, telegram):
+    """The whole point: a week-long pause must not be waited out inside the
+    webhook request, and must not be silently clamped to fifteen seconds
+    either — the rest of the chain becomes a row with a due date."""
+    week = 7 * 24 * 3600
+    bot, blocks = await drip_bot(db, owner, make_bot, pause_seconds=week)
+    _welcome, _pause, video = blocks
+
+    before = datetime.now(timezone.utc)
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID, "type": "private"}, "text": "/start", "from": {"id": USER_ID}}},
+        bot.id, db,
+    )
+
+    # The first block went out; the one after the pause did not.
+    assert telegram.sent() == ["Добро пожаловать в клуб!"]
+
+    queued = await steps_of(db, bot.id)
+    assert len(queued) == 1, "долгая пауза обязана превратиться в отложенный шаг"
+    step = queued[0]
+    assert step.block_id == video.id, "продолжать надо с блока ПОСЛЕ паузы"
+    assert step.chat_id == CHAT_ID
+    assert step.telegram_user_id == USER_ID
+    assert step.status == StepStatus.pending
+    # Due a week out, not now and not in fifteen seconds.
+    assert step.run_at - before >= timedelta(days=6, hours=23)
+
+
+async def test_the_queued_step_sends_exactly_what_the_walk_would_have(db, owner, make_bot, telegram, as_bot):
+    bot, blocks = await drip_bot(db, owner, make_bot, pause_seconds=3600)
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+    telegram.reset_mock()
+
+    step = (await steps_of(db, bot.id))[0]
+    step.run_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    await db.commit()
+
+    assert await scheduler.run_due() == 1
+
+    assert telegram.sent() == ["Тренировка №2"]
+    await db.refresh(step)
+    assert step.status == StepStatus.sent
+    assert step.ran_at is not None
+
+
+async def test_a_chain_of_long_pauses_drips_one_at_a_time(db, owner, make_bot, telegram, as_bot):
+    """Four videos over a month is four hops, not one walk — each sweep sends
+    one block and re-queues the next, so nothing is ever sent early."""
+    bot, blocks = await make_bot(
+        owner,
+        [
+            (BlockType.welcome, {"text": "Оплачено!"}),
+            (BlockType.delay, {"seconds": 7 * 24 * 3600}),
+            (BlockType.description, {"text": "Видео 1"}),
+            (BlockType.delay, {"seconds": 7 * 24 * 3600}),
+            (BlockType.description, {"text": "Видео 2"}),
+        ],
+    )
+
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+    assert telegram.sent() == ["Оплачено!"]
+
+    for expected in ("Видео 1", "Видео 2"):
+        telegram.reset_mock()
+        pending = [s for s in await steps_of(db, bot.id) if s.status == StepStatus.pending]
+        assert len(pending) == 1, f"перед «{expected}» в очереди должен быть ровно один шаг"
+        pending[0].run_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        await db.commit()
+        await scheduler.run_due()
+        assert telegram.sent() == [expected]
+
+
+# ------------------------------------------------------- exactly once
+
+
+async def test_two_sweeps_racing_on_one_step_send_it_once(db, owner, make_bot, telegram, as_bot):
+    """The same guarantee the payment path has, for the same reason: the row
+    leaves `pending` in the statement that checks it is still there."""
+    bot, _ = await drip_bot(db, owner, make_bot, pause_seconds=3600)
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+    telegram.reset_mock()
+
+    step = (await steps_of(db, bot.id))[0]
+    step.run_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    await db.commit()
+
+    await asyncio.gather(*(scheduler.run_due() for _ in range(8)))
+
+    assert telegram.sent() == ["Тренировка №2"], "восемь одновременных проходов — одна отправка"
+
+
+async def test_a_deleted_block_cancels_the_step_instead_of_vanishing(db, owner, make_bot, telegram, as_bot):
+    """ON DELETE SET NULL means the row survives its target. It must say so,
+    not sit pending forever and not look as if it ran."""
+    bot, blocks = await drip_bot(db, owner, make_bot, pause_seconds=3600)
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+    telegram.reset_mock()
+
+    step = (await steps_of(db, bot.id))[0]
+    step.run_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    await db.commit()
+    await db.delete(blocks[2])
+    await db.commit()
+
+    await scheduler.run_due()
+
+    await db.refresh(step)
+    assert step.status == StepStatus.cancelled
+    assert "удал" in step.last_error
+    assert telegram.sent() == []
+
+
+# ------------------------------------------- entitlement is re-read, not trusted
+
+
+async def subscription_row(db, bot, *, status=SubscriptionStatus.active, days_left=10) -> Subscription:
+    row = Subscription(
+        bot_id=bot.id,
+        block_id=None,
+        telegram_user_id=USER_ID,
+        chat_id=CHAT_ID,
+        provider="stars",
+        billing_mode=BillingMode.auto,
+        status=status,
+        period_days=30,
+        amount_minor=59000,
+        currency="RUB",
+        title="Закрытый клуб",
+        current_period_end=datetime.now(timezone.utc) + timedelta(days=days_left),
+    )
+    db.add(row)
+    await db.commit()
+    return row
+
+
+@pytest.mark.parametrize(
+    "status, days_left, why",
+    [
+        (SubscriptionStatus.cancelled, 10, "отменённая подписка не досылает оплаченное"),
+        (SubscriptionStatus.expired, 10, "закончившаяся подписка не досылает"),
+        (SubscriptionStatus.active, -1, "период кончился — статус ещё не успели поменять"),
+    ],
+)
+async def test_work_queued_while_healthy_is_dropped_once_it_is_not(
+    db, owner, make_bot, telegram, as_bot, status, days_left, why
+):
+    """Everything in the queue was queued while the subscription was fine.
+    Whether it still is gets decided at send time — including by the date
+    alone, because a period ending is a moment, not an event somebody has to
+    remember to record."""
+    bot, blocks = await drip_bot(db, owner, make_bot, pause_seconds=3600)
+    subscription = await subscription_row(db, bot, status=status, days_left=days_left)
+
+    step = ScheduledStep(
+        bot_id=bot.id,
+        block_id=blocks[2].id,
+        chat_id=CHAT_ID,
+        telegram_user_id=USER_ID,
+        subscription_id=subscription.id,
+        reason="delay",
+        run_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+    )
+    db.add(step)
+    await db.commit()
+
+    await scheduler.run_due()
+
+    await db.refresh(step)
+    assert step.status == StepStatus.cancelled, why
+    assert telegram.sent() == []
+
+
+async def test_cancelling_a_subscription_empties_its_queue(db, owner, make_bot, telegram):
+    bot, blocks = await drip_bot(db, owner, make_bot, pause_seconds=3600)
+    subscription = await subscription_row(db, bot)
+    for _ in range(3):
+        db.add(
+            ScheduledStep(
+                bot_id=bot.id,
+                block_id=blocks[2].id,
+                chat_id=CHAT_ID,
+                telegram_user_id=USER_ID,
+                subscription_id=subscription.id,
+                run_at=datetime.now(timezone.utc) + timedelta(days=7),
+            )
+        )
+    await db.commit()
+
+    assert await scheduler.cancel_for_subscription(db, subscription.id, why="отменено") == 3
+
+    remaining = [s for s in await steps_of(db, bot.id) if s.status == StepStatus.pending]
+    assert remaining == []
