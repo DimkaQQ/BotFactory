@@ -1,9 +1,11 @@
 import type { BotBlock, PaymentProviderInfo } from "../../api/builderApi";
 import { BLOCK_TYPE_BY_ID } from "../../blockTypes";
 import { useEscape } from "../../hooks/useEscape";
+import { BroadcastButton } from "../BroadcastButton";
 import { ButtonsEditor } from "../ButtonsEditor";
 import { MediaEditor } from "../MediaEditor";
 import { PaymentEditor } from "../PaymentEditor";
+import { DelayEditor } from "../DelayEditor";
 import { PollEditor } from "../PollEditor";
 
 const PLACEHOLDER: Record<BotBlock["block_type"], string> = {
@@ -17,8 +19,6 @@ const PLACEHOLDER: Record<BotBlock["block_type"], string> = {
   payment: "",
   delay: "",
 };
-
-const DELAY_PRESETS = [1, 2, 3, 5, 8, 10];
 
 interface Props {
   block: BotBlock;
@@ -36,6 +36,8 @@ interface Props {
    * the payment block asks for. */
   paymentProviderInfo?: PaymentProviderInfo | null;
   onOpenPaymentSettings: () => void;
+  /** Broadcasting needs a token, which only a published bot has. */
+  botPublished?: boolean;
 }
 
 /** The block's full editor, opened on the side (desktop) / as a bottom sheet
@@ -53,15 +55,19 @@ export function BlockEditPanel({
   paymentCurrencies,
   paymentProviderInfo,
   onOpenPaymentSettings,
+  botPublished,
 }: Props) {
   useEscape(onClose);
   const def = BLOCK_TYPE_BY_ID[block.block_type];
   const isMediaBlock = block.block_type === "image" || block.block_type === "video";
   const isPollBlock = block.block_type === "poll";
+  const isDeliveryBlock = block.block_type === "delivery";
+  // Not payment (an invoice has to belong to a conversation) and not
+  // delay (it says nothing on its own).
+  const canBroadcast = !["payment", "delay"].includes(block.block_type);
   const isButtonsBlock = block.block_type === "buttons";
   const isDelayBlock = block.block_type === "delay";
   const isPaymentBlock = block.block_type === "payment";
-  const seconds = Math.max(0, Math.min(Number(block.content.seconds ?? 2), 15));
 
   return (
     <>
@@ -82,18 +88,7 @@ export function BlockEditPanel({
 
         <div className="edit-panel__body">
           {isDelayBlock ? (
-            <div className="chat-delay__control edit-panel__delay">
-              {DELAY_PRESETS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className={`chat-delay__preset ${seconds === s ? "chat-delay__preset--active" : ""}`}
-                  onClick={() => onChange({ ...block.content, seconds: s })}
-                >
-                  {s}с
-                </button>
-              ))}
-            </div>
+            <DelayEditor content={block.content} onChange={onChange} />
           ) : isPaymentBlock ? (
             <PaymentEditor
               content={block.content}
@@ -122,6 +117,45 @@ export function BlockEditPanel({
             <div className="edit-panel__buttons">
               <p className="edit-panel__section-label">Кнопки</p>
               <ButtonsEditor content={block.content} onChange={onChange} blocks={blocks} />
+            </div>
+          )}
+
+          {/* Any block that is just a message can also be sent to everyone —
+              which is what «рассылка» on the landing page has always meant,
+              and what the constructor had no way to do. */}
+          {canBroadcast && (
+            <div className="edit-panel__buttons">
+              <p className="edit-panel__section-label">Разослать этот блок</p>
+              <BroadcastButton botId={botId} blockId={block.id} published={Boolean(botPublished)} />
+            </div>
+          )}
+
+          {isDeliveryBlock && (
+            <div className="edit-panel__buttons">
+              <p className="edit-panel__section-label">Или пусти в закрытую группу</p>
+              <label className="buttons-editor__field">
+                <span className="buttons-editor__field-label">ID группы или канала</span>
+                <input
+                  className="payment-editor__input"
+                  placeholder="-1001234567890 или @mychannel"
+                  value={block.content.group_chat_id ?? ""}
+                  onChange={(e) => onChange({ ...block.content, group_chat_id: e.target.value.trim() })}
+                />
+              </label>
+              <p className="app-hint">
+                {block.content.group_chat_id ? (
+                  <>
+                    Бот выдаст каждому покупателю <b>свою одноразовую ссылку</b> — переслать её другу не выйдет.
+                    Когда подписка закончится, бот уберёт человека из группы. Для этого добавь бота в группу
+                    администратором с правами «Приглашать пользователей» и «Блокировать пользователей».
+                  </>
+                ) : (
+                  <>
+                    Оставь пустым, если выдаёшь файл или ссылку. Узнать ID: перешли любое сообщение из группы
+                    боту @userinfobot.
+                  </>
+                )}
+              </p>
             </div>
           )}
         </div>

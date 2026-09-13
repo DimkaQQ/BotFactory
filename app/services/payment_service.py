@@ -771,7 +771,7 @@ async def _notify_owner_of_claim(db: AsyncSession, payment: Payment) -> None:
         if instance is None:
             return
 
-        amount = payment_providers.minor_to_major(payment.amount_minor)
+        amount = payment_providers.money(payment.amount_minor, payment.currency)
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -782,7 +782,7 @@ async def _notify_owner_of_claim(db: AsyncSession, payment: Payment) -> None:
         )
         await instance.send_message(
             owner.telegram_user_id,
-            f"💰 Заказ №{payment.invoice_no}: «{payment.description}» на {amount} {payment.currency}.\n"
+            f"💰 Заказ №{payment.invoice_no}: «{payment.description}» на {amount}.\n"
             f"Покупатель говорит, что оплатил. Деньги пришли?",
             reply_markup=keyboard,
         )
@@ -833,7 +833,7 @@ async def _notify_owner_of_sale(db: AsyncSession, payment: Payment) -> None:
 
         buyer = await subscribers.get(db, payment.bot_id, payment.telegram_user_id)
         who = buyer.title if buyer is not None else f"id {payment.telegram_user_id}"
-        amount = payment_providers.minor_to_major(payment.amount_minor)
+        amount = payment_providers.money(payment.amount_minor, payment.currency)
 
         subscription = await subscription_service.find_for_payment(db, payment)
         if subscription is not None and subscription.periods_paid > 1:
@@ -845,7 +845,7 @@ async def _notify_owner_of_sale(db: AsyncSession, payment: Payment) -> None:
 
         lines = [
             f"{headline} №{payment.invoice_no}",
-            f"«{payment.description}» — {amount} {payment.currency}",
+            f"«{payment.description}» — {amount}",
             f"Покупатель: {who}",
         ]
         if subscription is not None:

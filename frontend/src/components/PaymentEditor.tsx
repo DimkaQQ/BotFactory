@@ -126,6 +126,58 @@ export function PaymentEditor({ content, provider, currencies, providerInfo, onC
         />
       </label>
 
+      {/* Subscription — the one place in the product where the difference
+          between the providers actually changes what the owner is selling,
+          so it is stated in full rather than hidden behind a checkbox. */}
+      <div className="payment-editor__subscription">
+        <label className="payment-editor__toggle">
+          <input
+            type="checkbox"
+            checked={Boolean(content.subscription)}
+            onChange={(e) => onChange({ ...content, subscription: e.target.checked })}
+          />
+          <span>Это подписка — платят регулярно</span>
+        </label>
+
+        {content.subscription && (
+          <>
+            {isStars ? (
+              <p className="payment-editor__note payment-editor__note--good">
+                ⭐️ Telegram сам спишет звёзды раз в 30 дней, пока подписчик не отменит — отменяет он тоже внутри
+                Telegram. Период фиксированный: 30 дней, другого Telegram не поддерживает.
+              </p>
+            ) : (
+              <>
+                <label className="buttons-editor__field payment-editor__period">
+                  <span className="buttons-editor__field-label">Период доступа, дней</span>
+                  <input
+                    className="payment-editor__input"
+                    inputMode="numeric"
+                    placeholder="30"
+                    value={content.period_days ?? ""}
+                    onChange={(e) =>
+                      onChange({ ...content, period_days: e.target.value.replace(/[^\d]/g, "") })
+                    }
+                  />
+                </label>
+                <p className="payment-editor__note payment-editor__note--manual">
+                  {providerInfo ? (
+                    <>
+                      ⚠️ {providerInfo.title} не умеет списывать сама — так устроены все кассы, кроме Telegram
+                      Stars.
+                    </>
+                  ) : (
+                    <>⚠️ Автосписание умеет только Telegram Stars, остальные кассы — нет.</>
+                  )}{" "}
+                  Бот пришлёт новый счёт за 2 дня до конца периода и напомнит; доступ продлится, если счёт
+                  оплатят. Если нужно именно автосписание — выбери Telegram Stars в настройках кассы.
+                </p>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
       <p className="payment-editor__note">
         После оплаты бот сам продолжит сценарий по стрелке «дальше» — поставь туда блок «Выдача» с файлом или
         ссылкой.

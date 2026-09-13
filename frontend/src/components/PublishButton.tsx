@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from "react";
 
 interface Props {
   disabled?: boolean;
+  /** Blocks nothing on the canvas leads to. Not an error — a half-wired
+   * scenario is a normal thing to have open — but shipping one silently is
+   * how a bot that was meant to send four videos sends one. */
+  orphanCount?: number;
   onPublish: (token: string) => Promise<void>;
 }
 
-export function PublishButton({ disabled, onPublish }: Props) {
+export function PublishButton({ disabled, orphanCount = 0, onPublish }: Props) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
 
@@ -49,6 +53,12 @@ export function PublishButton({ disabled, onPublish }: Props) {
       <p className="publish-form__hint">
         Вставь токен бота от <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather</a>
       </p>
+      {orphanCount > 0 && (
+        <p className="publish-form__warning">
+          ⚠️ {orphanCount === 1 ? "Один блок ни с чем не соединён" : `Блоков ни с чем не соединено: ${orphanCount}`}
+          {" — "}бот их не покажет. Опубликовать можно, но сначала проверь стрелки на холсте.
+        </p>
+      )}
       <input
         className="publish-form__input"
         placeholder="123456789:AA...your-token"

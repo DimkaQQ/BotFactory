@@ -5,11 +5,13 @@ import {
   type OrdersReport,
   type PaymentProviderInfo,
   type PaymentRegion,
+  type SubscribersReport,
   type PaymentSettings,
   ApiError,
   builderApi,
   formatAmount,
 } from "../api/builderApi";
+import { confirmDialog } from "../confirm";
 import { useEscape } from "../hooks/useEscape";
 
 interface Props {
@@ -40,6 +42,12 @@ const SHORT: Record<string, string> = {
   cryptobot: "USDT, TON · без юрлица",
   link: "любая своя ссылка · подтверждаешь вручную",
   test: "только для проверки сценария",
+};
+
+const SUB_STATUS: Record<string, string> = {
+  active: "активна",
+  expired: "закончилась",
+  cancelled: "отменена",
 };
 
 const STATUS_LABEL: Record<Order["status"], string> = {
@@ -78,6 +86,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
 
   const [providers, setProviders] = useState<PaymentProviderInfo[] | null>(null);
   const [regions, setRegions] = useState<PaymentRegion[]>([]);
+  const [subs, setSubs] = useState<SubscribersReport | null>(null);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [slug, setSlug] = useState<string>("");
   const [isTest, setIsTest] = useState(true);
@@ -92,7 +101,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const [list, current, sales] = await Promise.all([
+        const [list, current, sales, audience] = await Promise.all([
           builderApi.listPaymentProviders(),
           builderApi.getPaymentSettings(botId),
           // A bot with no sales yet is the normal case, so a failure here
@@ -100,6 +109,11 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
           builderApi
             .listOrders(botId)
             .catch(() => ({ orders: [] as Order[], totals: [], paid_count: 0, paid_total_minor: 0 })),
+          // A bot with no subscribers is the normal case on day one, so a
+          // failure here must not take the settings form down either.
+          builderApi
+            .listSubscribers(botId)
+            .catch(() => ({ subscriptions: [], people: [], active_count: 0 }) as SubscribersReport),
         ]);
         setProviders(list.providers);
         setRegions(list.regions ?? []);
@@ -108,6 +122,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
         setIsTest(current.is_test);
         setOrders(sales.orders);
         setTotals(sales.totals ?? []);
+        setSubs(audience);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Не удалось загрузить настройки оплаты");
       }
@@ -294,6 +309,21 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                         <span className="orders__amount">
                           {formatAmount(order.amount_minor)} {unit(order.currency)}
                         </span>
+                        {order.buyer && (
+                          <span className="orders__buyer">
+                            {order.buyer.username ? (
+                              <a
+                                href={`https://t.me/${order.buyer.username}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {order.buyer.title}
+                              </a>
+                            ) : (
+                              order.buyer.title
+                            )}
+                          </span>
+                        )}
                       </div>
                       <div className="orders__actions">
                         <button
@@ -309,9 +339,11 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                           className="orders__reject"
                           disabled={busyOrder === order.id}
                           onClick={() => {
-                            if (window.confirm(`Отклонить заказ №${order.invoice_no}? Покупателю придёт сообщение, что оплату не видно.`)) {
-                              decide(order, false);
-                            }
+                            void confirmDialog(
+                              `Отклонить заказ №${order.invoice_no}? Покупателю придёт сообщение, что оплату не видно.`,
+                            ).then((ok) => {
+                              if (ok) decide(order, false);
+                            });
                           }}
                         >
                           Не пришло
@@ -352,10 +384,49 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                           </span>
                           <span className="orders__log-meta">
                             {STATUS_LABEL[order.status]} · {when(order.paid_at ?? order.created_at)}
+                            {order.buyer && ` · ${order.buyer.title}`}
                           </span>
                         </span>
                         <span className="orders__log-amount">
                           {formatAmount(order.amount_minor)} {unit(order.currency)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {subs && subs.subscriptions.length > 0 && (
+                <div className="orders orders--subs">
+                  <span className="buttons-editor__field-label">
+                    Подписки · активных: {subs.active_count}
+                  </span>
+                  <ul className="orders__log">
+                    {subs.subscriptions.slice(0, 20).map((sub) => (
+                      <li className={`orders__log-row orders__log-row--${sub.status}`} key={sub.id}>
+                        <span className="orders__log-main">
+                          <span className="orders__log-title">
+                            {sub.buyer?.username ? (
+                              <a href={`https://t.me/${sub.buyer.username}`} target="_blank" rel="noreferrer">
+                                {sub.buyer.title}
+                              </a>
+                            ) : (
+                              (sub.buyer?.title ?? `id ${sub.telegram_user_id}`)
+                            )}
+                            {" · "}
+                            {sub.title}
+                          </span>
+                          <span className="orders__log-meta">
+                            {SUB_STATUS[sub.status]}
+                            {sub.status === "active" && ` до ${when(sub.current_period_end)}`}
+                            {" · "}
+                            {sub.periods_paid === 1 ? "1-й период" : `${sub.periods_paid}-й период`}
+                            {" · "}
+                            {sub.billing_mode === "auto" ? "списывает Telegram" : "по счёту"}
+                          </span>
+                        </span>
+                        <span className="orders__log-amount">
+                          {formatAmount(sub.amount_minor)} {unit(sub.currency)}
                         </span>
                       </li>
                     ))}

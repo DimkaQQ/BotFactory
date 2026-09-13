@@ -5027,3 +5027,162 @@
   position: absolute;
   inset: -6px;
 }
+
+/* =========================================================================
+   Пауза, подписка, доступ в группу — интерфейс к тому, чего в движке
+   раньше не было.
+   ========================================================================= */
+
+.delay-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.delay-editor__row {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.delay-editor__amount {
+  flex: 0 0 96px;
+}
+
+.delay-editor__unit {
+  flex: 1;
+}
+
+.delay-editor__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.delay-editor__note {
+  margin: 0;
+}
+
+/* ---- Подписка на блоке оплаты ---- */
+
+.payment-editor__subscription {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--tg-separator);
+  background: color-mix(in srgb, var(--tg-secondary-bg) 50%, transparent);
+}
+
+.payment-editor__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  /* The checkbox itself stays the platform's, but the whole row is the
+     target — a 13px box is not something a thumb can aim at. */
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.payment-editor__toggle input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: var(--tg-button);
+  cursor: pointer;
+}
+
+.payment-editor__period {
+  max-width: 220px;
+}
+
+/* The good-news variant of the note: Stars really does charge by itself. */
+.payment-editor__note--good {
+  color: var(--accent-success-ink);
+  background: color-mix(in srgb, var(--accent-success) 10%, transparent);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: 10px;
+}
+
+/* ---- Блок, к которому не ведёт ни одна стрелка ---- */
+
+.flow-node__orphan-badge {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-buttons) 18%, transparent);
+  color: var(--accent-buttons);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.publish-form__warning {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-buttons) 14%, transparent);
+  color: var(--accent-buttons);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ---- Покупатель в журнале заказов ---- */
+
+.orders__buyer {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.orders__buyer a {
+  color: var(--accent-on-surface);
+}
+
+.orders__log-row--expired .orders__log-meta,
+.orders__log-row--cancelled .orders__log-meta {
+  color: var(--text-tertiary);
+}
+
+/* ---- Рассылка ---- */
+
+.broadcast {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.broadcast__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.broadcast__button {
+  flex: 1 1 140px;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.broadcast__button--quiet {
+  background: color-mix(in srgb, var(--tg-text) 8%, transparent);
+  color: var(--text-primary);
+}
+
+.broadcast__button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.broadcast__result {
+  margin: 0;
+}

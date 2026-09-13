@@ -11,9 +11,11 @@ from __future__ import annotations
 import logging
 import uuid
 from html import escape
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +24,7 @@ from app.database import get_db
 from app.deps import get_current_client, get_owned_bot
 from app.models.bot import Bot as BotModel
 from app.models.bot import BotStatus
+from app.models.bot_block import BotBlock
 from app.models.bot_subscriber import BotSubscriber
 from app.models.client import Client
 from app.models.subscription import Subscription, SubscriptionStatus
@@ -201,7 +204,7 @@ async def test_payment_page(payment_id: uuid.UUID, db: AsyncSession = Depends(ge
     )
     await _apply(db, payment, verified)
 
-    amount = payment_providers.minor_to_major(payment.amount_minor)
+    amount = payment_providers.money(payment.amount_minor, payment.currency)
     return HTMLResponse(
         f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -551,6 +554,84 @@ async def list_subscribers(
         ],
         "active_count": sum(1 for s in subscriptions if s.status == SubscriptionStatus.active),
     }
+
+
+class BroadcastIn(BaseModel):
+    """Which block to send, and to whom."""
+
+    block_id: uuid.UUID
+    #: "all" — everyone who ever wrote to the bot; "subscribers" — only
+    #: people with a live subscription. The second exists because "новый
+    #: выпуск для подписчиков" and "у нас скидка" are different messages to
+    #: different rooms, and sending the first to the second room gives away
+    #: what somebody is paying for.
+    audience: Literal["all", "subscribers"] = "all"
+
+
+@router.post("/api/bots/{bot_id}/broadcast")
+async def broadcast(
+    bot_id: uuid.UUID,
+    payload: BroadcastIn,
+    bot: BotModel = Depends(get_owned_bot),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Send one block to everyone the bot knows.
+
+    The landing page has always promised «рассылка» and the constructor had
+    no way to send anything to anybody after the conversation that triggered
+    it. It is cheap now only because the two hard parts already exist: a
+    list of people, and a queue that resumes a chain at a given time.
+
+    Queued rather than sent inline: a shop with two thousand subscribers
+    would otherwise hold this request open through two thousand Telegram
+    calls and hit the rate limit halfway, with no record of where it stopped.
+    Each person becomes a scheduled step, so the sweep paces them and a
+    failure retries only that one.
+    """
+    from app.services import scheduler
+
+    block = (
+        await db.execute(select(BotBlock).where(BotBlock.id == payload.block_id, BotBlock.bot_id == bot_id))
+    ).scalar_one_or_none()
+    if block is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Блок не найден")
+
+    if bot.status != BotStatus.active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Бот не опубликован — рассылать пока некому и нечем.",
+        )
+
+    query = select(BotSubscriber).where(
+        BotSubscriber.bot_id == bot_id,
+        # Someone who blocked the bot cannot be written to, and trying would
+        # burn a retry on every sweep from now on.
+        BotSubscriber.blocked_at.is_(None),
+    )
+    if payload.audience == "subscribers":
+        query = query.where(
+            BotSubscriber.telegram_user_id.in_(
+                select(Subscription.telegram_user_id).where(
+                    Subscription.bot_id == bot_id,
+                    Subscription.status == SubscriptionStatus.active,
+                )
+            )
+        )
+    people = list((await db.execute(query)).scalars().all())
+
+    for person in people:
+        await scheduler.schedule(
+            db,
+            bot_id=bot_id,
+            block_id=block.id,
+            chat_id=person.chat_id,
+            telegram_user_id=person.telegram_user_id,
+            delay_seconds=0,
+            reason="broadcast",
+        )
+
+    logger.info("Broadcast of block %s queued for %d people of bot %s", block.id, len(people), bot_id)
+    return {"queued": len(people)}
 
 
 def _buyer_of(subscriber: BotSubscriber | None) -> dict | None:

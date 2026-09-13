@@ -3,11 +3,14 @@ import { Handle, Position } from "@xyflow/react";
 
 import type { BotBlock } from "../../api/builderApi";
 import { BLOCK_TYPE_BY_ID } from "../../blockTypes";
+import { humanDelay } from "../../humanDelay";
 import { useFlowActions } from "./flowActions";
 
 export interface BlockNodeData {
   block: BotBlock;
   isStart: boolean;
+  /** Nothing leads here: the dialogue can never arrive at this block. */
+  orphan: boolean;
   [key: string]: unknown;
 }
 
@@ -17,7 +20,7 @@ function preview(block: BotBlock): string {
     case "poll":
       return c.question?.trim() || "О чём спросим?";
     case "delay":
-      return `Пауза ${Math.max(0, Math.min(Number(c.seconds ?? 2), 15))} сек`;
+      return `Пауза ${humanDelay(Number(c.seconds ?? 2))}`;
     case "image":
     case "video":
       return c.text?.trim() || (c.media_file_id ? "Без подписи" : "Ссылка не добавлена");
@@ -25,7 +28,7 @@ function preview(block: BotBlock): string {
       return c.text?.trim() || "Текст перед кнопками";
     case "payment":
       return c.price?.trim()
-        ? `💳 ${c.title?.trim() || "Оплата"} — ${c.price} ${c.currency || "KZT"}`
+        ? `💳 ${c.title?.trim() || "Оплата"} — ${c.price} ${c.currency ?? ""}`.trim()
         : "Цена не указана";
     default:
       return c.text?.trim() || "Пусто — нажми, чтобы написать";
@@ -42,7 +45,7 @@ function preview(block: BotBlock): string {
  * card says so instead of leaving a dead handle looking clickable (the rule
  * itself lives in bot_dispatcher.py's chain-walk). */
 function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNodeData; selected?: boolean }) {
-  const { block, isStart } = data;
+  const { block, isStart, orphan } = data;
   const { onEdit, onDelete } = useFlowActions();
   const def = BLOCK_TYPE_BY_ID[block.block_type];
   const isButtons = block.block_type === "buttons";
@@ -75,6 +78,14 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
         </span>
         <span className="flow-node__label">{def.label}</span>
         {isStart && <span className="flow-node__start-badge">START</span>}
+        {orphan && !isStart && (
+          <span
+            className="flow-node__orphan-badge"
+            title="Сюда не ведёт ни одна стрелка — этот блок никто не увидит. Протяни стрелку от предыдущего блока."
+          >
+            НЕ ПОДКЛЮЧЁН
+          </span>
+        )}
         <button
           type="button"
           className="flow-node__delete"

@@ -34,6 +34,20 @@ export interface BlockContent {
   price?: string;
   currency?: string;
   button_label?: string;
+  /** Payment block: charge for a period at a time rather than once.
+   * Telegram Stars then bills every 30 days on its own; every other
+   * provider re-invoices, which the editor says out loud. */
+  subscription?: boolean;
+  /** How long one paid period lasts. Ignored for Stars — Telegram supports
+   * 30 days and nothing else. */
+  period_days?: string | number;
+  /** Delivery block: the private group or channel a buyer is let into. A
+   * numeric id (-100…) or an @username. Set means the block hands out a
+   * single-use invite instead of its text. */
+  group_chat_id?: string;
+  /** Written by the engine when a poll is sent, so an incoming answer can be
+   * matched back to this block. Not edited by hand. */
+  telegram_poll_id?: string;
 }
 
 export interface BotBlock {
@@ -257,6 +271,12 @@ export const builderApi = {
     }),
   getPayment: (paymentId: string) => request<PaymentInfo>(`/payments/${paymentId}`),
   listOrders: (botId: string) => request<OrdersReport>(`/bots/${botId}/orders`),
+  listSubscribers: (botId: string) => request<SubscribersReport>(`/bots/${botId}/subscribers`),
+  broadcast: (botId: string, blockId: string, audience: "all" | "subscribers") =>
+    request<{ queued: number }>(`/bots/${botId}/broadcast`, {
+      method: "POST",
+      body: JSON.stringify({ block_id: blockId, audience }),
+    }),
   confirmOrder: (botId: string, paymentId: string) =>
     request<{ status: string; delivered: boolean }>(`/bots/${botId}/orders/${paymentId}/confirm`, { method: "POST" }),
   rejectOrder: (botId: string, paymentId: string) =>
@@ -347,6 +367,13 @@ export interface OrdersReport {
   paid_total_minor: number;
 }
 
+export interface Buyer {
+  /** "Дима (@dimkaqq)" — name and @username, however much of each is known. */
+  title: string;
+  username: string | null;
+  telegram_user_id: number;
+}
+
 export interface Order {
   id: string;
   invoice_no: number;
@@ -355,6 +382,9 @@ export interface Order {
   currency: string;
   description: string;
   telegram_user_id: number | null;
+  /** Who bought. Null for orders placed before the bot started recording
+   * its people. */
+  buyer: Buyer | null;
   created_at: string;
   paid_at: string | null;
   /** When the buyer tapped «Я оплатил» on a provider we can't verify. */
@@ -372,3 +402,39 @@ export function formatAmount(amountMinor: number): string {
 }
 
 export { ApiError };
+
+
+export interface SubscribersReport {
+  subscriptions: SubscriptionRow[];
+  /** Everyone who ever wrote to the bot, newest first — a subscriber list
+   * exists at all only since the bot started recording its people. */
+  people: PersonRow[];
+  active_count: number;
+}
+
+export interface SubscriptionRow {
+  id: string;
+  title: string;
+  status: "active" | "expired" | "cancelled";
+  /** "auto" = Telegram Stars charges by itself; "renewal" = the bot
+   * re-invoices and access continues only if that invoice is paid. */
+  billing_mode: "auto" | "renewal";
+  provider: string;
+  period_days: number;
+  periods_paid: number;
+  amount_minor: number;
+  currency: string;
+  current_period_end: string;
+  created_at: string;
+  buyer: Buyer | null;
+  telegram_user_id: number;
+}
+
+export interface PersonRow {
+  telegram_user_id: number;
+  title: string;
+  username: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  blocked: boolean;
+}

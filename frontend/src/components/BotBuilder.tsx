@@ -13,6 +13,7 @@ import {
 import { confirmDialog } from "../confirm";
 import { openExternal } from "../hooks/useTelegramWebApp";
 import { BLOCK_TYPE_BY_ID } from "../blockTypes";
+import { orphanBlocks } from "../reachability";
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { LivePreview } from "./LivePreview";
 import { PaymentSettingsPanel } from "./PaymentSettingsPanel";
@@ -271,6 +272,14 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     async (blockType: BlockType, position: { x: number; y: number }): Promise<string> => {
       if (!bot) throw new Error("Bot not loaded");
       const defaultContent = BLOCK_TYPE_BY_ID[blockType].defaultContent();
+      if (blockType === "payment") {
+        // The shop's own currency, not a constant. Falls back to RUB only
+        // when no cash desk is connected yet — and the block picks the real
+        // one up as soon as one is, because PaymentEditor writes back
+        // whatever the provider actually supports.
+        const connected = paymentProviders.find((p) => p.slug === paymentSettings?.provider);
+        defaultContent.currency = connected?.currencies[0] ?? "RUB";
+      }
       const created = await builderApi.createBlock(bot.id, blockType, defaultContent, position);
       setBot((prev) =>
         prev
@@ -283,7 +292,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       );
       return created.id;
     },
-    [bot],
+    [bot, paymentProviders, paymentSettings],
   );
 
   // Graph edges — a plain arrow (next_block_id), a per-button branch (lives
@@ -559,7 +568,11 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               onPaid={() => setPublication((prev) => (prev ? { ...prev, paid: true } : prev))}
             />
           ) : (
-            <PublishButton onPublish={handlePublish} disabled={bot.blocks.length === 0} />
+            <PublishButton
+              onPublish={handlePublish}
+              disabled={bot.blocks.length === 0}
+              orphanCount={orphanBlocks(bot.blocks, bot.start_block_id).length}
+            />
           )}
         </div>
       )}

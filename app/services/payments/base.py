@@ -250,5 +250,22 @@ def same_currency(provider_title: str, charged, ordered: str) -> None:
 
 def minor_to_major(amount_minor: int) -> str:
     """990_00 -> "990.00" — the string form providers expect in a signature,
-    where a rounding difference of one kopek means a rejected payment."""
+    where a rounding difference of one kopek means a rejected payment.
+
+    For anything a person reads, use `money()` instead: this one is
+    deliberately exact and ugly, and showed a 250-star subscription to its
+    own seller as "250.00 XTR".
+    """
     return f"{amount_minor // 100}.{amount_minor % 100:02d}"
+
+
+def money(amount_minor: int, currency: str) -> str:
+    """"990 RUB", "990.50 RUB", "250 ⭐" — an amount as a person reads it.
+
+    Trailing kopeks are dropped when there are none, because "990.00 ₽" for
+    a round price reads like a machine wrote it; Stars have no fractional
+    part at all and get their own symbol.
+    """
+    whole, kopecks = divmod(int(amount_minor), 100)
+    amount = str(whole) if kopecks == 0 else f"{whole}.{kopecks:02d}"
+    return f"{amount} ⭐" if (currency or "").upper() == "XTR" else f"{amount} {currency}"

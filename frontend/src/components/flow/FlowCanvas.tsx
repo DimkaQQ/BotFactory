@@ -12,6 +12,7 @@ import "@xyflow/react/dist/style.css";
 
 import type { BlockType, BotBlock, BotWithBlocks, PaymentProviderInfo } from "../../api/builderApi";
 import { useEscape } from "../../hooks/useEscape";
+import { reachableBlockIds } from "../../reachability";
 import { confirmDialog } from "../../confirm";
 import { BLOCK_TYPES, BLOCK_TYPE_BY_ID } from "../../blockTypes";
 import { BlockEditPanel } from "./BlockEditPanel";
@@ -71,12 +72,12 @@ type FlowNode = Node<any>;
 
 const nodeTypes = { block: BlockNode, start: StartNode };
 
-function blockNode(block: BotBlock, isStart: boolean): FlowNode {
+function blockNode(block: BotBlock, isStart: boolean, orphan: boolean): FlowNode {
   return {
     id: block.id,
     type: "block",
     position: { x: block.position_x, y: block.position_y },
-    data: { block, isStart } satisfies BlockNodeData,
+    data: { block, isStart, orphan } satisfies BlockNodeData,
   };
 }
 
@@ -114,9 +115,13 @@ function Inner({
 
   const blocksById = useMemo(() => new Map(bot.blocks.map((b) => [b.id, b])), [bot.blocks]);
 
+  // useNodesState takes a value, not an initialiser, so this runs on every
+  // render — cheap (one traversal of a graph a person drew by hand) and only
+  // the first result is ever used.
+  const initialReachable = reachableBlockIds(bot.blocks, bot.start_block_id);
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([
     { id: START_ID, type: "start", position: START_POSITION, data: {} },
-    ...bot.blocks.map((b) => blockNode(b, b.id === bot.start_block_id)),
+    ...bot.blocks.map((b) => blockNode(b, b.id === bot.start_block_id, !initialReachable.has(b.id))),
   ]);
 
   // Reconcile nodes with the current block list on every bot change, without
@@ -137,16 +142,27 @@ function Inner({
       const next: FlowNode[] = [startNode];
       let changed = current.length !== bot.blocks.length + 1 || current[0] !== startNode;
 
+      // Which blocks the dialogue can actually reach. A block dragged in from
+      // the library starts unconnected, which is fine while you wire it up
+      // and disastrous if you publish without noticing — so the node says so.
+      const reachable = reachableBlockIds(bot.blocks, bot.start_block_id);
+
       for (const block of bot.blocks) {
         const existing = byId.get(block.id);
         const isStart = block.id === bot.start_block_id;
-        if (existing && existing.data.block === block && existing.data.isStart === isStart) {
+        const orphan = !reachable.has(block.id);
+        if (
+          existing &&
+          existing.data.block === block &&
+          existing.data.isStart === isStart &&
+          existing.data.orphan === orphan
+        ) {
           next.push(existing);
         } else if (existing) {
-          next.push({ ...existing, data: { block, isStart } satisfies BlockNodeData });
+          next.push({ ...existing, data: { block, isStart, orphan } satisfies BlockNodeData });
           changed = true;
         } else {
-          next.push(blockNode(block, isStart));
+          next.push(blockNode(block, isStart, orphan));
           changed = true;
         }
       }
@@ -452,6 +468,7 @@ function Inner({
           paymentCurrencies={paymentCurrencies}
           paymentProviderInfo={paymentProviderInfo}
           onOpenPaymentSettings={onOpenPaymentSettings}
+          botPublished={bot.status === "active"}
           onChange={(content) => onChangeContent(editingBlock.id, content)}
           onDelete={() => handleDelete(editingBlock.id)}
           onClose={() => setEditingId(null)}

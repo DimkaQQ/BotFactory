@@ -75,7 +75,16 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     icon: "💳",
     accent: "success",
     hint: "Кнопка оплаты — выдача после платежа",
-    defaultContent: () => ({ text: "", title: "", price: "", currency: "KZT", button_label: "" }),
+    // No currency here on purpose: a new payment block takes the one the
+    // connected cash desk actually charges in (see BotBuilder.handleAdd).
+    // A hardcoded "KZT" meant a shop on ЮKassa typed 990, got a block
+    // priced in tenge, and either hit a refusal at checkout or — on a
+    // provider that takes both — charged 990 ₸ ≈ 170 ₽ for a 990 ₽ guide.
+    // RUB, not KZT: this product is Russian-language and CIS-first, and
+    // it is the same value PaymentEditor falls back to — so the canvas
+    // and the editor agree from the first render. Once a cash desk is
+    // connected, BotBuilder.handleAdd uses *its* currency instead.
+    defaultContent: () => ({ text: "", title: "", price: "", currency: "RUB", button_label: "" }),
   },
   {
     type: "delay",

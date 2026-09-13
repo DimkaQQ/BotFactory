@@ -98,15 +98,12 @@ def _typing_delay(text: str) -> float:
 
 
 def _money(payment) -> str:
-    """"990 RUB", "990.50 RUB", "250 ⭐".
+    """The amount as the buyer reads it — the one number in the whole
+    dialogue they are entitled to trust. Shared with the owner's
+    notifications so the two can never disagree."""
+    from app.services.payments import money
 
-    Integer division used to build this, which turned a 990.50 ₽ product into
-    a button reading "Оплатить 990 RUB" while the card was charged 990.50 —
-    the one number in the whole dialogue the buyer is entitled to trust.
-    """
-    whole, kopecks = divmod(payment.amount_minor, 100)
-    amount = str(whole) if kopecks == 0 else f"{whole}.{kopecks:02d}"
-    return f"{amount} ⭐" if payment.currency == "XTR" else f"{amount} {payment.currency}"
+    return money(payment.amount_minor, payment.currency)
 
 
 _URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")

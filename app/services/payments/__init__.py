@@ -22,6 +22,7 @@ from app.services.payments.base import (
     ProviderError,
     WebhookResult,
     minor_to_major,
+    money,
     same_currency,
 )
 from app.services.payments.click import ClickProvider
@@ -136,6 +137,7 @@ __all__ = [
     "PaymentRef",
     "PROVIDERS",
     "ProviderError",
+    "money",
     "REGIONS",
     "WebhookResult",
     "describe_providers",

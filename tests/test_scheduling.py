@@ -353,3 +353,108 @@ async def test_a_bot_asks_telegram_for_poll_answers_at_all():
 
     source = inspect.getsource(bot_registry)
     assert '"poll_answer"' in source, "без poll_answer в allowed_updates Telegram ответы не пришлёт"
+
+
+# ------------------------------------------------------------ рассылка
+
+
+async def test_a_broadcast_reaches_everyone_the_bot_knows(db, owner, make_bot, api, auth, telegram, as_bot):
+    """The landing page has promised «рассылка» since day one and the
+    constructor could not send anything to anybody after the update that
+    triggered it."""
+    from app.models.bot import BotStatus
+    from app.models.bot_subscriber import BotSubscriber
+
+    bot, blocks = await make_bot(
+        owner, [(BlockType.description, {"text": "Скидка 20% до воскресенья!"})], status=BotStatus.active
+    )
+    for index in range(3):
+        db.add(
+            BotSubscriber(
+                bot_id=bot.id,
+                telegram_user_id=9000 + index,
+                chat_id=9000 + index,
+                first_name=f"Клиент {index}",
+            )
+        )
+    # Someone who blocked the bot: writing to them fails forever, so they are
+    # not queued at all.
+    db.add(
+        BotSubscriber(
+            bot_id=bot.id,
+            telegram_user_id=9100,
+            chat_id=9100,
+            first_name="Ушёл",
+            blocked_at=datetime.now(timezone.utc),
+        )
+    )
+    await db.commit()
+
+    response = await api.post(
+        f"/api/bots/{bot.id}/broadcast",
+        headers=auth(owner),
+        json={"block_id": str(blocks[0].id), "audience": "all"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["queued"] == 3, "заблокировавший бота в очередь не попадает"
+
+    await scheduler.run_due()
+    assert sorted(telegram.sent()) == ["Скидка 20% до воскресенья!"] * 3
+
+
+async def test_a_broadcast_to_subscribers_only_skips_everyone_else(db, owner, make_bot, api, auth, as_bot):
+    """«Новый выпуск для подписчиков» and «у нас скидка» go to different
+    rooms — sending the first to everyone gives away who is paying."""
+    from app.models.bot import BotStatus
+    from app.models.bot_subscriber import BotSubscriber
+
+    bot, blocks = await make_bot(
+        owner, [(BlockType.description, {"text": "Выпуск 5 уже в канале"})], status=BotStatus.active
+    )
+    db.add_all(
+        [
+            BotSubscriber(bot_id=bot.id, telegram_user_id=9200, chat_id=9200, first_name="Платит"),
+            BotSubscriber(bot_id=bot.id, telegram_user_id=9201, chat_id=9201, first_name="Просто зашёл"),
+        ]
+    )
+    db.add(
+        Subscription(
+            bot_id=bot.id,
+            telegram_user_id=9200,
+            chat_id=9200,
+            provider="stars",
+            billing_mode=BillingMode.auto,
+            status=SubscriptionStatus.active,
+            period_days=30,
+            amount_minor=59000,
+            currency="RUB",
+            title="Клуб",
+            current_period_end=datetime.now(timezone.utc) + timedelta(days=10),
+        )
+    )
+    await db.commit()
+
+    response = await api.post(
+        f"/api/bots/{bot.id}/broadcast",
+        headers=auth(owner),
+        json={"block_id": str(blocks[0].id), "audience": "subscribers"},
+    )
+    assert response.json()["queued"] == 1
+
+
+async def test_a_draft_bot_cannot_broadcast(db, owner, make_bot, api, auth):
+    """There is no token yet, so every send would fail — and the owner would
+    find out from a queue of failures rather than from a sentence."""
+    from app.models.bot import BotStatus
+
+    bot, blocks = await make_bot(
+        owner, [(BlockType.description, {"text": "Привет"})], status=BotStatus.draft
+    )
+
+    response = await api.post(
+        f"/api/bots/{bot.id}/broadcast",
+        headers=auth(owner),
+        json={"block_id": str(blocks[0].id), "audience": "all"},
+    )
+    assert response.status_code == 400
+    assert "не опубликован" in response.json()["detail"]

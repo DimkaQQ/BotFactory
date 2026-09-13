@@ -46,6 +46,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
           text: "Стоимость — [цена]. После оплаты материал придёт сюда автоматически.",
           title: "[название продукта]",
           price: "990",
+          currency: "RUB",
         },
       },
       {
@@ -59,8 +60,13 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     accent: "buttons",
     icon: "🔔",
     label: "Платная подписка",
-    pitch: "Новый видос/техника каждую неделю для подписчиков — тренер, коуч, канал",
+    pitch: "Новый материал каждую неделю — тренер, коуч, закрытый канал",
     suggestedName: "Подписка",
+    // The template builds the whole month, not just the sale: the payment
+    // block is marked as a subscription and the three weekly videos are real
+    // blocks behind real week-long pauses. It used to promise «новый видос
+    // каждую неделю» on top of a bot that sent one message and never came
+    // back — the copy was the feature.
     blocks: [
       { block_type: "welcome", content: { text: "Привет! Здесь ты будешь получать новый материал каждую неделю 🔔" } },
       {
@@ -77,9 +83,19 @@ export const BOT_TEMPLATES: BotTemplate[] = [
           text: "Подписка стоит [цена] в месяц. После оплаты доступ откроется сразу.",
           title: "Подписка на месяц",
           price: "590",
+          currency: "RUB",
+          subscription: true,
+          period_days: 30,
         },
       },
-      { block_type: "delivery", content: { text: "Отлично! Первый материал уже готовится — жди на этой неделе 👀" } },
+      { block_type: "delivery", content: { text: "Готово! Первое видео — сразу, дальше по одному каждую неделю 👀" } },
+      { block_type: "video", content: { text: "Выпуск 1 — вставь ссылку на видео", media_type: "video" } },
+      { block_type: "delay", content: { seconds: 7 * 24 * 3600 } },
+      { block_type: "video", content: { text: "Выпуск 2 — придёт через неделю после оплаты", media_type: "video" } },
+      { block_type: "delay", content: { seconds: 7 * 24 * 3600 } },
+      { block_type: "video", content: { text: "Выпуск 3 — ещё через неделю", media_type: "video" } },
+      { block_type: "delay", content: { seconds: 7 * 24 * 3600 } },
+      { block_type: "video", content: { text: "Выпуск 4 — последний в этом месяце", media_type: "video" } },
     ],
   },
   {
@@ -96,20 +112,32 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         content: { text: "Опиши формат: длительность, что разбираем, что получит клиент на выходе." },
       },
       {
+        // One button, wired to the payment block. For separate time slots,
+        // add a button per slot on the canvas and drag each one to its own
+        // «Оплата» block titled with that time — then the sales list shows
+        // which slot was booked, because the order carries the block's title.
         block_type: "buttons",
-        content: { buttons: [{ label: "Записаться", action_type: "text", action_value: "" }] },
+        content: {
+          text: "Выбери, когда удобно — я подтвержу время в переписке.",
+          buttons: [{ label: "Записаться", action_type: "text", action_value: "" }],
+        },
       },
       {
         block_type: "payment",
         content: {
-          text: "Сессия стоит [цена]. Оплати, и я пришлю ссылку на запись в календарь.",
+          text: "Сессия стоит [цена]. После оплаты я напишу тебе лично и подтвержу время.",
           title: "Личная сессия",
           price: "3000",
+          currency: "RUB",
         },
       },
       {
         block_type: "delivery",
-        content: { text: "Оплата получена! Выбери удобное время: [ссылка на календарь]" },
+        content: {
+          text:
+            "Записал! Я получу уведомление с твоим именем и временем и свяжусь с тобой здесь, " +
+            "чтобы подтвердить. До встречи 👋",
+        },
       },
     ],
   },
