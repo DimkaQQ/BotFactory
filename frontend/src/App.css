@@ -5186,3 +5186,11 @@
 .broadcast__result {
   margin: 0;
 }
+
+.payment-settings__recurring {
+  font-size: 11px;
+}
+
+.payment-settings__recurring-legend {
+  margin: 0 0 var(--sp-2);
+}

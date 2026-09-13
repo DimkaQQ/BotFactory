@@ -13,6 +13,7 @@ frontend work at all.
 
 from __future__ import annotations
 
+import enum
 import uuid
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -74,6 +75,47 @@ class Checkout:
     meta: dict = field(default_factory=dict)
 
 
+class RecurringMode(str, enum.Enum):
+    """How — and whether — this gateway can take money a second time.
+
+    Three genuinely different mechanisms, and the difference decides what the
+    shop owner is actually selling, so it is carried explicitly rather than
+    inferred:
+
+    * `gateway` — the gateway runs the subscription itself. We create it once
+      and it charges on its own schedule, retries its own declines, and lets
+      the buyer cancel on its own surface. Nothing about the card ever
+      reaches us. Telegram Stars and Stripe work this way.
+    * `token` — the first payment saves a payment method and hands back a
+      handle; *we* initiate every later charge with it, on our own schedule.
+      ЮKassa, CloudPayments and Т-Банк work this way. More power and more
+      responsibility: the retry policy, the dunning and the "period ended"
+      decision are ours.
+    * `none` — the integration cannot charge again by any means, so a
+      subscription here is a reminder plus a fresh invoice each period.
+    """
+
+    none = "none"
+    gateway = "gateway"
+    token = "token"
+
+
+@dataclass(frozen=True)
+class RecurringSetup:
+    """What a first payment has to carry so a later one can be charged.
+
+    Returned by the adapter from its own reading of a settled payment, and
+    stored against the subscription. `token` is a handle to a payment method
+    held by the gateway — it is useless without the shop's own API keys, but
+    it moves money when combined with them, so it is stored encrypted.
+    """
+
+    token: str
+    #: Some gateways need the customer handle they minted alongside the
+    #: token (CloudPayments' AccountId, Т-Банк's CustomerKey).
+    customer: str = ""
+
+
 @dataclass(frozen=True)
 class WebhookResult:
     status: PaymentStatus
@@ -116,6 +158,8 @@ class PaymentProvider(Protocol):
     uses_callback: bool
     #: Whether "тестовый режим" means anything for this provider.
     has_test_mode: bool
+    #: Whether this gateway can be charged a second time, and by whom.
+    recurring: RecurringMode
 
     async def create_checkout(self, request: CheckoutRequest) -> Checkout:
         """Create the payment on the provider's side and return where to
@@ -181,6 +225,33 @@ class PaymentProvider(Protocol):
         error. See `ProviderDefaults.error_body`."""
         ...
 
+    def recurring_setup(self, settled: dict) -> RecurringSetup | None:
+        """Pull the saved-payment-method handle out of a settled payment.
+
+        Only meaningful when `recurring is RecurringMode.token`. `settled` is
+        whatever the adapter itself put in `WebhookResult.meta`, so no
+        provider-shaped JSON escapes its own module."""
+        ...
+
+    async def charge_recurring(
+        self,
+        *,
+        credentials: dict[str, str],
+        setup: RecurringSetup,
+        amount_minor: int,
+        currency: str,
+        description: str,
+        payment_id: uuid.UUID,
+        is_test: bool = False,
+    ) -> WebhookResult:
+        """Take the next period's money with nobody present.
+
+        Only for `RecurringMode.token`. Returns the same verdict shape as a
+        webhook, so a successful charge settles through exactly the same path
+        as a payment the buyer made by hand — one place where an order
+        becomes paid, whatever prompted it."""
+        ...
+
 
 class ProviderDefaults:
     """What most providers don't have to think about.
@@ -205,6 +276,9 @@ class ProviderDefaults:
     #: Most providers are country-specific and say so; "works everywhere" is
     #: the safe default for the handful that genuinely do.
     region = "global"
+    #: Assume no. An adapter claiming recurring it does not have would sell a
+    #: shop a subscription business and charge their customers once.
+    recurring = RecurringMode.none
     block_fields: tuple[CredentialField, ...] = ()
 
     async def check_status(
@@ -232,6 +306,22 @@ class ProviderDefaults:
         `found` is False when no payment matched the callback at all.
         """
         return None
+
+    def recurring_setup(self, settled: dict) -> RecurringSetup | None:
+        return None
+
+    async def charge_recurring(
+        self,
+        *,
+        credentials: dict[str, str],
+        setup: RecurringSetup,
+        amount_minor: int,
+        currency: str,
+        description: str,
+        payment_id: uuid.UUID,
+        is_test: bool = False,
+    ) -> WebhookResult:
+        raise ProviderError(f"{getattr(self, 'title', 'Провайдер')}: автосписание так не работает")
 
 
 

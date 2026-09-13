@@ -302,6 +302,11 @@ export interface PaymentProviderInfo {
   currencies: string[];
   /** Which `PaymentRegion` this gateway is filed under. */
   region: string;
+  /** Whether this gateway can take money a second time, and who initiates it.
+   * "gateway" — it runs the subscription itself (Telegram Stars, Stripe);
+   * "token" — the first payment saves a card and the bot charges it each
+   * period (ЮKassa, CloudPayments); "none" — a fresh invoice every time. */
+  recurring: "none" | "gateway" | "token";
   /** Asked once per shop, in the settings panel. */
   fields: PaymentField[];
   /** Asked per product, on the payment block itself — Lava's offerId, the

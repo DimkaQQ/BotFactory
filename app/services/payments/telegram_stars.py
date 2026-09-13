@@ -31,6 +31,7 @@ from app.services.payments.base import (
     CheckoutRequest,
     PaymentRef,
     ProviderDefaults,
+    RecurringMode,
     ProviderError,
     WebhookResult,
 )
@@ -70,6 +71,9 @@ class TelegramStarsProvider(ProviderDefaults):
     )
     currencies = ("XTR",)
     region = "global"
+    # Telegram держит платёжный инструмент и списывает сам каждые 30 дней;
+    # отписаться покупатель может внутри Telegram.
+    recurring = RecurringMode.gateway
     credential_fields = ()
     uses_callback = False
     has_test_mode = False

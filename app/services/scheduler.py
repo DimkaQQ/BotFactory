@@ -209,6 +209,27 @@ async def _run_step(step_id: uuid.UUID) -> None:
             return  # another sweep got there first
 
         await db.refresh(step)
+
+        if step.reason == "charge":
+            # Not a message to send — money to take. The subscription layer
+            # owns everything that follows (the new payment row, extending
+            # the period, telling both sides), so this is the whole branch.
+            from app.services import subscription_service
+
+            subscription = (
+                await db.execute(select(Subscription).where(Subscription.id == step.subscription_id))
+            ).scalar_one_or_none()
+            if subscription is None:
+                step.status = StepStatus.cancelled
+                step.last_error = "подписка удалена"
+                await db.commit()
+                return
+            try:
+                await subscription_service.charge_now(db, subscription)
+            except Exception as exc:
+                await _give_up_or_retry(db, step, repr(exc))
+            return
+
         try:
             bot_instance = await bot_registry.get_or_create(step.bot_id, db)
             if bot_instance is None:

@@ -274,6 +274,7 @@ async def test_the_provider_catalogue_is_enough_to_render_the_settings_form(api,
     for entry in catalogue:
         assert entry["slug"] and entry["title"] and entry["hint"]
         assert entry["currencies"], f"{entry['slug']} без валют — селектор будет пустым"
+        assert entry["recurring"] in {"none", "gateway", "token"}, entry["slug"]
         for flag in ("supports_status_check", "uses_callback", "has_test_mode"):
             assert isinstance(entry[flag], bool), f"{entry['slug']}: {flag} должен быть булевым"
         for field in entry["fields"] + entry["block_fields"]:
@@ -290,6 +291,11 @@ async def test_the_provider_catalogue_is_enough_to_render_the_settings_form(api,
     # The form draws a section per region and skips empty ones, so every
     # provider has to land in a section the response also describes —
     # otherwise it is configurable over the API and invisible in the UI.
+    # Several recurring options, not one: the whole point of the exercise is
+    # that a shop does not have to take Telegram Stars to sell a subscription.
+    recurring = [e["slug"] for e in catalogue if e["recurring"] != "none"]
+    assert len(recurring) >= 3, recurring
+
     regions = body["regions"]
     assert regions, "без разделов форма отрисует один безымянный список"
     known = {r["slug"] for r in regions}

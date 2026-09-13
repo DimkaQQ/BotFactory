@@ -1,24 +1,22 @@
 """Standing access, a period at a time.
 
-The honest shape of this feature, stated once so the rest of the code can be
-read against it: **exactly one of the twenty payment providers can charge a
-second time by itself.** Telegram Stars does, because Telegram holds the
-payment instrument and bills against it on a 30-day cycle. ЮKassa, Т-Банк,
-CloudPayments, Freedom Pay and the rest are invoice-based here — the adapter
-mints a checkout, a person pays it, and nothing in the integration can
-initiate a second charge later.
+Three different things are called "подписка" by the twenty gateways, and the
+difference decides what the shop owner actually has, so it is carried
+explicitly rather than averaged away (see `payments.base.RecurringMode`):
 
-Pretending otherwise is what the product used to do: a template called
-«Платная подписка» selling «Подписка стоит [цена] в месяц» on top of an
-engine that took the money once and never came back. So there are two
-billing modes and they are named differently everywhere the owner can see
-them:
-
-* `auto` (Stars) — Telegram charges monthly; we receive a fresh
-  `successful_payment` on the same invoice payload and extend the period.
-* `renewal` (everyone else) — when the period is nearly up the bot sends a
-  fresh invoice and says so. Access continues if it is paid. This is a
-  reminder-and-re-invoice cycle, and the constructor calls it that.
+* **the gateway runs it** — Telegram Stars and Stripe. We create the
+  subscription once; they charge on their own schedule, retry their own
+  declines, and give the buyer somewhere to cancel. No card detail, not even
+  a handle to one, is ours to hold.
+* **we charge a saved method** — ЮKassa (`save_payment_method` →
+  `payment_method_id`) and CloudPayments (`Token` → `payments/tokens/charge`).
+  The first payment saves the method and hands back a handle; every later
+  charge is initiated by our own scheduler. More control, and the dunning
+  policy becomes our problem.
+* **re-invoice** — everyone else. Nothing in the integration can take money
+  again, so the bot sends a fresh invoice before the period ends and access
+  continues only if it is paid. Honest recurring *billing*, not recurring
+  *collection*, and the constructor says so in those words.
 
 Either way `current_period_end` is the one fact everything else reads:
 whether to send this month's video, whether the person is still in the
@@ -27,6 +25,7 @@ group, what the owner's list shows.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -34,15 +33,16 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.bot import Bot as BotModel
 from app.models.bot_block import BotBlock
 from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
 from app.services import scheduler
+from app.services.payments import get_provider
+from app.services.payments.base import ProviderError, RecurringMode, RecurringSetup
 
 logger = logging.getLogger(__name__)
 
-#: Providers whose adapter can take money again without the buyer acting.
-_SELF_CHARGING = {"stars"}
 
 #: How long before a period ends to ask for the next one. Two days, so a
 #: renewal that needs a bank app, a top-up or a working day still has room
@@ -53,7 +53,26 @@ DEFAULT_PERIOD_DAYS = 30
 
 
 def billing_mode(provider: str | None) -> BillingMode:
-    return BillingMode.auto if (provider or "") in _SELF_CHARGING else BillingMode.renewal
+    """Automatic where the integration can actually take money again.
+
+    Read off the adapter rather than a list kept here, so a provider that
+    gains (or loses) recurring changes this in one place — the module that
+    knows how that gateway works.
+    """
+    try:
+        mode = get_provider(provider or "").recurring
+    except ProviderError:
+        return BillingMode.renewal
+    return BillingMode.auto if mode is not RecurringMode.none else BillingMode.renewal
+
+
+def charges_itself(provider: str | None) -> bool:
+    """True when *we* have to initiate each later charge (token recurring),
+    as opposed to the gateway running the subscription on its own."""
+    try:
+        return get_provider(provider or "").recurring is RecurringMode.token
+    except ProviderError:
+        return False
 
 
 def is_subscription_block(content: dict | None) -> bool:
@@ -95,10 +114,13 @@ async def find_for_payment(db: AsyncSession, payment: Payment) -> Subscription |
     """
     if payment.bot_id is None or payment.telegram_user_id is None:
         return None
+    # A payment we raised ourselves to renew carries the handle of the one
+    # that opened the subscription; a payment the buyer made *is* that handle.
+    handle = (payment.meta or {}).get("renews") or str(payment.id)
     result = await db.execute(
         select(Subscription).where(
             Subscription.bot_id == payment.bot_id,
-            Subscription.provider_subscription_id == str(payment.id),
+            Subscription.provider_subscription_id == str(handle),
         )
     )
     return result.scalar_one_or_none()
@@ -138,6 +160,8 @@ async def start_or_extend(db: AsyncSession, payment: Payment) -> Subscription | 
             existing.current_period_end.isoformat(),
             existing.periods_paid,
         )
+        _remember_method(existing, payment)
+        await db.commit()
         await _schedule_renewal(db, existing)
         return existing
 
@@ -159,6 +183,7 @@ async def start_or_extend(db: AsyncSession, payment: Payment) -> Subscription | 
         # The handle a Stars renewal will arrive under.
         provider_subscription_id=str(payment.id),
     )
+    _remember_method(subscription, payment)
     db.add(subscription)
     await db.commit()
     logger.info(
@@ -173,19 +198,84 @@ async def start_or_extend(db: AsyncSession, payment: Payment) -> Subscription | 
     return subscription
 
 
-async def _schedule_renewal(db: AsyncSession, subscription: Subscription) -> None:
-    """Queue what happens as this period runs out.
+def _remember_method(subscription: Subscription, payment: Payment) -> None:
+    """Keep the handle the gateway gave us for charging this person again.
 
-    For `auto` there is nothing to ask for — Telegram will either charge or
-    not — so only the expiry check is queued, and it is what withdraws access
-    if the charge never came. For `renewal` a reminder goes out first, far
-    enough ahead to be actionable.
+    Stored encrypted with the same Fernet key as the shop's API credentials.
+    On its own the handle is inert — it only moves money together with those
+    credentials — but it moves money, so it is not left lying in plaintext
+    JSONB next to things that do not.
+
+    Re-read on every settled payment rather than only the first: a gateway
+    can rotate the handle (ЮKassa returns a fresh `payment_method.id` when a
+    buyer re-confirms), and a stale one declines silently a month later.
+    """
+    from app.services.payment_service import encrypt_credentials
+
+    try:
+        provider = get_provider(subscription.provider)
+    except ProviderError:
+        return
+    setup = provider.recurring_setup(payment.meta or {})
+    if setup is None:
+        return
+
+    blob = encrypt_credentials({"token": setup.token, "customer": setup.customer}).decode("ascii")
+    subscription.meta = {**(subscription.meta or {}), "recurring_token": blob}
+
+
+def _saved_method(subscription: Subscription) -> RecurringSetup | None:
+    from app.services.payment_service import decrypt_credentials
+
+    blob = (subscription.meta or {}).get("recurring_token")
+    if not blob:
+        return None
+    try:
+        stored = decrypt_credentials(blob.encode("ascii"))
+    except Exception:
+        logger.exception("Subscription %s: stored payment method could not be read", subscription.id)
+        return None
+    token = stored.get("token")
+    return RecurringSetup(token=token, customer=stored.get("customer") or "") if token else None
+
+
+async def _schedule_renewal(db: AsyncSession, subscription: Subscription) -> None:
+    """Queue what happens as this period runs out — one of three things.
+
+    * gateway-run (Stars, Stripe): nothing to queue. They will charge or they
+      will not, and the expiry sweep withdraws access if nothing arrived.
+    * token (ЮKassa, CloudPayments): a charge, at the moment the period ends.
+      Not earlier — the buyer paid for every day of it.
+    * re-invoice: a reminder, far enough ahead to be actionable.
     """
     # Anything queued for an earlier period is stale the moment the period
-    # moves; leaving it would send a second reminder for a month already paid.
+    # moves; leaving it would charge or remind twice for a month already paid.
     await scheduler.cancel_for_subscription(db, subscription.id, why="период продлён")
 
-    if subscription.billing_mode == BillingMode.renewal:
+    if charges_itself(subscription.provider):
+        if not (subscription.meta or {}).get("recurring_token"):
+            # Paid, but the gateway did not hand back a saved method — the
+            # shop may not have autopayments enabled. Falls back to asking,
+            # which at least keeps the subscriber, and says so in the log.
+            logger.warning(
+                "Subscription %s is on %s but has no saved payment method — falling back to re-invoicing",
+                subscription.id,
+                subscription.provider,
+            )
+        else:
+            await scheduler.schedule(
+                db,
+                bot_id=subscription.bot_id,
+                block_id=subscription.block_id,
+                chat_id=subscription.chat_id,
+                telegram_user_id=subscription.telegram_user_id,
+                run_at=subscription.current_period_end,
+                reason="charge",
+                subscription_id=subscription.id,
+            )
+            return
+
+    if subscription.billing_mode == BillingMode.renewal or charges_itself(subscription.provider):
         lead = timedelta(days=min(RENEWAL_LEAD_DAYS, max(1, subscription.period_days - 1)))
         await scheduler.schedule(
             db,
@@ -197,6 +287,125 @@ async def _schedule_renewal(db: AsyncSession, subscription: Subscription) -> Non
             reason="renewal",
             subscription_id=subscription.id,
         )
+
+
+async def charge_now(db: AsyncSession, subscription: Subscription) -> bool:
+    """Take the next period's money from the saved method. Returns success.
+
+    A fresh `Payment` row is created for it and settled through
+    `apply_result` — the same single place an order becomes paid whether the
+    money came from a webhook, a buyer's "Я оплатил", the owner's confirm or
+    this. That is also what extends the period, notifies the owner and
+    re-queues the next charge, so none of it is duplicated here.
+    """
+    from app.services import bot_registry, payment_service
+
+    setup = _saved_method(subscription)
+    if setup is None:
+        return False
+
+    bot_row = (
+        await db.execute(select(BotModel).where(BotModel.id == subscription.bot_id))
+    ).scalar_one_or_none()
+    if bot_row is None:
+        return False
+
+    provider = get_provider(subscription.provider)
+    credentials = payment_service.decrypt_credentials(bot_row.payment_credentials_encrypted)
+
+    payment = Payment(
+        kind=PaymentKind.order,
+        status=PaymentStatus.pending,
+        provider=subscription.provider,
+        amount_minor=subscription.amount_minor,
+        currency=subscription.currency,
+        description=(subscription.title or "Продление подписки")[:255],
+        bot_id=subscription.bot_id,
+        block_id=subscription.block_id,
+        telegram_user_id=subscription.telegram_user_id,
+        chat_id=subscription.chat_id,
+        # Marks this as our own initiative, not something the buyer started —
+        # the sales log and any support question later both need to know.
+        meta={"auto_charge": True, "subscription_id": str(subscription.id)},
+    )
+    db.add(payment)
+    await db.commit()
+
+    try:
+        verdict = await provider.charge_recurring(
+            credentials=credentials,
+            setup=setup,
+            amount_minor=subscription.amount_minor,
+            currency=subscription.currency,
+            description=payment.description,
+            payment_id=payment.id,
+            is_test=bool(bot_row.payment_is_test),
+        )
+    except ProviderError as exc:
+        logger.warning("Subscription %s: charge refused — %s", subscription.id, exc)
+        payment.status = PaymentStatus.failed
+        payment.meta = {**(payment.meta or {}), "decline": str(exc)[:300]}
+        await db.commit()
+        await _tell_them_the_charge_failed(db, subscription, str(exc))
+        return False
+
+    if verdict.status != PaymentStatus.paid:
+        reason = (verdict.meta or {}).get("decline") or "банк отклонил списание"
+        logger.info("Subscription %s: charge not paid (%s)", subscription.id, reason)
+        payment.status = PaymentStatus.failed
+        payment.meta = {**(payment.meta or {}), "decline": str(reason)[:300]}
+        await db.commit()
+        await _tell_them_the_charge_failed(db, subscription, str(reason))
+        return False
+
+    # The subscription this payment belongs to is found by
+    # `provider_subscription_id`, which holds the *first* payment's id — so
+    # point this one at the same handle before settling it.
+    payment.meta = {**(payment.meta or {}), "renews": subscription.provider_subscription_id}
+    await db.commit()
+
+    charged = await payment_service.apply_result(db, payment, verdict, deliver=False)
+    if charged:
+        await _tell_them_it_renewed(db, subscription)
+    return charged
+
+
+async def _tell_them_the_charge_failed(db: AsyncSession, subscription: Subscription, why: str) -> None:
+    """A failed charge is the one moment a subscriber can still fix it.
+
+    Silence here is how a customer discovers a month later that they lost
+    access, and the shop discovers it as a refund request.
+    """
+    from app.services import bot_registry, subscribers
+
+    try:
+        instance = await bot_registry.get_or_create(subscription.bot_id, db)
+        if instance is None:
+            return
+        ends = subscription.current_period_end.strftime("%d.%m.%Y")
+        await instance.send_message(
+            subscription.chat_id,
+            f"⚠️ Не получилось списать оплату за «{subscription.title}».\n"
+            f"Доступ работает до {ends}. Проверь карту и оплати вручную — нажми /start.",
+        )
+    except Exception as exc:
+        if subscribers.looks_blocked(exc):
+            await subscribers.mark_blocked(db, subscription.bot_id, subscription.telegram_user_id)
+            return
+        logger.exception("Could not tell user %s their charge failed", subscription.telegram_user_id)
+
+
+async def _tell_them_it_renewed(db: AsyncSession, subscription: Subscription) -> None:
+    from app.services import bot_registry
+
+    with contextlib.suppress(Exception):
+        instance = await bot_registry.get_or_create(subscription.bot_id, db)
+        if instance is not None:
+            until = subscription.current_period_end.strftime("%d.%m.%Y")
+            await instance.send_message(
+                subscription.chat_id,
+                f"🔁 Подписка «{subscription.title}» продлена — доступ открыт до {until}.",
+            )
 
 
 async def cancel(db: AsyncSession, subscription: Subscription, *, why: str = "") -> None:

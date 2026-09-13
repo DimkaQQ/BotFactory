@@ -20,6 +20,8 @@ from app.services.payments.base import (
     CredentialField,
     PaymentRef,
     ProviderDefaults,
+    RecurringMode,
+    RecurringSetup,
     ProviderError,
     WebhookResult,
     minor_to_major,
@@ -40,6 +42,12 @@ class YooKassaProvider(ProviderDefaults):
     currencies = ("RUB",)
     region = "ru"
     supports_status_check = True
+    # Автоплатежи: первый платёж просит сохранить способ оплаты, ответ
+    # приносит payment_method.id, и последующие списания идут с этим id
+    # без участия покупателя. Поля сверены с официальным SDK
+    # (yookassa 3.12.1: PaymentRequest.save_payment_method /
+    # .payment_method_id, ResponsePaymentData.id / .saved).
+    recurring = RecurringMode.token
     credential_fields = (
         CredentialField("shop_id", "shopId", "идентификатор магазина", secret=False),
         CredentialField("secret_key", "Секретный ключ", "live_… или test_…"),
@@ -62,6 +70,14 @@ class YooKassaProvider(ProviderDefaults):
             "description": request.description[:128] or "Оплата",
             "metadata": {"order_id": str(request.payment_id)},
         }
+        if request.extra.get("subscription"):
+            # Turns this into the *first* payment of an autopayment series:
+            # the buyer confirms once, and the response carries a handle we
+            # can charge later. ЮKassa requires the shop to have autopayments
+            # enabled by their manager — an account without it refuses the
+            # field outright rather than silently ignoring it, which is the
+            # behaviour we want.
+            body["save_payment_method"] = True
 
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
@@ -156,11 +172,67 @@ class YooKassaProvider(ProviderDefaults):
             if value and abs(float(value) - amount_minor / 100) > 0.009:
                 raise ProviderError(f"ЮKassa: сумма не совпадает (в кассе {value})")
             same_currency(self.title, (payment.get("amount") or {}).get("currency"), currency)
-            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(remote_id))
+            method = payment.get("payment_method") or {}
+            notes = {}
+            if method.get("saved") and method.get("id"):
+                notes["yookassa_payment_method_id"] = str(method["id"])
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(remote_id), meta=notes)
 
         if status == "canceled":
             return WebhookResult(status=PaymentStatus.failed, provider_payment_id=str(remote_id))
         return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(remote_id))
+
+
+    def recurring_setup(self, settled: dict) -> RecurringSetup | None:
+        token = (settled or {}).get("yookassa_payment_method_id")
+        return RecurringSetup(token=str(token)) if token else None
+
+    async def charge_recurring(
+        self,
+        *,
+        credentials: dict[str, str],
+        setup: RecurringSetup,
+        amount_minor: int,
+        currency: str,
+        description: str,
+        payment_id: uuid.UUID,
+        is_test: bool = False,
+    ) -> WebhookResult:
+        """The next period, with nobody present.
+
+        Same POST /payments as a normal sale, minus the confirmation block
+        and plus `payment_method_id` — ЮKassa then charges the saved method
+        outright. The idempotence key is our own payment id, so a retried
+        charge cannot take the money twice.
+        """
+        auth = self._auth(credentials)
+        body = {
+            "amount": {"value": minor_to_major(amount_minor), "currency": currency.upper()},
+            "capture": True,
+            "payment_method_id": setup.token,
+            "description": description[:128] or "Продление подписки",
+            "metadata": {"order_id": str(payment_id)},
+        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{_BASE}/payments", json=body, auth=auth, headers={"Idempotence-Key": str(payment_id)}
+            )
+        if response.status_code >= 400:
+            raise ProviderError(f"ЮKassa: {_error(response)}")
+
+        payload = response.json()
+        remote_id = str(payload.get("id") or "")
+        status = payload.get("status")
+        if status == "succeeded" and payload.get("paid"):
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
+        if status == "canceled":
+            # A declined card is not an error to retry into oblivion — it is
+            # this period's answer, and the subscription layer treats it as
+            # "not paid" rather than "try again in a minute".
+            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=remote_id)
+        # "pending" here means 3-D Secure was demanded for a payment nobody
+        # is watching, which for an autopayment is a decline in slow motion.
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=remote_id)
 
 
 def _error(response: httpx.Response) -> str:

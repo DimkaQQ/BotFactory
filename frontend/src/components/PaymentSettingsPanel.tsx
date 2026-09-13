@@ -211,6 +211,9 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
 
               <div className="buttons-editor__field">
                 <span className="buttons-editor__field-label">Платёжная система</span>
+                <p className="app-hint payment-settings__recurring-legend">
+                  🔁 — умеет списывать подписку сама. У остальных бот присылает новый счёт каждый период.
+                </p>
                 {grouped.map((group) => (
                   <div key={group.slug} className="payment-settings__region">
                     {group.title && <p className="payment-settings__region-title">{group.title}</p>}
@@ -224,7 +227,21 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                           }`}
                           onClick={() => setSlug(provider.slug)}
                         >
-                          <span className="payment-settings__provider-title">{provider.title}</span>
+                          <span className="payment-settings__provider-title">
+                            {provider.title}
+                            {provider.recurring !== "none" && (
+                              <span
+                                className="payment-settings__recurring"
+                                title={
+                                  provider.recurring === "gateway"
+                                    ? "Ведёт подписку сама: списывает следующий период без участия покупателя"
+                                    : "Автосписание: первая оплата сохраняет карту, дальше бот списывает сам"
+                                }
+                              >
+                                {" "}🔁
+                              </span>
+                            )}
+                          </span>
                           {SHORT[provider.slug] && (
                             <span className="payment-settings__provider-note">{SHORT[provider.slug]}</span>
                           )}

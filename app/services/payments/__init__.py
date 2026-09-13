@@ -107,6 +107,10 @@ def describe_providers() -> list[dict]:
             "hint": provider.hint,
             "currencies": list(provider.currencies),
             "region": provider.region,
+            # "gateway" — шлюз ведёт подписку сам; "token" — мы списываем с
+            # сохранённого способа оплаты; "none" — только новый счёт.
+            # Разница решает, что владелец продаёт, поэтому едет в каталог.
+            "recurring": provider.recurring.value,
             "fields": [
                 {"key": f.key, "label": f.label, "hint": f.hint, "secret": f.secret}
                 for f in provider.credential_fields

@@ -30,6 +30,8 @@ from app.services.payments.base import (
     CredentialField,
     PaymentRef,
     ProviderDefaults,
+    RecurringMode,
+    RecurringSetup,
     ProviderError,
     WebhookResult,
     same_currency,
@@ -60,6 +62,12 @@ class CloudPaymentsProvider(ProviderDefaults):
     currencies = ("RUB", "KZT", "USD", "EUR", "UAH")
     region = "ru"
     supports_status_check = True
+    # Рекуррент по токену карты: успешный платёж возвращает Token, и
+    # последующие списания идут через payments/tokens/charge с этим
+    # токеном и AccountId. Поля сверены с официальной библиотекой
+    # (cloudpayments 1.6.3: Client.charge_token → payments/tokens/charge,
+    # параметры Token / AccountId / Amount / Currency / InvoiceId).
+    recurring = RecurringMode.token
     credential_fields = (
         CredentialField("public_id", "Public ID", "pk_… из кабинета", secret=False),
         CredentialField("api_secret", "API-пароль", "он же API Secret"),
@@ -72,6 +80,25 @@ class CloudPaymentsProvider(ProviderDefaults):
         if not public_id or not secret:
             raise ProviderError("CloudPayments: не заполнены Public ID или API-пароль")
         return public_id, secret
+
+    async def _call(self, path: str, body: dict, credentials: dict[str, str]) -> dict:
+        """The raw call, without treating a business refusal as an error.
+
+        `_post` below turns `Success: false` into a ProviderError, which is
+        right for "find this payment" and wrong for "charge this card": a
+        declined card is this period's answer, not a broken integration, and
+        the shop owner needs the bank's own wording rather than a stringified
+        response body.
+        """
+        auth = self._auth(credentials)
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(f"{_BASE}{path}", json=body, auth=auth)
+        if response.status_code >= 400:
+            raise ProviderError(f"CloudPayments: HTTP {response.status_code}")
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise ProviderError("CloudPayments: непонятный ответ") from exc
 
     async def _post(self, path: str, body: dict, credentials: dict[str, str]) -> dict:
         auth = self._auth(credentials)
@@ -163,6 +190,58 @@ class CloudPaymentsProvider(ProviderDefaults):
     ) -> WebhookResult:
         return await self._find(credentials, payment_id, amount_minor, currency)
 
+    def recurring_setup(self, settled: dict) -> RecurringSetup | None:
+        token = (settled or {}).get("cloudpayments_token")
+        if not token:
+            return None
+        return RecurringSetup(token=str(token), customer=str((settled or {}).get("cloudpayments_account") or ""))
+
+    async def charge_recurring(
+        self,
+        *,
+        credentials: dict[str, str],
+        setup: RecurringSetup,
+        amount_minor: int,
+        currency: str,
+        description: str,
+        payment_id: uuid.UUID,
+        is_test: bool = False,
+    ) -> WebhookResult:
+        """Charge the saved card for the next period.
+
+        `payments/tokens/charge`, not `.../auth`: the auth variant holds the
+        money for a later confirm, and a subscription renewal nobody is
+        watching has no one to do the confirming.
+        """
+        if not setup.token:
+            raise ProviderError("CloudPayments: нет сохранённого токена карты")
+        body = {
+            "Amount": round(amount_minor / 100, 2),
+            "Currency": currency.upper(),
+            "AccountId": setup.customer or str(payment_id),
+            "Token": setup.token,
+            "InvoiceId": str(payment_id),
+            "Description": description[:250] or "Продление подписки",
+        }
+        parsed = await self._call("/payments/tokens/charge", body, credentials)
+        model = parsed.get("Model") or {}
+        transaction_id = model.get("TransactionId")
+        remote_id = str(transaction_id) if transaction_id is not None else None
+
+        if not parsed.get("Success"):
+            # A refusal here is the bank declining, not the integration
+            # breaking — `Message`/`CardHolderMessage` is what the shop owner
+            # needs to see in their subscription list.
+            reason = model.get("CardHolderMessage") or parsed.get("Message") or "отказ банка"
+            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=remote_id, meta={"decline": reason})
+
+        status = str(model.get("Status") or "").lower()
+        if status in _PAID:
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
+        if status in _FAILED:
+            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=remote_id)
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=remote_id)
+
     async def _find(
         self, credentials: dict[str, str], payment_id: uuid.UUID, amount_minor: int, currency: str = ""
     ) -> WebhookResult:
@@ -193,7 +272,13 @@ class CloudPaymentsProvider(ProviderDefaults):
             if mismatch:
                 raise ProviderError(f"CloudPayments: сумма не совпадает (пришло {amount})")
             same_currency(self.title, model.get("Currency"), currency)
-            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
+            notes = {}
+            # Present only when the payment was made with card-token saving
+            # enabled; a one-off sale simply has no Token and this stays empty.
+            if model.get("Token"):
+                notes["cloudpayments_token"] = str(model["Token"])
+                notes["cloudpayments_account"] = str(model.get("AccountId") or "")
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id, meta=notes)
 
         if status in _REFUNDED:
             return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=remote_id)

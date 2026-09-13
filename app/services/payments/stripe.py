@@ -23,6 +23,7 @@ from app.services.payments.base import (
     CredentialField,
     PaymentRef,
     ProviderDefaults,
+    RecurringMode,
     ProviderError,
     WebhookResult,
     same_currency,
@@ -37,12 +38,30 @@ _SIGNATURE_TOLERANCE_S = 300
 _ZERO_DECIMAL = {"BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"}
 
 
+def _interval(period_days: int) -> tuple[str, int]:
+    """A period in days as Stripe's own billing interval.
+
+    Stripe takes day/week/month/year plus a count, so a 30-day period is
+    expressed as one month rather than thirty days — the two differ in
+    February, and a subscriber billed "every 30 days" drifts a day earlier
+    every month against the date they signed up on.
+    """
+    if period_days % 365 == 0:
+        return "year", period_days // 365
+    if period_days % 30 == 0:
+        return "month", period_days // 30
+    if period_days % 7 == 0:
+        return "week", period_days // 7
+    return "day", max(1, period_days)
+
+
 class StripeProvider(ProviderDefaults):
     slug = "stripe"
     title = "Stripe"
     hint = "Secret key (sk_live_… или sk_test_…) — в Stripe Dashboard → Developers → API keys. Webhook secret (whsec_…) появится, когда добавишь наш URL в Developers → Webhooks на событие checkout.session.completed."
     currencies = ("USD", "EUR", "GBP", "KZT", "PLN", "TRY", "AED")
     region = "global"
+    recurring = RecurringMode.gateway
     credential_fields = (
         CredentialField("secret_key", "Secret key", "sk_live_… или sk_test_…"),
         CredentialField("webhook_secret", "Webhook signing secret", "whsec_… из настроек вебхука"),
@@ -68,6 +87,23 @@ class StripeProvider(ProviderDefaults):
             "line_items[0][price_data][unit_amount]": str(unit_amount),
             "line_items[0][price_data][product_data][name]": request.description[:250] or "Оплата",
         }
+
+        if request.extra.get("subscription"):
+            # One extra pair of fields turns the same Checkout Session into a
+            # real Stripe subscription: Stripe then bills on its own schedule,
+            # retries its own declines and gives the buyer somewhere to
+            # cancel. Nothing about the card ever reaches us — which is why
+            # this is `gateway` recurring and not `token`.
+            #
+            # Field names taken from the official SDK's typed parameters
+            # (stripe 15.6.1, checkout/_session_create_params.py:
+            # mode='subscription', line_items[].price_data.recurring.interval
+            # ∈ day|week|month|year, plus interval_count).
+            interval, count = _interval(int(request.extra.get("period_days") or 30))
+            data["mode"] = "subscription"
+            data["line_items[0][price_data][recurring][interval]"] = interval
+            data["line_items[0][price_data][recurring][interval_count]"] = str(count)
+            data["subscription_data[metadata][payment_id]"] = str(request.payment_id)
 
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.post(_API_URL, data=data, auth=(secret_key, ""))

@@ -29,14 +29,18 @@ class BillingMode(str, enum.Enum):
     the shop owner in those words, because it decides whether they have a
     subscription business or a reminder business:
 
-    * `auto` — Telegram Stars. Telegram itself charges every 30 days and
-      sends us a fresh `successful_payment`; the subscriber can cancel from
-      inside Telegram. This is the only provider of the twenty that can
-      charge a second time without the buyer doing anything.
-    * `renewal` — everyone else (ЮKassa, Т-Банк, CloudPayments, …). None of
-      their adapters can charge again on their own, so the bot sends a fresh
-      invoice when the period ends and access continues only if the buyer
-      pays it. Honest recurring *billing*, not recurring *collection*.
+    * `auto` — the next period's money arrives without the buyer doing
+      anything. Two mechanisms sit under this one word, and which applies is
+      a property of the adapter (`payments.base.RecurringMode`): Telegram
+      Stars and Stripe run the subscription themselves, while ЮKassa and
+      CloudPayments hand back a saved payment method that *we* charge on
+      schedule. The distinction matters to the code — only the second kind
+      queues a charge of its own — but not to the owner's mental model, which
+      is why it collapses to one value here.
+    * `renewal` — everyone else. Nothing in those integrations can take money
+      again, so the bot sends a fresh invoice when the period ends and access
+      continues only if the buyer pays it. Honest recurring *billing*, not
+      recurring *collection*.
     """
 
     auto = "auto"

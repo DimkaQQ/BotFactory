@@ -21,6 +21,27 @@ const FALLBACK_CURRENCIES = ["RUB", "KZT", "USD", "EUR"];
 /** Editor for a payment block: what's being sold, for how much, and what
  * the button says. What happens *after* the money lands is the block's
  * plain arrow on the canvas — usually a delivery block. */
+function PeriodField({
+  content,
+  onChange,
+}: {
+  content: BlockContent;
+  onChange: (content: BlockContent) => void;
+}) {
+  return (
+    <label className="buttons-editor__field payment-editor__period">
+      <span className="buttons-editor__field-label">Период доступа, дней</span>
+      <input
+        className="payment-editor__input"
+        inputMode="numeric"
+        placeholder="30"
+        value={content.period_days ?? ""}
+        onChange={(e) => onChange({ ...content, period_days: e.target.value.replace(/[^\d]/g, "") })}
+      />
+    </label>
+  );
+}
+
 export function PaymentEditor({ content, provider, currencies, providerInfo, onChange, onOpenSettings }: Props) {
   const options = currencies.length > 0 ? currencies : FALLBACK_CURRENCIES;
   const currency = content.currency && options.includes(content.currency) ? content.currency : options[0];
@@ -35,6 +56,10 @@ export function PaymentEditor({ content, provider, currencies, providerInfo, onC
     }
   }, [content, currency, onChange]);
   const isStars = currency === "XTR";
+  // What this particular gateway can do about the next period. Three
+  // genuinely different answers, and the owner is choosing a business
+  // model here, not a checkbox.
+  const recurring = providerInfo?.recurring ?? "none";
   const blockFields = providerInfo?.block_fields ?? [];
 
   return (
@@ -141,36 +166,38 @@ export function PaymentEditor({ content, provider, currencies, providerInfo, onC
 
         {content.subscription && (
           <>
-            {isStars ? (
-              <p className="payment-editor__note payment-editor__note--good">
-                ⭐️ Telegram сам спишет звёзды раз в 30 дней, пока подписчик не отменит — отменяет он тоже внутри
-                Telegram. Период фиксированный: 30 дней, другого Telegram не поддерживает.
-              </p>
+            {recurring === "gateway" ? (
+              <>
+                {/* Stars is locked to Telegram's own 30-day cycle; every
+                    other gateway-run subscription takes the period we ask
+                    for, so hiding the field would silently pin it to 30. */}
+                {!isStars && <PeriodField content={content} onChange={onChange} />}
+                <p className="payment-editor__note payment-editor__note--good">
+                  {isStars
+                    ? "⭐️ Telegram сам спишет звёзды раз в 30 дней, пока подписчик не отменит — отменяет он тоже внутри Telegram. Период фиксированный: 30 дней, другого Telegram не поддерживает."
+                    : `✅ ${providerInfo?.title ?? "Касса"} сама ведёт подписку: спишет следующий период без участия покупателя, сама повторит попытку при отказе карты и даст ему страницу, где отписаться.`}
+                </p>
+              </>
+            ) : recurring === "token" ? (
+              <>
+                <PeriodField content={content} onChange={onChange} />
+                <p className="payment-editor__note payment-editor__note--good">
+                  ✅ Первая оплата сохранит карту, дальше бот сам списывает в конце каждого периода. Если карта
+                  откажет — подписчику придёт сообщение, а доступ закроется в конце оплаченного срока.
+                  {providerInfo?.slug === "yookassa" &&
+                    " В ЮKassa автоплатежи включает менеджер — если их нет, бот перейдёт на счета."}
+                </p>
+              </>
             ) : (
               <>
-                <label className="buttons-editor__field payment-editor__period">
-                  <span className="buttons-editor__field-label">Период доступа, дней</span>
-                  <input
-                    className="payment-editor__input"
-                    inputMode="numeric"
-                    placeholder="30"
-                    value={content.period_days ?? ""}
-                    onChange={(e) =>
-                      onChange({ ...content, period_days: e.target.value.replace(/[^\d]/g, "") })
-                    }
-                  />
-                </label>
+                <PeriodField content={content} onChange={onChange} />
                 <p className="payment-editor__note payment-editor__note--manual">
-                  {providerInfo ? (
-                    <>
-                      ⚠️ {providerInfo.title} не умеет списывать сама — так устроены все кассы, кроме Telegram
-                      Stars.
-                    </>
-                  ) : (
-                    <>⚠️ Автосписание умеет только Telegram Stars, остальные кассы — нет.</>
-                  )}{" "}
-                  Бот пришлёт новый счёт за 2 дня до конца периода и напомнит; доступ продлится, если счёт
-                  оплатят. Если нужно именно автосписание — выбери Telegram Stars в настройках кассы.
+                  {/* "Мы не умеем", не "касса не умеет": у половины этих
+                      шлюзов рекуррент есть, просто мы его ещё не подключили,
+                      и врать про чужой продукт незачем. */}
+                  ⚠️ Автосписание через {providerInfo?.title ?? "эту кассу"} бот пока не умеет. Он пришлёт новый
+                  счёт за 2 дня до конца периода и напомнит; доступ продлится, если счёт оплатят. Списывают
+                  сами: Telegram Stars, Stripe, ЮKassa и CloudPayments.
                 </p>
               </>
             )}
