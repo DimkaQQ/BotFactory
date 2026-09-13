@@ -243,6 +243,9 @@ class PaymentProvider(Protocol):
         description: str,
         payment_id: uuid.UUID,
         is_test: bool = False,
+        #: The short numeric invoice number of *this* charge. Robokassa signs
+        #: the recurring call with it; the others never look at it.
+        invoice_no: int | None = None,
     ) -> WebhookResult:
         """Take the next period's money with nobody present.
 
@@ -320,6 +323,9 @@ class ProviderDefaults:
         description: str,
         payment_id: uuid.UUID,
         is_test: bool = False,
+        #: The short numeric invoice number of *this* charge. Robokassa signs
+        #: the recurring call with it; the others never look at it.
+        invoice_no: int | None = None,
     ) -> WebhookResult:
         raise ProviderError(f"{getattr(self, 'title', 'Провайдер')}: автосписание так не работает")
 

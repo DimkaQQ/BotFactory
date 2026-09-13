@@ -324,9 +324,18 @@ async def charge_now(db: AsyncSession, subscription: Subscription) -> bool:
         block_id=subscription.block_id,
         telegram_user_id=subscription.telegram_user_id,
         chat_id=subscription.chat_id,
-        # Marks this as our own initiative, not something the buyer started —
-        # the sales log and any support question later both need to know.
-        meta={"auto_charge": True, "subscription_id": str(subscription.id)},
+        meta={
+            # Marks this as our own initiative, not something the buyer
+            # started — the sales log and any support question need to know.
+            "auto_charge": True,
+            "subscription_id": str(subscription.id),
+            # Written *before* the charge, not after: Robokassa settles a
+            # recurring charge through the ordinary ResultURL callback, which
+            # can arrive before this function returns. Without the link
+            # already in place that callback would settle a payment belonging
+            # to no subscription, and the period would never move.
+            "renews": subscription.provider_subscription_id,
+        },
     )
     db.add(payment)
     await db.commit()
@@ -340,6 +349,7 @@ async def charge_now(db: AsyncSession, subscription: Subscription) -> bool:
             description=payment.description,
             payment_id=payment.id,
             is_test=bool(bot_row.payment_is_test),
+            invoice_no=payment.invoice_no,
         )
     except ProviderError as exc:
         logger.warning("Subscription %s: charge refused — %s", subscription.id, exc)
@@ -347,6 +357,16 @@ async def charge_now(db: AsyncSession, subscription: Subscription) -> bool:
         payment.meta = {**(payment.meta or {}), "decline": str(exc)[:300]}
         await db.commit()
         await _tell_them_the_charge_failed(db, subscription, str(exc))
+        return False
+
+    if verdict.status == PaymentStatus.pending:
+        # Requested, not yet taken. Robokassa works this way by design: its
+        # acknowledgement means the operation was created, and whether the
+        # money moved arrives later on the ordinary callback — which settles
+        # this very payment and extends the period through the same path as
+        # everything else. Nothing to tell the subscriber yet; if nothing
+        # comes, the expiry sweep closes the period on its date.
+        logger.info("Subscription %s: charge requested, waiting for the provider", subscription.id)
         return False
 
     if verdict.status != PaymentStatus.paid:
@@ -357,12 +377,6 @@ async def charge_now(db: AsyncSession, subscription: Subscription) -> bool:
         await db.commit()
         await _tell_them_the_charge_failed(db, subscription, str(reason))
         return False
-
-    # The subscription this payment belongs to is found by
-    # `provider_subscription_id`, which holds the *first* payment's id — so
-    # point this one at the same handle before settling it.
-    payment.meta = {**(payment.meta or {}), "renews": subscription.provider_subscription_id}
-    await db.commit()
 
     charged = await payment_service.apply_result(db, payment, verdict, deliver=False)
     if charged:

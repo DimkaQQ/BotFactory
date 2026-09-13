@@ -23,6 +23,7 @@ from app.models.scheduled_step import ScheduledStep, StepStatus
 from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
 from app.services import bot_dispatcher, subscription_service
 from app.services.payments import get_provider
+from app.services.payments.base import ProviderError
 from app.services.payments.base import CheckoutRequest
 
 CHAT_ID = 991
@@ -729,3 +730,203 @@ async def test_a_card_subscription_without_a_saved_method_falls_back_to_asking(d
         await db.execute(select(ScheduledStep).where(ScheduledStep.subscription_id == subscription.id))
     ).scalars().all()
     assert [s.reason for s in queued] == ["renewal"]
+
+
+# ------------------------------------------- остальные шлюзы, по одному механизму
+
+
+async def test_tbank_registers_the_autopayment_and_then_charges_the_rebill_id(mock_http):
+    """Two calls, and the second is the whole feature: Init mints a PaymentId
+    for this period, Charge takes the money against the stored RebillId."""
+    from app.services.payments.base import RecurringSetup
+
+    seen: list[dict] = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append({"url": str(request.url), **body})
+        if request.url.path.endswith("/Init"):
+            return httpx.Response(200, json={"Success": True, "PaymentId": 4242, "PaymentURL": "https://pay"})
+        return httpx.Response(200, json={"Success": True, "Status": "CONFIRMED", "Amount": 59000})
+
+    provider = get_provider("tbank")
+    creds = {"terminal_key": "T1", "password": "p"}
+
+    with mock_http(handler):
+        await provider.create_checkout(_tbank_request(creds, extra={"subscription": True}))
+        seen.clear()
+        verdict = await provider.charge_recurring(
+            credentials=creds,
+            setup=RecurringSetup(token="rebill-77", customer="tg-5150"),
+            amount_minor=59000,
+            currency="RUB",
+            description="Клуб",
+            payment_id=uuid.uuid4(),
+            invoice_no=1234,
+        )
+
+    assert verdict.status == PaymentStatus.paid
+    init, charge = seen
+    assert init["url"].endswith("/Init") and "Recurrent" not in init, "повторная регистрация автоплатежа не нужна"
+    assert charge["url"].endswith("/Charge")
+    assert charge["RebillId"] == "rebill-77"
+    assert charge["PaymentId"] == "4242"
+
+
+async def test_tbank_asks_for_the_autopayment_only_on_a_subscription(mock_http):
+    seen: list[dict] = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={"Success": True, "PaymentId": 1, "PaymentURL": "https://pay"})
+
+    provider = get_provider("tbank")
+    creds = {"terminal_key": "T1", "password": "p"}
+    with mock_http(handler):
+        await provider.create_checkout(_tbank_request(creds, extra={"subscription": True}))
+        await provider.create_checkout(_tbank_request(creds, extra={}))
+
+    assert seen[0]["Recurrent"] == "Y" and seen[0]["CustomerKey"]
+    assert "Recurrent" not in seen[1]
+
+
+async def test_tbank_a_held_but_uncaptured_charge_is_not_treated_as_paid(mock_http):
+    """AUTHORIZED on a two-stage terminal means the money is held, not taken,
+    and a renewal has nobody to confirm it."""
+    from app.services.payments.base import RecurringSetup
+
+    def handler(request):
+        if request.url.path.endswith("/Init"):
+            return httpx.Response(200, json={"Success": True, "PaymentId": 9})
+        return httpx.Response(200, json={"Success": True, "Status": "AUTHORIZED", "Amount": 59000})
+
+    with mock_http(handler):
+        verdict = await get_provider("tbank").charge_recurring(
+            credentials={"terminal_key": "T1", "password": "p"},
+            setup=RecurringSetup(token="r"),
+            amount_minor=59000,
+            currency="RUB",
+            description="Клуб",
+            payment_id=uuid.uuid4(),
+            invoice_no=1,
+        )
+    assert verdict.status == PaymentStatus.pending
+
+
+async def test_robokassa_says_requested_not_paid(mock_http):
+    """«OK<InvId>» means the operation was created. Reading it as a settlement
+    would hand over a month for a charge that can still be declined — the real
+    answer comes later on ResultURL."""
+    from app.services.payments.base import RecurringSetup
+
+    seen: list[httpx.Request] = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, text="OK1235")
+
+    with mock_http(handler):
+        verdict = await get_provider("robokassa").charge_recurring(
+            credentials={"merchant_login": "shop", "password1": "p1", "password2": "p2"},
+            setup=RecurringSetup(token="1000"),
+            amount_minor=59000,
+            currency="RUB",
+            description="Клуб",
+            payment_id=uuid.uuid4(),
+            invoice_no=1235,
+        )
+
+    assert verdict.status == PaymentStatus.pending, "ответ Robokassa — не подтверждение списания"
+    body = dict(x.split("=", 1) for x in seen[0].content.decode().split("&"))
+    assert str(seen[0].url).endswith("/Merchant/Recurring")
+    assert body["PreviousInvoiceID"] == "1000"
+    assert body["InvoiceID"] == "1235"
+    assert body["OutSum"] == "590.00"
+
+
+async def test_robokassa_refuses_a_charge_it_cannot_sign(mock_http):
+    from app.services.payments.base import RecurringSetup
+
+    with mock_http(lambda request: httpx.Response(200, text="OK1")):
+        with pytest.raises(ProviderError):
+            await get_provider("robokassa").charge_recurring(
+                credentials={"merchant_login": "shop", "password1": "p1"},
+                setup=RecurringSetup(token="1000"),
+                amount_minor=59000,
+                currency="RUB",
+                description="Клуб",
+                payment_id=uuid.uuid4(),
+                invoice_no=None,
+            )
+
+
+async def test_liqpay_creates_a_subscription_the_gateway_then_runs():
+    """LiqPay bills it itself, so the only thing to get right is the action
+    and the period."""
+    import base64
+
+    provider = get_provider("liqpay")
+    creds = {"public_key": "pub", "private_key": "priv"}
+
+    checkout = await provider.create_checkout(_generic_request(creds, extra={"subscription": True, "period_days": 30}))
+    params = json.loads(base64.b64decode(checkout.meta["form_fields"]["data"]))
+    assert params["action"] == "subscribe"
+    assert params["subscribe"] == 1
+    assert params["subscribe_periodicity"] == "month"
+    assert params["subscribe_date_start"]
+
+    plain = await provider.create_checkout(_generic_request(creds, extra={}))
+    plain_params = json.loads(base64.b64decode(plain.meta["form_fields"]["data"]))
+    assert plain_params["action"] == "pay"
+    assert "subscribe" not in plain_params
+
+
+async def test_lavatop_stops_hardcoding_one_time(mock_http):
+    """The adapter used to send `"periodicity": "ONE_TIME"` unconditionally —
+    lava.top sells subscriptions and we were refusing to ask for one."""
+    seen: list[dict] = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={"paymentUrl": "https://lava/pay", "id": "inv-1"})
+
+    provider = get_provider("lavatop")
+    creds = {"api_key": "k", "buyer_email": "a@b.c"}
+    with mock_http(handler):
+        await provider.create_checkout(
+            _generic_request(creds, extra={"offer_id": "o1", "subscription": True, "period_days": 30})
+        )
+        await provider.create_checkout(_generic_request(creds, extra={"offer_id": "o1"}))
+
+    assert seen[0]["periodicity"] == "MONTHLY"
+    assert seen[1]["periodicity"] == "ONE_TIME"
+
+
+def _tbank_request(creds: dict, *, extra: dict) -> CheckoutRequest:
+    return CheckoutRequest(
+        payment_id=uuid.uuid4(),
+        invoice_no=1,
+        amount_minor=59000,
+        currency="RUB",
+        description="Клуб",
+        return_url="https://example.test/ok",
+        is_test=True,
+        credentials=creds,
+        extra=extra,
+        telegram_user_id=USER_ID,
+    )
+
+
+def _generic_request(creds: dict, *, extra: dict) -> CheckoutRequest:
+    return CheckoutRequest(
+        payment_id=uuid.uuid4(),
+        invoice_no=1,
+        amount_minor=59000,
+        currency="RUB",
+        description="Клуб",
+        return_url="https://example.test/ok",
+        is_test=True,
+        credentials=creds,
+        extra=extra,
+        telegram_user_id=USER_ID,
+    )

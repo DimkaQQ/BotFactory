@@ -34,6 +34,8 @@ from app.services.payments.base import (
     PaymentRef,
     ProviderDefaults,
     ProviderError,
+    RecurringMode,
+    RecurringSetup,
     WebhookResult,
 )
 
@@ -69,6 +71,12 @@ class TBankProvider(ProviderDefaults):
     currencies = ("RUB",)
     region = "ru"
     supports_status_check = True
+    # Автоплатёж: Init с Recurrent="Y" и CustomerKey, банк возвращает RebillId
+    # в нотификации, дальше Init нового платежа + Charge(PaymentId, RebillId).
+    # Поля сверены с типизированной реализацией github.com/nikita-vanyasin/tinkoff
+    # (InitRequest.Recurrent "Y", InitRequest.CustomerKey, Notification.RebillId,
+    # ChargeRequest.PaymentId/.RebillId) — не по памяти.
+    recurring = RecurringMode.token
     credential_fields = (
         CredentialField("terminal_key", "Terminal Key", "идентификатор терминала", secret=False),
         CredentialField("password", "Пароль терминала", "он же Secret Key"),
@@ -112,6 +120,17 @@ class TBankProvider(ProviderDefaults):
                 "SuccessURL": request.return_url,
                 "FailURL": request.return_url,
                 "NotificationURL": f"{base}/webhook/pay/tbank",
+                **(
+                    {
+                        "Recurrent": "Y",
+                        # The bank ties the RebillId to this key, so it has to
+                        # be the buyer — not the order, which changes every
+                        # period.
+                        "CustomerKey": str(request.telegram_user_id or request.payment_id),
+                    }
+                    if request.extra.get("subscription")
+                    else {}
+                ),
             },
             request.credentials,
         )
@@ -155,9 +174,21 @@ class TBankProvider(ProviderDefaults):
         if not remote_id:
             raise ProviderError("Т-Банк: уведомление без PaymentId")
         result = await self._read(credentials, str(remote_id), amount_minor)
+        # RebillId is only ever in the notification — GetState does not carry
+        # it — so it is picked up here or not at all.
+        notes = dict(result.meta or {})
+        rebill = event.get("RebillId") or form.get("RebillId")
+        if rebill:
+            notes["tbank_rebill_id"] = str(rebill)
+        customer = event.get("CustomerKey") or form.get("CustomerKey")
+        if customer:
+            notes["tbank_customer_key"] = str(customer)
         # The terminal keeps resending until it sees exactly "OK".
         return WebhookResult(
-            status=result.status, provider_payment_id=result.provider_payment_id, response_body="OK"
+            status=result.status,
+            provider_payment_id=result.provider_payment_id,
+            response_body="OK",
+            meta=notes,
         )
 
     async def check_status(
@@ -174,6 +205,62 @@ class TBankProvider(ProviderDefaults):
         if not provider_payment_id:
             raise ProviderError("Т-Банк: платёж ещё не создан")
         return await self._read(credentials, provider_payment_id, amount_minor)
+
+    def recurring_setup(self, settled: dict) -> RecurringSetup | None:
+        rebill = (settled or {}).get("tbank_rebill_id")
+        if not rebill:
+            return None
+        return RecurringSetup(token=str(rebill), customer=str((settled or {}).get("tbank_customer_key") or ""))
+
+    async def charge_recurring(
+        self,
+        *,
+        credentials: dict[str, str],
+        setup: RecurringSetup,
+        amount_minor: int,
+        currency: str,
+        description: str,
+        payment_id: uuid.UUID,
+        is_test: bool = False,
+        #: The short numeric invoice number of *this* charge. Robokassa signs
+        #: the recurring call with it; the others never look at it.
+        invoice_no: int | None = None,
+    ) -> WebhookResult:
+        """Two calls, because Charge needs a payment to charge.
+
+        `Init` mints a fresh PaymentId for this period — deliberately without
+        `Recurrent`, since the arrangement already exists and re-registering
+        it would ask the bank for a second one — and `Charge` then takes the
+        money against the stored RebillId with nobody present.
+        """
+        started = await self._call(
+            "Init",
+            {
+                "Amount": amount_minor,
+                "OrderId": str(payment_id),
+                "Description": (description or "Продление подписки")[:250],
+                **({"CustomerKey": setup.customer} if setup.customer else {}),
+            },
+            credentials,
+        )
+        remote_id = started.get("PaymentId")
+        if remote_id is None:
+            raise ProviderError("Т-Банк: Init не вернул PaymentId")
+
+        charged = await self._call(
+            "Charge", {"PaymentId": str(remote_id), "RebillId": setup.token}, credentials
+        )
+        status = str(charged.get("Status") or "").upper()
+        if status in _PAID:
+            amount = charged.get("Amount")
+            if amount is not None and int(amount) != amount_minor:
+                raise ProviderError(f"Т-Банк: списано {amount} вместо {amount_minor}")
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(remote_id))
+        if status in _FAILED:
+            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=str(remote_id))
+        # AUTHORIZED on a two-stage terminal means held, not taken — and a
+        # renewal nobody is watching has no one to confirm it.
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(remote_id))
 
     async def _read(self, credentials: dict[str, str], remote_id: str, amount_minor: int) -> WebhookResult:
         parsed = await self._call("GetState", {"PaymentId": remote_id}, credentials)

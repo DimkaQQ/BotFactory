@@ -32,6 +32,7 @@ from app.services.payments.base import (
     CredentialField,
     PaymentRef,
     ProviderDefaults,
+    RecurringMode,
     ProviderError,
     WebhookResult,
     same_currency,
@@ -41,6 +42,29 @@ _BASE = "https://gate.lava.top"
 _PAID = {"COMPLETED", "SUBSCRIPTION_ACTIVE"}
 _FAILED = {"FAILED", "CANCELLED"}
 _REFUNDED = {"REFUNDED", "PARTIALLY_REFUNDED", "REVERSED", "CHARGEBACK"}
+
+
+#: lava.top bills on named periods, not on a number of days. Values taken
+#: from the published SDK (lava-top-sdk 1.1.1, `types_custom.Periodicity`);
+#: `create_subscription` there is the same POST /api/v3/invoice as a one-off
+#: sale with a non-ONE_TIME value, which is why there is no second code path.
+_PERIODICITY = (
+    (365, "PERIOD_YEAR"),
+    (180, "PERIOD_180_DAYS"),
+    (90, "PERIOD_90_DAYS"),
+    (0, "MONTHLY"),
+)
+
+
+def _periodicity(extra: dict) -> str:
+    """Which lava.top cycle this block is selling, if any."""
+    if not extra.get("subscription"):
+        return "ONE_TIME"
+    days = int(extra.get("period_days") or 30)
+    for threshold, value in _PERIODICITY:
+        if days >= threshold:
+            return value
+    return "MONTHLY"
 
 
 class LavaTopProvider(ProviderDefaults):
@@ -54,6 +78,9 @@ class LavaTopProvider(ProviderDefaults):
     )
     currencies = ("RUB", "USD", "EUR")
     region = "ru"
+    # Подписку ведёт сам lava.top: тот же POST /api/v3/invoice, только с
+    # periodicity, отличной от ONE_TIME.
+    recurring = RecurringMode.gateway
     supports_status_check = True
     credential_fields = (
         CredentialField("api_key", "API-ключ", "заголовок X-Api-Key из настроек аккаунта"),
@@ -88,7 +115,7 @@ class LavaTopProvider(ProviderDefaults):
             "email": email,
             "offerId": offer_id,
             "currency": request.currency.upper(),
-            "periodicity": "ONE_TIME",
+            "periodicity": _periodicity(request.extra),
             "buyerLanguage": "RU",
             # Lava has no order id field; utm_content is the one value that
             # makes the round trip into the webhook untouched.

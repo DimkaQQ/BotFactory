@@ -206,6 +206,9 @@ class CloudPaymentsProvider(ProviderDefaults):
         description: str,
         payment_id: uuid.UUID,
         is_test: bool = False,
+        #: The short numeric invoice number of *this* charge. Robokassa signs
+        #: the recurring call with it; the others never look at it.
+        invoice_no: int | None = None,
     ) -> WebhookResult:
         """Charge the saved card for the next period.
 

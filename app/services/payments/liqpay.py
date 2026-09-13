@@ -15,6 +15,7 @@ of inventing a GET form of the same URL.
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
 import hashlib
 import hmac
 import json
@@ -30,6 +31,7 @@ from app.services.payments.base import (
     CredentialField,
     PaymentRef,
     ProviderDefaults,
+    RecurringMode,
     ProviderError,
     WebhookResult,
     minor_to_major,
@@ -52,6 +54,20 @@ def _sign(private_key: str, data: str) -> str:
     return base64.b64encode(hashlib.sha1(joined).digest()).decode()
 
 
+#: LiqPay bills on named periods, not on a number of days. Anything that is
+#: not one of them is rounded to the nearest one it can express, because a
+#: subscription silently created on the wrong cycle is worse than one the
+#: owner can see is monthly.
+def _periodicity(period_days: int) -> str:
+    if period_days >= 365:
+        return "year"
+    if period_days >= 28:
+        return "month"
+    if period_days >= 7:
+        return "week"
+    return "day"
+
+
 class LiqPayProvider(ProviderDefaults):
     slug = "liqpay"
     title = "LiqPay"
@@ -62,6 +78,7 @@ class LiqPayProvider(ProviderDefaults):
     )
     currencies = ("UAH", "USD", "EUR")
     region = "ua"
+    recurring = RecurringMode.gateway
     supports_status_check = True
     credential_fields = (
         CredentialField("public_key", "public_key", "начинается с i… или sandbox_i…", secret=False),
@@ -94,6 +111,19 @@ class LiqPayProvider(ProviderDefaults):
             "language": "ru",
             "sandbox": 1 if request.is_test else 0,
         }
+        if request.extra.get("subscription"):
+            # LiqPay runs the subscription itself once the first payment goes
+            # through — hence RecurringMode.gateway and no charge job of ours.
+            #
+            # Field names and the allowed periodicity values taken from the
+            # typed Go client github.com/kabachoksolutions/liqpay
+            # (action "subscribe", json tags subscribe / subscribe_periodicity
+            # / subscribe_date_start, SubscribePeriod ∈ day|week|month|year).
+            params["action"] = "subscribe"
+            params["subscribe"] = 1
+            params["subscribe_periodicity"] = _periodicity(int(request.extra.get("period_days") or 30))
+            # LiqPay wants the first charge's moment, in UTC, to the second.
+            params["subscribe_date_start"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         data = base64.b64encode(json.dumps(params).encode()).decode()
         return Checkout(
             # LiqPay's checkout is a POST, so the "link" we hand the buyer is
