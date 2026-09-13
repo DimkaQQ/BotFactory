@@ -274,3 +274,82 @@ async def test_cancelling_a_subscription_empties_its_queue(db, owner, make_bot, 
 
     remaining = [s for s in await steps_of(db, bot.id) if s.status == StepStatus.pending]
     assert remaining == []
+
+
+# --------------------------------------------------- the poll that collected nothing
+
+
+async def test_a_poll_answer_is_recorded_against_the_block_that_asked(db, owner, make_bot, telegram):
+    """The block sent a real poll and the landing page sold it as a way to
+    find out what subscribers want. `poll_answer` was not in the bot's
+    allowed_updates, so Telegram never delivered an answer — and there was
+    nowhere to put one."""
+    from app.models.poll_answer import PollAnswer
+
+    bot, blocks = await make_bot(
+        owner,
+        [(BlockType.poll, {"question": "Что снимать дальше?", "options": ["Ноги", "Спина", "Руки"]})],
+    )
+    poll_block = blocks[0]
+
+    telegram.send_poll.return_value = type("Sent", (), {"poll": type("P", (), {"id": "tg_poll_77"})()})()
+
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "from": {"id": USER_ID}, "text": "/start"}}, bot.id, db
+    )
+    await db.refresh(poll_block)
+    assert poll_block.content["telegram_poll_id"] == "tg_poll_77", "иначе ответ не привязать к блоку"
+
+    await bot_dispatcher.process_update(
+        telegram,
+        {"poll_answer": {"poll_id": "tg_poll_77", "user": {"id": USER_ID}, "option_ids": [1]}},
+        bot.id,
+        db,
+    )
+
+    saved = (
+        await db.execute(select(PollAnswer).where(PollAnswer.block_id == poll_block.id))
+    ).scalars().all()
+    assert len(saved) == 1
+    assert saved[0].option_ids == [1]
+    assert saved[0].telegram_user_id == USER_ID
+
+
+async def test_changing_your_mind_replaces_the_answer_instead_of_counting_twice(db, owner, make_bot, telegram):
+    from app.models.poll_answer import PollAnswer
+
+    bot, blocks = await make_bot(
+        owner, [(BlockType.poll, {"question": "Что снимать?", "options": ["Ноги", "Спина"]})]
+    )
+    telegram.send_poll.return_value = type("Sent", (), {"poll": type("P", (), {"id": "tg_poll_88"})()})()
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "from": {"id": USER_ID}, "text": "/start"}}, bot.id, db
+    )
+
+    for picked in ([0], [1]):
+        await bot_dispatcher.process_update(
+            telegram,
+            {"poll_answer": {"poll_id": "tg_poll_88", "user": {"id": USER_ID}, "option_ids": picked}},
+            bot.id,
+            db,
+        )
+
+    saved = (
+        await db.execute(
+            select(PollAnswer)
+            .where(PollAnswer.block_id == blocks[0].id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalars().all()
+    assert len(saved) == 1, "один человек — один голос"
+    assert saved[0].option_ids == [1]
+
+
+async def test_a_bot_asks_telegram_for_poll_answers_at_all():
+    """Everything above is unreachable if the update type is not subscribed."""
+    import inspect
+
+    from app.services import bot_registry
+
+    source = inspect.getsource(bot_registry)
+    assert '"poll_answer"' in source, "без poll_answer в allowed_updates Telegram ответы не пришлёт"

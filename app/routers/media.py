@@ -43,6 +43,12 @@ _IMAGE_MAGIC: dict[str, bytes] = {
 _RIFF_MAGIC: dict[str, tuple[bytes, bytes]] = {
     "image/webp": (b"RIFF", b"WEBP"),
 }
+#: Documents are sniffed too, and these two have unambiguous signatures.
+_DOC_MAGIC: dict[str, bytes] = {
+    "application/pdf": b"%PDF-",
+    # Every zip-family container, .epub and modern Office files included.
+    "application/zip": b"PK\x03\x04",
+}
 _ALLOWED: dict[str, tuple[str, str]] = {
     "image/jpeg": (".jpg", "photo"),
     "image/png": (".png", "photo"),
@@ -51,6 +57,17 @@ _ALLOWED: dict[str, tuple[str, str]] = {
     "video/mp4": (".mp4", "video"),
     "video/quicktime": (".mov", "video"),
     "video/webm": (".webm", "video"),
+    # The delivery block says «файл, ссылка или доступ» and the block editor
+    # invites «пришли сюда ссылку или файл» — but a guide is a PDF and a
+    # course pack is a ZIP, and neither could be uploaded at all. Every
+    # seller of a written product had to host it somewhere else first.
+    "application/pdf": (".pdf", "document"),
+    "application/zip": (".zip", "document"),
+    "application/epub+zip": (".epub", "document"),
+    "application/x-zip-compressed": (".zip", "document"),
+    "audio/mpeg": (".mp3", "audio"),
+    "audio/mp4": (".m4a", "audio"),
+    "audio/ogg": (".ogg", "audio"),
 }
 
 
@@ -64,7 +81,10 @@ async def upload_media(
     if match is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Неподдерживаемый формат — можно JPG, PNG, GIF, WebP, MP4, MOV или WebM",
+            detail=(
+                "Неподдерживаемый формат. Можно картинки (JPG, PNG, GIF, WebP), "
+                "видео (MP4, MOV, WebM), аудио (MP3, M4A, OGG) и файлы (PDF, ZIP, EPUB)."
+            ),
         )
     ext, media_type = match
 
@@ -87,6 +107,10 @@ async def upload_media(
 
     riff = _RIFF_MAGIC.get(content_type)
     if riff and not (data.startswith(riff[0]) and data[8:12] == riff[1]):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Файл не похож на заявленный формат")
+
+    doc = _DOC_MAGIC.get(content_type)
+    if doc and not data.startswith(doc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Файл не похож на заявленный формат")
 
     upload_dir = Path(settings.media_upload_dir)

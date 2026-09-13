@@ -79,7 +79,10 @@ async def register_webhook(bot_id: uuid.UUID, token: str) -> None:
             # Named rather than left to Telegram's default: pre_checkout_query
             # is what makes Stars work, and spelling the list out means a bot
             # stops being delivered update types nothing here reads.
-            allowed_updates=["message", "callback_query", "pre_checkout_query"],
+            # poll_answer included because the «Опрос» block is sold as a way
+            # to find out what subscribers want — without it Telegram never
+            # delivers the answers and the block collects nothing.
+            allowed_updates=["message", "callback_query", "pre_checkout_query", "poll_answer"],
             # Echoed back on every update, which is what lets the webhook
             # route tell Telegram apart from anyone who guessed the URL.
             secret_token=webhook_secret(bot_id),

@@ -22,7 +22,9 @@ from app.database import get_db
 from app.deps import get_current_client, get_owned_bot
 from app.models.bot import Bot as BotModel
 from app.models.bot import BotStatus
+from app.models.bot_subscriber import BotSubscriber
 from app.models.client import Client
+from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.schemas.payment import (
     PaymentOut,
@@ -444,6 +446,21 @@ async def list_orders(
         .limit(100)
     )
     orders = result.scalars().all()
+
+    # Who bought. The id was already in this response and the panel never
+    # showed it, so a coach taking bookings could see that *someone* had paid
+    # 3000 ₽ for «Пн 15 сентября, 19:00» and had no way to find out who, or
+    # to write to them. One query for the whole page rather than one per row.
+    buyer_ids = {o.telegram_user_id for o in orders if o.telegram_user_id is not None}
+    buyers: dict[int, BotSubscriber] = {}
+    if buyer_ids:
+        found = await db.execute(
+            select(BotSubscriber).where(
+                BotSubscriber.bot_id == bot_id, BotSubscriber.telegram_user_id.in_(buyer_ids)
+            )
+        )
+        buyers = {row.telegram_user_id: row for row in found.scalars().all()}
+
     return {
         "orders": [
             {
@@ -454,6 +471,7 @@ async def list_orders(
                 "currency": o.currency,
                 "description": o.description,
                 "telegram_user_id": o.telegram_user_id,
+                "buyer": _buyer_of(buyers.get(o.telegram_user_id)),
                 "created_at": o.created_at,
                 "paid_at": o.paid_at,
                 # Set when the buyer tapped «Я оплатил» on a provider we
@@ -468,6 +486,86 @@ async def list_orders(
         # shop, which is why `totals` exists.
         "paid_count": sum(t["count"] for t in by_currency),
         "paid_total_minor": by_currency[0]["total_minor"] if len(by_currency) == 1 else 0,
+    }
+
+
+@router.get("/api/bots/{bot_id}/subscribers")
+async def list_subscribers(
+    bot_id: uuid.UUID,
+    bot: BotModel = Depends(get_owned_bot),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Everyone the bot is selling to, and where each subscription stands.
+
+    There was nothing like this: a shop owner could not answer "кто у меня
+    платит" or "у кого заканчивается доступ" from inside the product at all.
+    Subscriptions first, because those are the rows with a date on them;
+    then everyone else who ever wrote to the bot.
+    """
+    subs = await db.execute(
+        select(Subscription)
+        .where(Subscription.bot_id == bot_id)
+        .order_by(Subscription.status, Subscription.current_period_end.desc())
+        .limit(200)
+    )
+    subscriptions = list(subs.scalars().all())
+
+    people = await db.execute(
+        select(BotSubscriber)
+        .where(BotSubscriber.bot_id == bot_id)
+        .order_by(BotSubscriber.last_seen_at.desc())
+        .limit(200)
+    )
+    everyone = list(people.scalars().all())
+    by_id = {person.telegram_user_id: person for person in everyone}
+
+    return {
+        "subscriptions": [
+            {
+                "id": str(s.id),
+                "title": s.title,
+                "status": s.status,
+                "billing_mode": s.billing_mode,
+                "provider": s.provider,
+                "period_days": s.period_days,
+                "periods_paid": s.periods_paid,
+                "amount_minor": s.amount_minor,
+                "currency": s.currency,
+                "current_period_end": s.current_period_end,
+                "created_at": s.created_at,
+                "buyer": _buyer_of(by_id.get(s.telegram_user_id)),
+                "telegram_user_id": s.telegram_user_id,
+            }
+            for s in subscriptions
+        ],
+        "people": [
+            {
+                "telegram_user_id": person.telegram_user_id,
+                "title": person.title,
+                "username": person.username or None,
+                "first_seen_at": person.first_seen_at,
+                "last_seen_at": person.last_seen_at,
+                "blocked": person.blocked_at is not None,
+            }
+            for person in everyone
+        ],
+        "active_count": sum(1 for s in subscriptions if s.status == SubscriptionStatus.active),
+    }
+
+
+def _buyer_of(subscriber: BotSubscriber | None) -> dict | None:
+    """What the sales log shows about a person.
+
+    Deliberately not the raw row: the panel needs a name and a way to reach
+    them, and nothing else about a bot's customers belongs in a response the
+    shop owner's browser holds.
+    """
+    if subscriber is None:
+        return None
+    return {
+        "title": subscriber.title,
+        "username": subscriber.username or None,
+        "telegram_user_id": subscriber.telegram_user_id,
     }
 
 

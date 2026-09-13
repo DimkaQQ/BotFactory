@@ -37,6 +37,7 @@ import contextlib
 import logging
 import re
 import uuid
+from datetime import datetime, timezone
 
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -182,13 +183,29 @@ async def _send_payment_block(
     buyer without the goods, not without the paywall. The customer is told
     something went wrong instead of being left staring at silence.
     """
-    from app.services import payment_service  # local import: avoids a cycle
+    from app.services import payment_service, subscription_service  # local import: avoids a cycle
 
     content = block.content or {}
     result = await db.execute(select(BotModel).where(BotModel.id == bot_id))
     bot_row = result.scalar_one_or_none()
     if bot_row is None:
         return True
+
+    # Already bought, and still entitled: hand it over instead of selling it
+    # again. A guide sold by the volume is the obvious case — a returning
+    # buyer pressing /start used to be offered том 1 a second time, with
+    # nothing anywhere to stop them paying for it — and a live subscriber
+    # coming back mid-period is the same question with the same answer.
+    if telegram_user_id is not None and await subscription_service.has_paid_for(db, bot_id, telegram_user_id, block.id):
+        what = (content.get("title") or "").strip()
+        with contextlib.suppress(Exception):
+            await bot.send_message(
+                chat_id,
+                f"У тебя уже есть доступ — «{what}» оплачено ✅" if what else "Это уже оплачено ✅",
+            )
+        # Not `True`: the chain continues into what was bought, which is
+        # exactly what "уже оплачено" has to mean.
+        return False
 
     text = (content.get("text") or content.get("title") or "").strip()
     try:
@@ -302,7 +319,134 @@ async def _is_owner(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int |
     return owner_id is not None and int(owner_id) == int(telegram_user_id)
 
 
-async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
+async def _deliver_group_invite(
+    bot: Bot,
+    chat_id: int,
+    block: BotBlock,
+    bot_id: uuid.UUID,
+    db: AsyncSession,
+    telegram_user_id: int | None,
+) -> bool:
+    """Let this one buyer into the private chat the block points at.
+
+    Returns True when it handled the block entirely. The invite is minted per
+    buyer and single-use, which is the difference between selling access and
+    giving away a link that works forever for anyone it is forwarded to.
+    """
+    from app.services import group_access, subscription_service
+
+    content = block.content or {}
+    chat_ref = group_access.chat_ref(content)
+    if not chat_ref:
+        return False
+
+    subscription = None
+    if telegram_user_id is not None:
+        live = await subscription_service.active_for(db, bot_id, telegram_user_id)
+        # Attach the invite to the subscription this delivery belongs to, so
+        # expiry knows which chat to remove them from.
+        subscription = live[-1] if live else None
+
+    try:
+        invite = await group_access.grant(
+            db,
+            bot_id=bot_id,
+            chat_ref_raw=chat_ref,
+            subscription=subscription,
+            valid_days=subscription.period_days if subscription is not None else None,
+        )
+    except group_access.GroupAccessError as exc:
+        # The buyer paid. They must not be left with silence, and the owner
+        # must be told in words they can act on rather than a log line.
+        logger.error("Bot %s: could not grant group access — %s", bot_id, exc)
+        await bot.send_message(
+            chat_id,
+            "Оплата прошла, но выдать доступ в группу прямо сейчас не получилось — продавец уже знает и всё пришлёт.",
+        )
+        await _tell_owner(db, bot_id, f"⚠️ Бот не смог выдать доступ в группу.\n{exc}")
+        return True
+
+    text = (content.get("text") or "").strip()
+    await bot.send_message(
+        chat_id,
+        f"{text}\n\n{invite}".strip() if text else invite,
+    )
+    return True
+
+
+async def _tell_owner(db: AsyncSession, bot_id: uuid.UUID, message: str) -> None:
+    from app.services import payment_service
+
+    with contextlib.suppress(Exception):
+        found = await payment_service._owner_of(db, bot_id)
+        if found is not None:
+            owner_id, instance = found
+            await instance.send_message(owner_id, message)
+
+
+async def _remember_poll(db: AsyncSession | None, block: BotBlock, sent) -> None:
+    """Tie Telegram's poll id to the block that asked.
+
+    An incoming `poll_answer` names Telegram's poll and the person, and
+    nothing of ours — so without this the answer cannot be attributed to a
+    block, a question, or a bot.
+    """
+    poll = getattr(sent, "poll", None)
+    poll_id = getattr(poll, "id", None)
+    if db is None or not poll_id:
+        return
+    with contextlib.suppress(Exception):
+        block.content = {**(block.content or {}), "telegram_poll_id": str(poll_id)}
+        await db.commit()
+
+
+async def _handle_poll_answer(answer: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
+    """Record what somebody picked.
+
+    Upserted on (block, person): a Telegram poll answer can be changed, and
+    the later choice replaces the earlier one instead of being counted twice.
+    """
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.models.poll_answer import PollAnswer
+
+    poll_id = str(answer.get("poll_id") or "")
+    user_id = (answer.get("user") or {}).get("id")
+    if not poll_id or user_id is None:
+        return
+
+    result = await db.execute(
+        select(BotBlock).where(
+            BotBlock.bot_id == bot_id,
+            BotBlock.block_type == BlockType.poll,
+            BotBlock.content["telegram_poll_id"].astext == poll_id,
+        )
+    )
+    block = result.scalar_one_or_none()
+    if block is None:
+        return
+
+    options = [int(index) for index in (answer.get("option_ids") or [])]
+    with contextlib.suppress(Exception):
+        await db.execute(
+            pg_insert(PollAnswer)
+            .values(
+                id=uuid.uuid4(),
+                bot_id=bot_id,
+                block_id=block.id,
+                telegram_user_id=user_id,
+                telegram_poll_id=poll_id,
+                option_ids=options,
+            )
+            .on_conflict_do_update(
+                constraint="uq_poll_answer",
+                set_={"option_ids": options, "updated_at": datetime.now(timezone.utc)},
+            )
+        )
+        await db.commit()
+
+
+async def _send_block(bot: Bot, chat_id: int, block: BotBlock, db: AsyncSession | None = None) -> None:
     content = block.content or {}
 
     if block.block_type == BlockType.poll:
@@ -315,7 +459,14 @@ async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
             # needs to find out.
             logger.warning("Bot: poll block %s needs a question and at least two options — skipped", block.id)
             return
-        await bot.send_poll(chat_id, question=question, options=options, is_anonymous=content.get("anonymous", True))
+        # Not anonymous by default any more: an anonymous poll's answers
+        # carry no user, so Telegram sends no `poll_answer` at all and the
+        # owner gets a vote count they cannot act on. The block can still ask
+        # for anonymity explicitly — it just no longer does so by accident.
+        sent = await bot.send_poll(
+            chat_id, question=question, options=options, is_anonymous=bool(content.get("anonymous", False))
+        )
+        await _remember_poll(db, block, sent)
         return
 
     # Whitespace is not content: a block holding only spaces used to pass the
@@ -332,6 +483,8 @@ async def _send_block(bot: Bot, chat_id: int, block: BotBlock) -> None:
         caption = text or None
         if media_type == "photo":
             await bot.send_photo(chat_id, media_file_id, caption=caption, reply_markup=keyboard)
+        elif media_type == "audio":
+            await bot.send_audio(chat_id, media_file_id, caption=caption, reply_markup=keyboard)
         elif media_type == "video":
             await bot.send_video(chat_id, media_file_id, caption=caption, reply_markup=keyboard)
         else:
@@ -425,7 +578,13 @@ async def walk_chain(
                     text = (block.content or {}).get("text") or ""
                     await bot.send_chat_action(chat_id, "typing")
                     await _pause(db, _typing_delay(text))
-                await _send_block(bot, chat_id, block)
+                handled = False
+                if block.block_type == BlockType.delivery:
+                    handled = await _deliver_group_invite(
+                        bot, chat_id, block, bot_id, db, telegram_user_id
+                    )
+                if not handled:
+                    await _send_block(bot, chat_id, block, db)
         except Exception:
             logger.exception("Failed to send block %s for bot %s", block.id, bot_id)
 
@@ -643,6 +802,11 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
     pre_checkout = update.get("pre_checkout_query")
     if pre_checkout:
         await _handle_pre_checkout(bot, pre_checkout, bot_id, db)
+        return
+
+    poll_answer = update.get("poll_answer")
+    if poll_answer:
+        await _handle_poll_answer(poll_answer, bot_id, db)
         return
 
     message = update.get("message")

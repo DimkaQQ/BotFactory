@@ -315,3 +315,48 @@ async def test_a_live_subscriber_is_left_alone_by_the_expiry_sweep(db, owner, ma
 
     await db.refresh(subscription)
     assert subscription.status == SubscriptionStatus.active
+
+
+# ------------------------------------------- what is already bought stays bought
+
+
+async def test_a_returning_buyer_is_not_sold_the_same_volume_twice(db, owner, make_bot, telegram, as_bot):
+    """Том 1 of a guide, bought last month. Pressing /start again used to
+    offer it for sale a second time, with nothing anywhere to stop the
+    payment going through."""
+    bot, blocks = await club_bot(db, owner, make_bot, subscription=False, provider="test")
+    _welcome, payment_block, delivery = blocks
+    await paid_order(db, bot, payment_block, provider="test")
+    telegram.reset_mock()
+
+    await bot_dispatcher.process_update(
+        telegram,
+        {"message": {"chat": {"id": CHAT_ID}, "from": {"id": USER_ID}, "text": "/start"}},
+        bot.id,
+        db,
+    )
+
+    sent = telegram.sent()
+    assert any("уже" in message for message in sent), sent
+    # And the chain continues into what they bought, rather than stopping at
+    # a paywall they already paid.
+    assert "Добро пожаловать!" in sent, sent
+    assert not any("Оплатить" in str(k) for k in telegram.keyboards())
+
+
+async def test_someone_who_has_not_paid_still_sees_the_paywall(db, owner, make_bot, telegram, as_bot):
+    """The mirror: the check must be per person, not per block."""
+    bot, blocks = await club_bot(db, owner, make_bot, subscription=False, provider="test")
+    await paid_order(db, bot, blocks[1], provider="test")
+    telegram.reset_mock()
+
+    await bot_dispatcher.process_update(
+        telegram,
+        {"message": {"chat": {"id": CHAT_ID}, "from": {"id": USER_ID + 1}, "text": "/start"}},
+        bot.id,
+        db,
+    )
+
+    sent = telegram.sent()
+    assert not any("уже" in message for message in sent), sent
+    assert "Добро пожаловать!" not in sent, "чужая оплата не должна открывать товар"

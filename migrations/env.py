@@ -13,6 +13,7 @@ from app.models import (  # noqa: E402,F401  (register models on Base.metadata)
     BotBlock,
     BotSubscriber,
     Client,
+    PollAnswer,
     ScheduledStep,
     Subscription,
 )
