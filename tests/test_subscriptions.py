@@ -1,10 +1,23 @@
 """Standing access, a period at a time.
 
-The claim being pinned is the honest one: **one** of the twenty providers can
-charge again by itself. Telegram Stars does, and these tests check the
-argument that makes it happen actually goes out. Every other provider is a
-reminder-and-re-invoice cycle, and the code is required to call it that
-rather than quietly present it as automatic billing.
+Eight of the twenty gateways can take money a second time, by two different
+mechanisms, and these tests pin the difference — because getting it wrong
+either charges a subscriber twice (our scheduler charging a subscription the
+gateway is already running) or never (a subscription nobody charges at all):
+
+* **the gateway runs it** — Telegram Stars, Stripe, LiqPay, lava.top. We ask
+  once, at checkout; the tests check that the one parameter which turns a
+  sale into a subscription actually goes out, and that an ordinary sale
+  never carries it.
+* **we charge a saved method** — ЮKassa, Т-Банк, CloudPayments, Robokassa.
+  The tests check the first payment asks to save the method, that the handle
+  is read back out, that the off-session charge sends what the gateway
+  expects, and that a decline is treated as this period's answer rather than
+  an error to retry into a surprise charge days later.
+
+The claim these replaced — "only Telegram Stars can charge again" — was
+true of our adapters and false of the gateways, which is the whole reason
+this file grew.
 """
 
 from __future__ import annotations
@@ -23,8 +36,7 @@ from app.models.scheduled_step import ScheduledStep, StepStatus
 from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
 from app.services import bot_dispatcher, subscription_service
 from app.services.payments import get_provider
-from app.services.payments.base import ProviderError
-from app.services.payments.base import CheckoutRequest
+from app.services.payments.base import CheckoutRequest, ProviderError
 
 CHAT_ID = 991
 USER_ID = 5150
