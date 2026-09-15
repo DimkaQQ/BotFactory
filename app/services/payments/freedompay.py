@@ -36,6 +36,8 @@ from app.services.payments.base import (
     PaymentRef,
     ProviderDefaults,
     ProviderError,
+    RecurringMode,
+    RecurringSetup,
     WebhookResult,
     minor_to_major,
     same_currency,
@@ -45,6 +47,18 @@ _BASE = "https://api.freedompay.money"
 #: The tail of our own callback address — what Freedom Pay signs its
 #: notification with. Must match the route in `payments.py`.
 _CALLBACK_SCRIPT = "freedompay"
+#: Charging an existing profile. Without `.php`: that spelling belongs to
+#: Platron and the old Paybox, and the signature is built from the last URL
+#: segment exactly as called, so the wrong one fails as a signature error
+#: rather than as a 404.
+_RECURRING_SCRIPT = "make_recurring_payment"
+#: How long a saved profile stays chargeable. Two years, capped by the card's
+#: own expiry on their side — a shorter value would end subscriptions early
+#: for no reason.
+_RECURRING_LIFETIME_DAYS = 730
+#: Error codes that mean "this profile will never work again", as opposed to
+#: "the bank said no this time".
+_DEAD_PROFILE = {"9011", "11070"}
 
 
 def _sign(script: str, params: dict[str, str], secret: str) -> str:
@@ -65,6 +79,11 @@ class FreedomPayProvider(ProviderDefaults):
     )
     currencies = ("KZT", "UZS", "KGS", "RUB", "USD", "EUR")
     region = "ca"
+    # Рекуррент: первый платёж с pg_recurring_start=1 создаёт профиль, его
+    # номер приходит на ResultURL, дальше POST на make_recurring_payment.
+    # Имя скрипта — без .php (легаси-форма с .php осталась у Platron и
+    # старого Paybox), и оно же идёт в подпись как последний сегмент URL.
+    recurring = RecurringMode.token
     credential_fields = (
         CredentialField("merchant_id", "Merchant ID", "номер магазина из кабинета", secret=False),
         CredentialField("secret_key", "Секретный ключ", "секретный ключ мерчанта"),
@@ -100,6 +119,13 @@ class FreedomPayProvider(ProviderDefaults):
             # between two otherwise identical requests.
             "pg_salt": secrets.token_hex(8),
         }
+        if request.extra.get("subscription"):
+            params["pg_recurring_start"] = "1"
+            # How long the profile stays chargeable, in days. Asked for a
+            # good deal longer than one period so a subscription is not
+            # silently cut off at the first renewal; Freedom Pay caps it at
+            # the card's own expiry anyway.
+            params["pg_recurring_lifetime"] = str(_RECURRING_LIFETIME_DAYS)
         if request.is_test:
             params["pg_testing_mode"] = "1"
         params["pg_sig"] = _sign("init_payment.php", params, secret)
@@ -165,13 +191,85 @@ class FreedomPayProvider(ProviderDefaults):
             raise ProviderError(f"Freedom Pay: сумма не совпадает (пришло {amount})")
         same_currency(self.title, form.get("pg_currency"), currency)
 
+        notes = {}
+        # The profile only ever arrives here. Both spellings are accepted:
+        # the docs name the field `pg_recurring_profile_id` on the result and
+        # `pg_recurring_profile` on the charge, and it costs nothing to read
+        # whichever one turns up.
+        profile = (form.get("pg_recurring_profile_id") or form.get("pg_recurring_profile") or "").strip()
+        if profile:
+            notes["freedompay_recurring_profile"] = profile
+
         return WebhookResult(
             status=PaymentStatus.paid,
             provider_payment_id=remote_id,
             # Freedom Pay retries until it gets a signed "ok" back.
             response_body=_ack(secret, "ok"),
             response_content_type="application/xml",
+            meta=notes,
         )
+
+    def recurring_setup(self, settled: dict) -> RecurringSetup | None:
+        profile = (settled or {}).get("freedompay_recurring_profile")
+        return RecurringSetup(token=str(profile)) if profile else None
+
+    async def charge_recurring(
+        self,
+        *,
+        credentials: dict[str, str],
+        setup: RecurringSetup,
+        amount_minor: int,
+        currency: str,
+        description: str,
+        payment_id: uuid.UUID,
+        is_test: bool = False,
+        invoice_no: int | None = None,
+    ) -> WebhookResult:
+        """Ask Freedom Pay to take the next period off the saved profile.
+
+        Returns `pending`, never `paid` — the same shape as Robokassa and for
+        the same reason. `pg_status=ok` here means the payment was *created*
+        (the response carries a fresh `pg_payment_id`); whether the card
+        actually paid arrives later on `pg_result_url`, as an ordinary
+        `pg_result=0/1` callback that settles this very payment. A declined
+        card is not visible in this XML at all, so treating "ok" as money
+        would hand over a month of access for nothing.
+        """
+        merchant, secret = self._keys(credentials)
+        base = get_settings().public_base_url.rstrip("/")
+
+        params = {
+            "pg_merchant_id": merchant,
+            "pg_recurring_profile": str(setup.token),
+            "pg_order_id": str(payment_id),
+            "pg_amount": minor_to_major(amount_minor),
+            "pg_currency": currency.upper(),
+            "pg_description": (description or "Продление подписки")[:255],
+            "pg_result_url": f"{base}/webhook/pay/{_CALLBACK_SCRIPT}",
+            "pg_request_method": "POST",
+            "pg_salt": secrets.token_hex(8),
+        }
+        # The signature takes the last segment of the URL exactly as called —
+        # so `_RECURRING_SCRIPT` is both the path and the signed name, and
+        # the two can never drift apart.
+        params["pg_sig"] = _sign(_RECURRING_SCRIPT, params, secret)
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(f"{_BASE}/{_RECURRING_SCRIPT}", data=params)
+        if response.status_code >= 400:
+            raise ProviderError(f"Freedom Pay: HTTP {response.status_code}")
+
+        payload = _parse_xml(response.text)
+        if (payload.get("pg_status") or "").lower() != "ok":
+            code = (payload.get("pg_error_code") or "").strip()
+            detail = payload.get("pg_error_description") or code or "отказ"
+            if code in _DEAD_PROFILE:
+                # The saved profile is gone — retrying cannot fix it, and the
+                # subscription layer falls back to asking for a fresh payment.
+                raise ProviderError(f"Freedom Pay: привязка карты больше не действует ({detail})")
+            raise ProviderError(f"Freedom Pay: {detail}")
+
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=payload.get("pg_payment_id"))
 
 
 def _ack(secret: str, status: str) -> str:

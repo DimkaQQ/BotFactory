@@ -672,6 +672,24 @@ async def _remember(db: AsyncSession, payment: Payment, result) -> None:
     remote_id = getattr(result, "provider_payment_id", None)
     changed = False
 
+    # Where the gateway, not the block, decides the price — a Prodamus
+    # subscription plan is the case — the row has to say what was actually
+    # charged. Otherwise the sales log shows the number we guessed at
+    # checkout, and a shop that raised its price in the dashboard would see
+    # the old one forever. Only an adapter that knows this applies sets it;
+    # nothing infers it from an amount simply arriving smaller.
+    charged = notes.pop("charged_amount_minor", None)
+    if isinstance(charged, int) and charged > 0 and charged != payment.amount_minor:
+        logger.info(
+            "Payment %s: provider charged %s, not the %s the block asked for",
+            payment.id,
+            charged,
+            payment.amount_minor,
+        )
+        notes["block_amount_minor"] = payment.amount_minor
+        payment.amount_minor = charged
+        changed = True
+
     if remote_id and payment.provider_payment_id != remote_id:
         payment.provider_payment_id = remote_id
         changed = True

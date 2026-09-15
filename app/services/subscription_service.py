@@ -161,6 +161,10 @@ async def start_or_extend(db: AsyncSession, payment: Payment) -> Subscription | 
             existing.periods_paid,
         )
         _remember_method(existing, payment)
+        # A method can arrive late — the buyer saved a card on their second
+        # payment — and a subscription that starts as "по счёту" becomes
+        # automatic from then on.
+        existing.billing_mode = _actual_billing_mode(existing)
         await db.commit()
         await _schedule_renewal(db, existing)
         return existing
@@ -172,7 +176,7 @@ async def start_or_extend(db: AsyncSession, payment: Payment) -> Subscription | 
         telegram_user_id=payment.telegram_user_id,
         chat_id=payment.chat_id or payment.telegram_user_id,
         provider=payment.provider,
-        billing_mode=billing_mode(payment.provider),
+        billing_mode=BillingMode.renewal,  # corrected below, once we know
         status=SubscriptionStatus.active,
         period_days=days,
         amount_minor=payment.amount_minor,
@@ -184,6 +188,14 @@ async def start_or_extend(db: AsyncSession, payment: Payment) -> Subscription | 
         provider_subscription_id=str(payment.id),
     )
     _remember_method(subscription, payment)
+    # "Автосписание" only if there is actually something to charge with. For
+    # a gateway-run subscription that is the gateway's promise; for a saved
+    # method it is a handle we either got or did not — ЮKassa refuses to save
+    # one for a shop without autopayments enabled, and ioka only saves a card
+    # the buyer chose to save. Claiming `auto` in those cases would put
+    # "спишется само" in front of an owner whose subscribers will be
+    # re-invoiced.
+    subscription.billing_mode = _actual_billing_mode(subscription)
     db.add(subscription)
     await db.commit()
     logger.info(
@@ -196,6 +208,15 @@ async def start_or_extend(db: AsyncSession, payment: Payment) -> Subscription | 
     )
     await _schedule_renewal(db, subscription)
     return subscription
+
+
+def _actual_billing_mode(subscription: Subscription) -> BillingMode:
+    """What this subscription can really do, not what the gateway can."""
+    if not charges_itself(subscription.provider):
+        # Gateway-run, or nothing at all — the provider's own capability is
+        # the whole answer.
+        return billing_mode(subscription.provider)
+    return BillingMode.auto if (subscription.meta or {}).get("recurring_token") else BillingMode.renewal
 
 
 def _remember_method(subscription: Subscription, payment: Payment) -> None:

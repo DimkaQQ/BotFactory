@@ -942,3 +942,331 @@ def _generic_request(creds: dict, *, extra: dict) -> CheckoutRequest:
         extra=extra,
         telegram_user_id=USER_ID,
     )
+
+
+# ---------------------------------- шлюзы, добавленные по присланной документации
+
+
+async def test_freedompay_opens_a_profile_and_charges_it_by_name(mock_http):
+    """The script name is not cosmetic: Freedom Pay signs the request with the
+    last segment of the URL exactly as called, so `make_recurring_payment` and
+    `make_recurring_payment.php` are two different signatures. Getting it wrong
+    fails as a signature error, not as a 404."""
+    from app.services.payments.base import RecurringSetup
+
+    seen: list[httpx.Request] = []
+
+    def handler(request):
+        seen.append(request)
+        if request.url.path.endswith("init_payment.php"):
+            return httpx.Response(200, text="<response><pg_status>ok</pg_status>"
+                                            "<pg_redirect_url>https://pay</pg_redirect_url></response>")
+        return httpx.Response(200, text="<response><pg_status>ok</pg_status>"
+                                        "<pg_payment_id>987</pg_payment_id></response>")
+
+    provider = get_provider("freedompay")
+    creds = {"merchant_id": "m1", "secret_key": "s1"}
+
+    with mock_http(handler):
+        await provider.create_checkout(_generic_request(creds, extra={"subscription": True}))
+        first = dict(x.split("=", 1) for x in seen[0].content.decode().split("&"))
+        assert first["pg_recurring_start"] == "1"
+        assert "pg_recurring_lifetime" in first
+
+        seen.clear()
+        verdict = await provider.charge_recurring(
+            credentials=creds,
+            setup=RecurringSetup(token="profile-55"),
+            amount_minor=59000,
+            currency="KZT",
+            description="Клуб",
+            payment_id=uuid.uuid4(),
+            invoice_no=7,
+        )
+
+    assert str(seen[0].url).endswith("/make_recurring_payment"), "имя скрипта — без .php"
+    body = {k: v for k, v in (x.split("=", 1) for x in seen[0].content.decode().split("&"))}
+    assert body["pg_recurring_profile"] == "profile-55"
+    # …and the signature was built over that same name.
+    assert verdict.status == PaymentStatus.pending, "pg_status=ok — это «платёж создан», а не «деньги списаны»"
+
+
+async def test_freedompay_does_not_ask_to_save_a_card_for_a_one_off_sale(mock_http):
+    def handler(request):
+        return httpx.Response(200, text="<response><pg_status>ok</pg_status>"
+                                        "<pg_redirect_url>https://pay</pg_redirect_url></response>")
+
+    with mock_http(handler) :
+        checkout = await get_provider("freedompay").create_checkout(
+            _generic_request({"merchant_id": "m1", "secret_key": "s1"}, extra={})
+        )
+    assert checkout.url == "https://pay"
+
+
+async def test_freedompay_says_plainly_when_the_saved_card_is_gone(mock_http):
+    """9011/11070 mean the profile is dead — retrying it forever would be a
+    permanent error loop, and the subscription has to fall back to asking."""
+    from app.services.payments.base import RecurringSetup
+
+    refusal = ("<response><pg_status>error</pg_status><pg_error_code>9011</pg_error_code>"
+               "<pg_error_description>Неверный рекуррентный профиль</pg_error_description></response>")
+    with mock_http(lambda request: httpx.Response(200, text=refusal)):
+        with pytest.raises(ProviderError, match="привязка карты"):
+            await get_provider("freedompay").charge_recurring(
+                credentials={"merchant_id": "m1", "secret_key": "s1"},
+                setup=RecurringSetup(token="dead"),
+                amount_minor=59000,
+                currency="KZT",
+                description="Клуб",
+                payment_id=uuid.uuid4(),
+                invoice_no=7,
+            )
+
+
+async def test_paymaster_asks_for_a_token_and_only_settled_is_money(mock_http):
+    from app.services.payments.base import RecurringSetup
+
+    seen: list[dict] = []
+
+    def handler(request):
+        seen.append({"url": str(request.url), **json.loads(request.content)})
+        if request.url.path.endswith("/invoices"):
+            return httpx.Response(200, json={"url": "https://pay", "paymentId": "p1"})
+        return httpx.Response(200, json={"paymentId": "p2", "status": "Settled"})
+
+    provider = get_provider("paymaster")
+    creds = {"merchant_id": "m", "token": "t"}
+
+    with mock_http(handler):
+        await provider.create_checkout(_generic_request(creds, extra={"subscription": True}))
+        assert seen[0]["tokenization"]["type"] == "recurring"
+        seen.clear()
+        verdict = await provider.charge_recurring(
+            credentials=creds,
+            setup=RecurringSetup(token="tok-1"),
+            amount_minor=99000,
+            currency="RUB",
+            description="PRO",
+            payment_id=uuid.uuid4(),
+        )
+
+    assert verdict.status == PaymentStatus.paid
+    assert seen[0]["paymentData"]["token"]["id"] == "tok-1"
+    assert seen[0]["amount"] == {"value": 990.0, "currency": "RUB"}
+
+
+@pytest.mark.parametrize("status", ["Confirmation", "Pending", "Authorized"])
+async def test_paymaster_holds_back_on_anything_short_of_settled(mock_http, status):
+    """Authorized is a hold, Confirmation wants the payer back. Handing over a
+    month for either would be giving the goods away."""
+    from app.services.payments.base import RecurringSetup
+
+    with mock_http(lambda request: httpx.Response(200, json={"paymentId": "p", "status": status})):
+        verdict = await get_provider("paymaster").charge_recurring(
+            credentials={"merchant_id": "m", "token": "t"},
+            setup=RecurringSetup(token="tok"),
+            amount_minor=99000,
+            currency="RUB",
+            description="PRO",
+            payment_id=uuid.uuid4(),
+        )
+    assert verdict.status == PaymentStatus.pending
+
+
+async def test_ioka_charges_a_saved_card_through_a_fresh_order(mock_http):
+    seen: list[httpx.Request] = []
+
+    def handler(request):
+        seen.append(request)
+        if request.url.path.endswith("/orders"):
+            return httpx.Response(200, json={"order": {"id": "ord_9", "checkout_url": "https://pay"}})
+        return httpx.Response(
+            200, json={"id": "pay_9", "status": "APPROVED", "approved_amount": 59000, "captured_amount": 59000}
+        )
+
+    from app.services.payments.base import RecurringSetup
+
+    with mock_http(handler):
+        verdict = await get_provider("ioka").charge_recurring(
+            credentials={"api_key": "sk"},
+            setup=RecurringSetup(token="card_1", customer="cus_1"),
+            amount_minor=59000,
+            currency="KZT",
+            description="Клуб",
+            payment_id=uuid.uuid4(),
+        )
+
+    assert verdict.status == PaymentStatus.paid
+    order_body = json.loads(seen[0].content)
+    assert order_body["capture_method"] == "AUTO", "под MANUAL APPROVED — это только холд"
+    assert order_body["customer_id"] == "cus_1"
+    assert json.loads(seen[1].content) == {"card_id": "card_1"}
+    assert str(seen[1].url).endswith("/orders/ord_9/payments/card")
+
+
+async def test_ioka_an_approved_but_uncaptured_charge_is_not_money(mock_http):
+    """The one trap the docs call out: APPROVED with captured_amount 0 is an
+    authorisation, and the money has not moved."""
+    from app.services.payments.base import RecurringSetup
+
+    def handler(request):
+        if request.url.path.endswith("/orders"):
+            return httpx.Response(200, json={"order": {"id": "ord_9"}})
+        return httpx.Response(200, json={"id": "p", "status": "APPROVED", "captured_amount": 0})
+
+    with mock_http(handler):
+        verdict = await get_provider("ioka").charge_recurring(
+            credentials={"api_key": "sk"},
+            setup=RecurringSetup(token="card_1", customer="cus_1"),
+            amount_minor=59000,
+            currency="KZT",
+            description="Клуб",
+            payment_id=uuid.uuid4(),
+        )
+    assert verdict.status == PaymentStatus.pending
+
+
+async def test_ioka_reports_the_declines_own_words(mock_http):
+    from app.services.payments.base import RecurringSetup
+
+    def handler(request):
+        if request.url.path.endswith("/orders"):
+            return httpx.Response(200, json={"order": {"id": "ord_9"}})
+        return httpx.Response(
+            200,
+            json={"status": "DECLINED", "error": {"code": "WRONG_CARD_DATA_INPUT", "message": "Операция отклонена"}},
+        )
+
+    with mock_http(handler):
+        verdict = await get_provider("ioka").charge_recurring(
+            credentials={"api_key": "sk"},
+            setup=RecurringSetup(token="card_1", customer="cus_1"),
+            amount_minor=59000,
+            currency="KZT",
+            description="Клуб",
+            payment_id=uuid.uuid4(),
+        )
+    assert verdict.status == PaymentStatus.failed
+    assert verdict.meta["decline"] == "Операция отклонена"
+
+
+async def test_prodamus_sells_the_plan_not_our_price(mock_http):
+    """Prodamus documents that with a subscription id present «сумма платежа
+    не учитывается» — so sending `products` alongside would only look like the
+    block's price mattered."""
+    from urllib.parse import parse_qs, urlparse
+
+    provider = get_provider("prodamus")
+    creds = {"shop_domain": "demo.payform.ru", "secret_key": "s"}
+
+    checkout = await provider.create_checkout(
+        _generic_request(creds, extra={"subscription": True, "prodamus_subscription_id": "777"})
+    )
+    params = parse_qs(urlparse(checkout.url).query)
+    assert params["subscription"] == ["777"]
+    assert not any(key.startswith("products") for key in params), "план и товар одновременно — ложь про цену"
+
+    plain = await provider.create_checkout(_generic_request(creds, extra={}))
+    plain_params = parse_qs(urlparse(plain.url).query)
+    assert "subscription" not in plain_params
+    assert any(key.startswith("products") for key in plain_params)
+
+
+async def test_prodamus_refuses_a_subscription_block_without_a_plan():
+    """Silently selling it as a one-off would take the money once and never
+    come back — the exact failure this whole feature exists to remove."""
+    with pytest.raises(ProviderError, match="ID подписки"):
+        await get_provider("prodamus").create_checkout(
+            _generic_request({"shop_domain": "demo.payform.ru", "secret_key": "s"}, extra={"subscription": True})
+        )
+
+
+async def test_prodamus_records_what_the_plan_charged_instead_of_rejecting_it():
+    """The block says 590; the plan charges 990, or 1 ₽ for a first month.
+    Comparing them would reject every renewal forever. The notification's
+    signature is what actually guards this, and the real amount is written
+    down rather than argued with."""
+    from app.services.payments.prodamus import sign
+
+    secret = "s"
+    data = {
+        "order_id": str(uuid.uuid4()),
+        "order_num": "A-1",
+        "payment_status": "success",
+        "sum": "990.00",
+        "subscription[id]": "777",
+    }
+    body = "&".join(f"{k}={v}" for k, v in data.items())
+    # Prodamus signs the *parsed* structure, PHP-style keys and all — which is
+    # also the shape the adapter has to find the plan id in.
+    from app.services.payments.prodamus import parse_form
+
+    verdict = await get_provider("prodamus").verify_webhook(
+        headers={"sign": sign(parse_form(body), secret)},
+        raw_body=body.encode(),
+        form=data,
+        credentials={"shop_domain": "demo.payform.ru", "secret_key": secret},
+        amount_minor=59000,  # ← our block's price, deliberately different
+        invoice_no=1,
+        payment_id=uuid.UUID(data["order_id"]),
+        provider_payment_id=None,
+        meta={},
+        currency="RUB",
+    )
+
+    assert verdict.status == PaymentStatus.paid
+    assert verdict.meta["charged_amount_minor"] == 99000
+    assert verdict.meta["prodamus_subscription_id"] == "777"
+
+
+async def test_a_plain_prodamus_sale_still_checks_the_amount():
+    """The relaxation is scoped to subscriptions. A one-off sale that comes
+    back for less must still be refused."""
+    from app.services.payments.prodamus import sign
+
+    secret = "s"
+    from app.services.payments.prodamus import parse_form
+
+    data = {
+        "order_id": str(uuid.uuid4()),
+        "order_num": "A-2",
+        "payment_status": "success",
+        "sum": "10.00",
+    }
+    body = "&".join(f"{k}={v}" for k, v in data.items())
+
+    with pytest.raises(ProviderError, match="сумма не совпадает"):
+        await get_provider("prodamus").verify_webhook(
+            headers={"sign": sign(parse_form(body), secret)},
+            raw_body=body.encode(),
+            form=data,
+            credentials={"shop_domain": "demo.payform.ru", "secret_key": secret},
+            amount_minor=59000,
+            invoice_no=1,
+            payment_id=uuid.UUID(data["order_id"]),
+            provider_payment_id=None,
+            meta={},
+            currency="RUB",
+        )
+
+
+async def test_the_row_records_what_was_actually_charged(db, owner, make_bot, as_bot):
+    """A sales log showing the price we guessed, not the price taken, is how a
+    shop that raised its plan in the dashboard keeps seeing the old number."""
+    from app.services import payment_service
+
+    bot, blocks = await club_bot(db, owner, make_bot, provider="test")
+    payment = await paid_order(db, bot, blocks[1], provider="test", amount=59000)
+    payment.status = PaymentStatus.pending
+    await db.commit()
+
+    verdict = type("R", (), {
+        "status": PaymentStatus.paid,
+        "provider_payment_id": "x",
+        "meta": {"charged_amount_minor": 99000},
+    })()
+    await payment_service.apply_result(db, payment, verdict, deliver=False)
+
+    await db.refresh(payment)
+    assert payment.amount_minor == 99000
+    assert payment.meta["block_amount_minor"] == 59000

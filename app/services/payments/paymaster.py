@@ -20,6 +20,8 @@ from app.services.payments.base import (
     PaymentRef,
     ProviderDefaults,
     ProviderError,
+    RecurringMode,
+    RecurringSetup,
     WebhookResult,
     same_currency,
 )
@@ -40,6 +42,11 @@ class PayMasterProvider(ProviderDefaults):
     currencies = ("RUB",)
     region = "ru"
     supports_status_check = True
+    # Хостируемая токенизация: объект tokenization в счёте, id токена
+    # приходит и в ответе, и в колбэке, списание — POST /payments с
+    # paymentData.token.id. Деньги только на Settled: Confirmation и
+    # Pending — это ещё не оплата.
+    recurring = RecurringMode.token
     credential_fields = (
         CredentialField("merchant_id", "merchantId", "UUID сайта в PayMaster", secret=False),
         CredentialField("token", "Токен доступа", "из раздела «Токены доступа»"),
@@ -75,6 +82,15 @@ class PayMasterProvider(ProviderDefaults):
             },
             "testMode": request.is_test,
         }
+        if request.extra.get("subscription"):
+            # PayMaster hosts the card form, so no PAN ever reaches us; what
+            # comes back is a token id. `purpose` is the consent text the
+            # payer is shown, so it has to name the actual arrangement.
+            body["tokenization"] = {
+                "type": "recurring",
+                "purpose": (request.description or "Подписка")[:255],
+                "callbackUrl": f"{base}/webhook/pay/paymaster",
+            }
 
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
@@ -88,6 +104,18 @@ class PayMasterProvider(ProviderDefaults):
         if not url:
             raise ProviderError("PayMaster: ответ без ссылки на оплату")
         return Checkout(url=url, provider_payment_id=payload.get("paymentId"))
+
+    @staticmethod
+    def _token_id(payment: dict) -> str:
+        """The saved-card handle, wherever this response happens to put it."""
+        for holder in (payment.get("paymentData") or {}, payment):
+            token = holder.get("token")
+            if isinstance(token, dict) and token.get("id"):
+                return str(token["id"])
+            if isinstance(token, str) and token:
+                return token
+        tokenization = payment.get("tokenization") or {}
+        return str(tokenization.get("id") or "") if tokenization.get("id") else ""
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
         try:
@@ -156,12 +184,80 @@ class PayMasterProvider(ProviderDefaults):
             if value is not None and abs(float(value) - amount_minor / 100) > 0.009:
                 raise ProviderError(f"PayMaster: сумма не совпадает (у провайдера {value})")
             same_currency(self.title, (payment.get("amount") or {}).get("currency"), currency)
-            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(remote_id))
+            token = self._token_id(payment)
+            return WebhookResult(
+                status=PaymentStatus.paid,
+                provider_payment_id=str(remote_id),
+                meta={"paymaster_token_id": token} if token else {},
+            )
         if status in _REFUNDED:
             return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=str(remote_id))
         if status in _FAILED:
             return WebhookResult(status=PaymentStatus.failed, provider_payment_id=str(remote_id))
         return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(remote_id))
+
+
+    def recurring_setup(self, settled: dict) -> RecurringSetup | None:
+        token = (settled or {}).get("paymaster_token_id")
+        return RecurringSetup(token=str(token)) if token else None
+
+    async def charge_recurring(
+        self,
+        *,
+        credentials: dict[str, str],
+        setup: RecurringSetup,
+        amount_minor: int,
+        currency: str,
+        description: str,
+        payment_id: uuid.UUID,
+        is_test: bool = False,
+        invoice_no: int | None = None,
+    ) -> WebhookResult:
+        """Charge the saved token. Only `Settled` counts as money.
+
+        The response comes back immediately but is not final: `Confirmation`
+        means PayMaster still wants something from the payer, and `Pending`
+        means it is still deciding. Both are reported as pending, and the
+        ordinary callback settles the payment when it resolves — the same
+        route a hand-made payment takes.
+        """
+        from app.config import get_settings
+
+        headers = self._headers(credentials)
+        merchant_id = (credentials.get("merchant_id") or "").strip()
+        if not merchant_id:
+            raise ProviderError("PayMaster: не заполнен merchantId")
+        if not setup.token:
+            raise ProviderError("PayMaster: нет сохранённого токена карты")
+
+        base = get_settings().public_base_url.rstrip("/")
+        body = {
+            "merchantId": merchant_id,
+            "invoice": {
+                "description": (description or "Продление подписки")[:255],
+                "orderNo": str(payment_id),
+            },
+            "amount": {"value": round(amount_minor / 100, 2), "currency": currency.upper()},
+            "paymentData": {"token": {"id": setup.token}},
+            "protocol": {"callbackUrl": f"{base}/webhook/pay/paymaster"},
+            "testMode": bool(is_test),
+        }
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{_BASE}/payments", json=body, headers={**headers, "Idempotency-Key": str(payment_id)}
+            )
+        if response.status_code >= 400:
+            raise ProviderError(f"PayMaster: {_error(response)}")
+
+        payload = response.json()
+        remote_id = payload.get("paymentId") or payload.get("id")
+        status = str(payload.get("status", "")).lower()
+        if status in _SETTLED:
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(remote_id or ""))
+        if status in _FAILED:
+            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=str(remote_id or ""))
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(remote_id or ""))
 
 
 def _error(response: httpx.Response) -> str:

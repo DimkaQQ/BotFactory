@@ -27,6 +27,7 @@ from app.services.payments.base import (
     PaymentRef,
     ProviderDefaults,
     ProviderError,
+    RecurringMode,
     WebhookResult,
     minor_to_major,
 )
@@ -124,9 +125,21 @@ class ProdamusProvider(ProviderDefaults):
     )
     currencies = ("RUB",)
     region = "ru"
+    # Подписку ведёт сам Prodamus: в ссылку передаётся id подписного товара,
+    # дальше он списывает по своему плану. Важное следствие — цену и период
+    # задаёт карточка подписки в их кабинете, а не наш блок.
+    recurring = RecurringMode.gateway
     credential_fields = (
         CredentialField("shop_domain", "Домен платёжной формы", "myshop.payform.ru", secret=False),
         CredentialField("secret_key", "Секретный ключ", "из раздела «Интеграции» в кабинете"),
+    )
+    block_fields = (
+        CredentialField(
+            "prodamus_subscription_id",
+            "ID подписки в Prodamus",
+            "номер подписного товара из кабинета — цену и период он задаёт сам",
+            secret=False,
+        ),
     )
 
     async def create_checkout(self, request: CheckoutRequest) -> Checkout:
@@ -139,17 +152,31 @@ class ProdamusProvider(ProviderDefaults):
         from app.config import get_settings
 
         base = get_settings().public_base_url.rstrip("/")
+        plan = str(request.extra.get("prodamus_subscription_id") or "").strip()
+        if request.extra.get("subscription") and not plan:
+            raise ProviderError("Prodamus: в блоке оплаты не указан ID подписки из кабинета Prodamus")
+
         data = {
             # Our payment id travels as order_id and comes straight back in
             # the callback — no mapping table needed.
             "order_id": str(request.payment_id),
-            "products": [
-                {
-                    "name": request.description[:255] or "Оплата",
-                    "price": minor_to_major(request.amount_minor),
-                    "quantity": "1",
+            # `subscription` replaces `products` outright: Prodamus documents
+            # that with a subscription id present "сумма платежа не
+            # учитывается". So the price is the plan's, ours is ignored, and
+            # sending both would only look like it mattered.
+            **(
+                {"subscription": plan}
+                if plan
+                else {
+                    "products": [
+                        {
+                            "name": request.description[:255] or "Оплата",
+                            "price": minor_to_major(request.amount_minor),
+                            "quantity": "1",
+                        }
+                    ]
                 }
-            ],
+            ),
             "urlNotification": f"{base}/webhook/pay/prodamus",
             "urlSuccess": request.return_url,
             "urlReturn": request.return_url,
@@ -207,6 +234,43 @@ class ProdamusProvider(ProviderDefaults):
             )
 
         paid = str(data.get("sum", "")).replace(",", ".")
+        # `parse_form` above turns PHP-style keys into a nested structure, so
+        # the plan arrives as data["subscription"]["id"], not under the flat
+        # name it has on the wire. Both are read: a notification that ever
+        # carries the flat spelling still works.
+        nested = data.get("subscription")
+        plan = ""
+        if isinstance(nested, dict):
+            plan = str(nested.get("id") or "").strip()
+        elif nested:
+            plan = str(nested).strip()
+        plan = plan or str(data.get("subscription[id]") or data.get("subscription_id") or "").strip()
+
+        if plan:
+            # A subscription's price lives in the Prodamus dashboard, and the
+            # first charge can legitimately differ from the recurring one
+            # ("Стоимость первого платежа"). Comparing against the block's
+            # price would reject every renewal forever — and the shop owner
+            # would find out by losing subscribers.
+            #
+            # What still guards this: the notification's own signature,
+            # checked above with the shop's secret, which is the real gate.
+            # The amount is recorded rather than compared, so the sales log
+            # shows what was actually charged instead of what we guessed.
+            try:
+                charged = round(float(paid) * 100) if paid else None
+            except ValueError:
+                charged = None
+            return WebhookResult(
+                status=PaymentStatus.paid,
+                provider_payment_id=str(data.get("order_num") or "") or None,
+                response_body="success",
+                meta={
+                    "prodamus_subscription_id": plan,
+                    **({"charged_amount_minor": charged} if charged else {}),
+                },
+            )
+
         if paid and abs(float(paid) - amount_minor / 100) > 0.009:
             raise ProviderError(f"Prodamus: сумма не совпадает (пришло {paid})")
 

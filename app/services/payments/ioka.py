@@ -29,6 +29,7 @@ floor), github.com/aruaycodes/myiokalib and github.com/boomfly/meteor-ioka
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 
 import httpx
@@ -41,6 +42,8 @@ from app.services.payments.base import (
     PaymentRef,
     ProviderDefaults,
     ProviderError,
+    RecurringMode,
+    RecurringSetup,
     WebhookResult,
     same_currency,
 )
@@ -49,6 +52,8 @@ _PROD = "https://api.ioka.kz/v2"
 _TEST = "https://stage-api.ioka.kz/v2"
 
 #: OrderStatusEnum, as the published client types it.
+logger = logging.getLogger(__name__)
+
 _PAID = "PAID"
 _FAILED = {"EXPIRED"}
 _REFUNDED = {"REFUNDED", "PARTIALLY_REFUNDED", "REVERSED"}
@@ -71,6 +76,12 @@ class IokaProvider(ProviderDefaults):
     )
     currencies = ("KZT", "RUB", "USD")
     region = "ca"
+    # Рекуррент по сохранённой карте. Карта сохраняется на стороне ioka —
+    # PAN к нам не попадает: покупатель либо ставит галочку на странице
+    # оплаты, либо проходит отдельную форму привязки (POST /v2/customers →
+    # checkout_url). card_id и customer_id приходят в payer оплаченного
+    # заказа; списание — POST /v2/orders/{id}/payments/card.
+    recurring = RecurringMode.token
     supports_status_check = True
     credential_fields = (CredentialField("api_key", "API-ключ", "секретный ключ магазина"),)
 
@@ -105,6 +116,12 @@ class IokaProvider(ProviderDefaults):
         if request.amount_minor < _MIN_AMOUNT:
             raise ProviderError("ioka: минимальная сумма заказа — 1 единица валюты")
 
+        customer_id = ""
+        if request.extra.get("subscription"):
+            customer_id = await self._customer(
+                api_key, self._base(request.is_test), request.telegram_user_id, request.payment_id
+            )
+
         payload = await self._call(
             "POST",
             f"{self._base(request.is_test)}/orders",
@@ -117,6 +134,15 @@ class IokaProvider(ProviderDefaults):
                 "capture_method": "AUTO",
                 "external_id": str(request.payment_id),
                 "description": (request.description or "Оплата")[:255],
+                # A saved card belongs to a customer, so a subscription needs
+                # one to exist before the first payment — otherwise there is
+                # nothing for the card to attach to and the renewal has no
+                # handle to charge.
+                **(
+                    {"customer_id": customer_id}
+                    if customer_id
+                    else {}
+                ),
                 "back_url": request.return_url,
                 "success_url": request.return_url,
                 "failure_url": request.return_url,
@@ -198,6 +224,100 @@ class IokaProvider(ProviderDefaults):
             credentials, payment_id, provider_payment_id, amount_minor, meta.get("is_test"), currency
         )
 
+    async def _customer(self, api_key: str, base: str, telegram_user_id: int | None, payment_id) -> str:
+        """The ioka customer this buyer's saved card will belong to.
+
+        Keyed on the Telegram user id, so the same person coming back gets
+        the same customer rather than a new one per order — which is what
+        makes a card saved last month usable this month. A failure here is
+        not fatal: the order is created without a customer and the
+        subscription falls back to re-invoicing.
+        """
+        external_id = str(telegram_user_id or payment_id)
+        try:
+            found = await self._call("POST", f"{base}/customers", api_key, {"external_id": external_id})
+        except ProviderError as exc:
+            # Already exists is the common case on a second subscription.
+            logger.info("ioka: could not create customer %s (%s)", external_id, exc)
+            return ""
+        customer = _unwrap(found) or (found if isinstance(found, dict) else {})
+        return str(customer.get("id") or "")
+
+    def recurring_setup(self, settled: dict) -> RecurringSetup | None:
+        card = (settled or {}).get("ioka_card_id")
+        if not card:
+            return None
+        return RecurringSetup(token=str(card), customer=str((settled or {}).get("ioka_customer_id") or ""))
+
+    async def charge_recurring(
+        self,
+        *,
+        credentials: dict[str, str],
+        setup: RecurringSetup,
+        amount_minor: int,
+        currency: str,
+        description: str,
+        payment_id: uuid.UUID,
+        is_test: bool = False,
+        invoice_no: int | None = None,
+    ) -> WebhookResult:
+        """Two calls: an order for this period, then pay it with the saved card.
+
+        `capture_method: AUTO` on purpose — under MANUAL an APPROVED response
+        is only an authorisation (`captured_amount: 0`) and the money has not
+        moved, which for a renewal nobody is watching would mean handing over
+        a month for a hold.
+        """
+        api_key = self._key(credentials)
+        if not setup.token:
+            raise ProviderError("ioka: нет сохранённой карты")
+        base = self._base(bool(is_test))
+
+        created = _unwrap(
+            await self._call(
+                "POST",
+                f"{base}/orders",
+                api_key,
+                {
+                    "amount": amount_minor,
+                    "currency": currency.upper(),
+                    "capture_method": "AUTO",
+                    "external_id": str(payment_id),
+                    "description": (description or "Продление подписки")[:255],
+                    **({"customer_id": setup.customer} if setup.customer else {}),
+                },
+            )
+        )
+        order_id = (created or {}).get("id")
+        if not order_id:
+            raise ProviderError("ioka: не удалось создать заказ на продление")
+
+        paid = await self._call(
+            "POST", f"{base}/orders/{order_id}/payments/card", api_key, {"card_id": setup.token}
+        )
+        payment = _unwrap(paid) or (paid if isinstance(paid, dict) else {})
+        status = str(payment.get("status") or "").upper()
+
+        if status == "APPROVED":
+            # Under AUTO this is a real charge; the guard is here because a
+            # shop can still have MANUAL configured at the acquirer level.
+            captured = payment.get("captured_amount")
+            if isinstance(captured, int) and captured <= 0:
+                return WebhookResult(
+                    status=PaymentStatus.pending,
+                    provider_payment_id=str(order_id),
+                    meta={"decline": "деньги только заблокированы, а не списаны"},
+                )
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(order_id))
+
+        if status == "DECLINED":
+            error = payment.get("error") or {}
+            reason = error.get("message") or error.get("code") or "банк отклонил списание"
+            return WebhookResult(
+                status=PaymentStatus.failed, provider_payment_id=str(order_id), meta={"decline": str(reason)}
+            )
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(order_id))
+
     async def _read(
         self,
         credentials: dict[str, str],
@@ -230,7 +350,13 @@ class IokaProvider(ProviderDefaults):
             if not isinstance(amount, int) or amount != amount_minor:
                 raise ProviderError(f"ioka: сумма не совпадает (в заказе {amount})")
             same_currency(self.title, order.get("currency"), currency)
-            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
+            payer = order.get("payer") or {}
+            notes = {}
+            if payer.get("card_id"):
+                notes["ioka_card_id"] = str(payer["card_id"])
+                notes["ioka_customer_id"] = str(payer.get("customer_id") or "")
+                notes["ioka_is_test"] = bool(is_test)
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id, meta=notes)
 
         if status in _REFUNDED:
             return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=remote_id)
