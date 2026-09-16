@@ -46,6 +46,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [paymentPanelOpen, setPaymentPanelOpen] = useState(false);
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [paymentProviders, setPaymentProviders] = useState<PaymentProviderInfo[]>([]);
+  // Server-side switch: subscriptions are built but off while the one-off
+  // sale is being shaken out.
+  const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [publication, setPublication] = useState<PublicationInfo | null>(null);
 
   // The fixed footer's height decides how much room the canvas gets and how
@@ -173,6 +176,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           builderApi.getPublicationInfo(botId),
         ]);
         setPaymentProviders(providers.providers);
+        setSubscriptionsEnabled(Boolean(providers.subscriptions_enabled));
         setPaymentSettings(settings);
         setPublication(publicationInfo);
       } catch {
@@ -555,6 +559,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         paymentCurrencies={paymentProviders.find((p) => p.slug === paymentSettings?.provider)?.currencies ?? []}
         paymentProviderInfo={paymentProviders.find((p) => p.slug === paymentSettings?.provider) ?? null}
         onPreview={bot.blocks.length > 0 ? () => setPreviewOpen(true) : undefined}
+        subscriptionsEnabled={subscriptionsEnabled}
         onOpenPaymentSettings={() => setPaymentPanelOpen(true)}
         disabled={isMiniApp}
       />

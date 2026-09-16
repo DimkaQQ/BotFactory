@@ -42,6 +42,20 @@ CHAT_ID = 991
 USER_ID = 5150
 
 
+@pytest.fixture(autouse=True)
+def subscriptions_on(monkeypatch):
+    """This whole file tests the subscription feature, which ships switched
+    off while the one-off sale is being shaken out on real shops. Turning it
+    on here keeps the tests honest about what the code does when it *is* on —
+    the two tests about the switch itself override this explicitly."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("SUBSCRIPTIONS_ENABLED", "true")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 async def paid_order(db, bot, block, *, provider="stars", amount=59000, currency="RUB") -> Payment:
     payment = Payment(
         kind=PaymentKind.order,
@@ -1270,3 +1284,92 @@ async def test_the_row_records_what_was_actually_charged(db, owner, make_bot, as
     await db.refresh(payment)
     assert payment.amount_minor == 99000
     assert payment.meta["block_amount_minor"] == 59000
+
+
+# ------------------------------------------------- выключатель подписок
+
+
+async def test_the_switch_really_switches_it_off(db, owner, make_bot, as_bot, monkeypatch):
+    """Hiding the toggle is not enough. A block saved while subscriptions were
+    on still carries `subscription: true`, and the danger is that it goes on
+    opening subscriptions — and, on Stripe or Stars, asking the gateway to
+    bill a card every month — with nothing in the constructor to show for it.
+    """
+    from app.config import get_settings
+    from app.services.payment_service import _purchase_terms
+
+    monkeypatch.setenv("SUBSCRIPTIONS_ENABLED", "false")
+    get_settings.cache_clear()
+
+    content = {"title": "Клуб", "price": "590", "subscription": True, "period_days": 30}
+
+    # 1. The adapters never see the flag, so no recurring invoice is minted.
+    assert "subscription" not in _purchase_terms(content)
+    assert "period_days" not in _purchase_terms(content)
+
+    # 2. And a settled payment on such a block opens nothing.
+    bot, blocks = await club_bot(db, owner, make_bot, provider="stars")
+    payment = await paid_order(db, bot, blocks[1])
+    assert await subscription_service.start_or_extend(db, payment) is None
+
+
+async def test_turning_it_back_on_needs_no_migration(db, owner, make_bot, as_bot, monkeypatch):
+    """The point of a switch rather than a deletion: the same block starts
+    selling subscriptions again the moment it is flipped."""
+    from app.config import get_settings
+    from app.services.payment_service import _purchase_terms
+
+    monkeypatch.setenv("SUBSCRIPTIONS_ENABLED", "true")
+    get_settings.cache_clear()
+
+    content = {"title": "Клуб", "price": "590", "subscription": True, "period_days": 30}
+    assert _purchase_terms(content)["subscription"] is True
+
+    bot, blocks = await club_bot(db, owner, make_bot, provider="stars")
+    payment = await paid_order(db, bot, blocks[1])
+    assert await subscription_service.start_or_extend(db, payment) is not None
+
+
+async def test_a_subscription_block_sells_as_a_one_off_while_the_switch_is_off(
+    db, owner, make_bot, mock_http, monkeypatch
+):
+    """The whole point of stripping the flag at the choke point rather than
+    only hiding the toggle.
+
+    A block saved while subscriptions were on still carries them in its
+    content — a template's does from the start. With the feature off, the
+    money path must sell it as an ordinary purchase: no `save_payment_method`
+    on the way out, and no subscription row on the way back. Anything less
+    and a shop testing "просто разовая оплата" would quietly be asking its
+    customers to authorise a standing arrangement.
+    """
+    from app.config import get_settings
+    from app.services import payment_service
+
+    monkeypatch.setenv("SUBSCRIPTIONS_ENABLED", "false")
+    get_settings.cache_clear()
+
+    seen: list[dict] = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={"id": "p1", "confirmation": {"confirmation_url": "https://pay"}})
+
+    bot, blocks = await club_bot(db, owner, make_bot, provider="yookassa", subscription=True)
+    # Exactly the shape a template leaves behind.
+    assert blocks[1].content["subscription"] is True
+
+    with mock_http(handler):
+        payment, url = await payment_service.create_order_payment(
+            db, bot=bot, block=blocks[1], chat_id=CHAT_ID, telegram_user_id=USER_ID
+        )
+
+    assert url == "https://pay"
+    assert "save_payment_method" not in seen[0], "выключенная подписка не должна просить сохранить карту"
+
+    verdict = type("R", (), {"status": PaymentStatus.paid, "provider_payment_id": "x", "meta": {}})()
+    await payment_service.apply_result(db, payment, verdict, deliver=False)
+    opened = (
+        await db.execute(select(Subscription).where(Subscription.bot_id == bot.id))
+    ).scalars().all()
+    assert opened == [], "подписка не должна открыться при выключенной фиче"

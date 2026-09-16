@@ -254,6 +254,10 @@ async def payment_done() -> HTMLResponse:
 async def list_providers(_client: Client = Depends(get_current_client)) -> dict:
     return {
         "providers": payment_providers.describe_providers(),
+        # Subscriptions are built but switched off while the one-off sale is
+        # being shaken out; the constructor hides the control rather than
+        # showing one that does nothing.
+        "subscriptions_enabled": get_settings().subscriptions_enabled,
         # The section headings, in display order. Sent alongside rather than
         # hardcoded in the constructor so adding a gateway is a backend-only
         # change — see payments/__init__.py.

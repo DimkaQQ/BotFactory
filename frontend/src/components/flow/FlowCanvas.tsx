@@ -61,6 +61,8 @@ interface Props {
    * controls anyway. Absent while the bot has no blocks — there is nothing
    * to preview yet. */
   onPreview?: () => void;
+  /** Whether the payment block offers subscriptions right now. */
+  subscriptionsEnabled?: boolean;
   disabled?: boolean;
 }
 
@@ -104,6 +106,7 @@ function Inner({
   paymentProviderInfo,
   onOpenPaymentSettings,
   onPreview,
+  subscriptionsEnabled,
   disabled,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -469,6 +472,7 @@ function Inner({
           paymentProviderInfo={paymentProviderInfo}
           onOpenPaymentSettings={onOpenPaymentSettings}
           botPublished={bot.status === "active"}
+          subscriptionsEnabled={subscriptionsEnabled}
           onChange={(content) => onChangeContent(editingBlock.id, content)}
           onDelete={() => handleDelete(editingBlock.id)}
           onClose={() => setEditingId(null)}

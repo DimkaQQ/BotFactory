@@ -87,6 +87,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
   const [providers, setProviders] = useState<PaymentProviderInfo[] | null>(null);
   const [regions, setRegions] = useState<PaymentRegion[]>([]);
   const [subs, setSubs] = useState<SubscribersReport | null>(null);
+  const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [slug, setSlug] = useState<string>("");
   const [isTest, setIsTest] = useState(true);
@@ -117,6 +118,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
         ]);
         setProviders(list.providers);
         setRegions(list.regions ?? []);
+        setSubscriptionsEnabled(Boolean(list.subscriptions_enabled));
         setSettings(current);
         setSlug(current.provider ?? "");
         setIsTest(current.is_test);
@@ -211,9 +213,11 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
 
               <div className="buttons-editor__field">
                 <span className="buttons-editor__field-label">Платёжная система</span>
-                <p className="app-hint payment-settings__recurring-legend">
-                  🔁 — умеет списывать подписку сама. У остальных бот присылает новый счёт каждый период.
-                </p>
+                {subscriptionsEnabled && (
+                  <p className="app-hint payment-settings__recurring-legend">
+                    🔁 — умеет списывать подписку сама. У остальных бот присылает новый счёт каждый период.
+                  </p>
+                )}
                 {grouped.map((group) => (
                   <div key={group.slug} className="payment-settings__region">
                     {group.title && <p className="payment-settings__region-title">{group.title}</p>}
@@ -229,7 +233,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                         >
                           <span className="payment-settings__provider-title">
                             {provider.title}
-                            {provider.recurring !== "none" && (
+                            {subscriptionsEnabled && provider.recurring !== "none" && (
                               <span
                                 className="payment-settings__recurring"
                                 title={

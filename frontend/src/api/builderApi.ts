@@ -290,6 +290,10 @@ export interface PaymentRegion {
 
 export interface PaymentProviderCatalogue {
   providers: PaymentProviderInfo[];
+  /** Whether the constructor offers subscriptions at all. Off while the
+   * one-off sale is being shaken out — the engine keeps the feature, the
+   * editor just does not show it. */
+  subscriptions_enabled?: boolean;
   /** Section headings for the provider grid, in display order. Comes from
    * the server so a new gateway needs no frontend change. */
   regions: PaymentRegion[];

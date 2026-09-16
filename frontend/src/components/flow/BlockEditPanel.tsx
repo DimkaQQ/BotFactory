@@ -38,6 +38,7 @@ interface Props {
   onOpenPaymentSettings: () => void;
   /** Broadcasting needs a token, which only a published bot has. */
   botPublished?: boolean;
+  subscriptionsEnabled?: boolean;
 }
 
 /** The block's full editor, opened on the side (desktop) / as a bottom sheet
@@ -56,6 +57,7 @@ export function BlockEditPanel({
   paymentProviderInfo,
   onOpenPaymentSettings,
   botPublished,
+  subscriptionsEnabled,
 }: Props) {
   useEscape(onClose);
   const def = BLOCK_TYPE_BY_ID[block.block_type];
@@ -95,6 +97,7 @@ export function BlockEditPanel({
               provider={paymentProvider}
               currencies={paymentCurrencies}
               providerInfo={paymentProviderInfo}
+              subscriptionsEnabled={subscriptionsEnabled}
               onChange={onChange}
               onOpenSettings={onOpenPaymentSettings}
             />

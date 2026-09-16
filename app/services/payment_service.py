@@ -195,6 +195,26 @@ def block_fingerprint(content: dict, next_block_id=None) -> str:
     return json.dumps(watched, ensure_ascii=False, sort_keys=True)
 
 
+def _purchase_terms(content: dict) -> dict:
+    """What the adapter is allowed to know about this sale.
+
+    The single choke point for the subscription switch. Every adapter reads
+    `extra["subscription"]` to decide whether to mint a recurring invoice —
+    Stripe creates a real subscription off it, Stars asks Telegram to bill
+    every 30 days — so hiding the toggle in the constructor would not be
+    enough on its own: a block saved while the feature was on would go on
+    selling subscriptions with nothing in the UI to show for it.
+
+    With the switch off, the flag is stripped here and the same block is
+    sold exactly as a one-off purchase.
+    """
+    from app.config import get_settings
+
+    if get_settings().subscriptions_enabled or not content.get("subscription"):
+        return content
+    return {key: value for key, value in content.items() if key not in ("subscription", "period_days")}
+
+
 async def _open_payment(
     db: AsyncSession,
     *,
@@ -291,7 +311,7 @@ async def _create(
                 return_url=return_url,
                 is_test=is_test,
                 credentials=credentials,
-                extra=extra or {},
+                extra=_purchase_terms(extra or {}),
                 bot_token=bot_token,
                 telegram_user_id=telegram_user_id,
             )

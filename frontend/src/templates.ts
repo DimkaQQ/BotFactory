@@ -1,6 +1,8 @@
 import type { BlockContent, BlockType } from "./api/builderApi";
 
 export interface BotTemplate {
+  /** Only offered when subscriptions are enabled. */
+  needsSubscriptions?: boolean;
   id: string;
   icon: string;
   label: string;
@@ -57,6 +59,10 @@ export const BOT_TEMPLATES: BotTemplate[] = [
   },
   {
     id: "subscription",
+    // Hidden while recurring billing is switched off server-side: the whole
+    // template is a promise of monthly charging, and showing it then is the
+    // same lie this product spent a while removing.
+    needsSubscriptions: true,
     accent: "buttons",
     icon: "🔔",
     label: "Платная подписка",

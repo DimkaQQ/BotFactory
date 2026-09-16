@@ -31,6 +31,17 @@ class Settings(BaseSettings):
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     fernet_key: str = ""
 
+    # Subscriptions (recurring billing + the scheduler behind it) are built
+    # and tested but switched off while the one-off sale is being shaken out
+    # on real shops. Off means two things at once, deliberately: the payment
+    # block stops offering the toggle, *and* a block already marked as a
+    # subscription is treated as an ordinary sale — hiding the control alone
+    # would leave old blocks quietly charging on a cycle nobody can see.
+    #
+    # Flip to true (SUBSCRIPTIONS_ENABLED=1) to turn it all back on;
+    # nothing is deleted, and no data migrates either way.
+    subscriptions_enabled: bool = False
+
     # CORS - Mini App origin(s), comma separated. "*" for local dev.
     cors_origins: str = "*"
 

@@ -11,6 +11,8 @@ interface Props {
   /** The chosen provider's catalogue entry, when it has been loaded: what it
    * needs per product, and whether it can confirm a payment by itself. */
   providerInfo?: PaymentProviderInfo | null;
+  /** Whether the constructor offers subscriptions at all right now. */
+  subscriptionsEnabled?: boolean;
   onChange: (content: BlockContent) => void;
   onOpenSettings: () => void;
 }
@@ -42,7 +44,15 @@ function PeriodField({
   );
 }
 
-export function PaymentEditor({ content, provider, currencies, providerInfo, onChange, onOpenSettings }: Props) {
+export function PaymentEditor({
+  content,
+  provider,
+  currencies,
+  providerInfo,
+  subscriptionsEnabled,
+  onChange,
+  onOpenSettings,
+}: Props) {
   const options = currencies.length > 0 ? currencies : FALLBACK_CURRENCIES;
   const currency = content.currency && options.includes(content.currency) ? content.currency : options[0];
 
@@ -153,7 +163,14 @@ export function PaymentEditor({ content, provider, currencies, providerInfo, onC
 
       {/* Subscription — the one place in the product where the difference
           between the providers actually changes what the owner is selling,
-          so it is stated in full rather than hidden behind a checkbox. */}
+          so it is stated in full rather than hidden behind a checkbox.
+
+          Hidden entirely while the feature is switched off server-side: a
+          control that saves a flag the engine then ignores is worse than no
+          control. The engine strips the flag too (payment_service
+          ._purchase_terms), so a block saved while it was on is sold as an
+          ordinary one-off purchase. */}
+      {subscriptionsEnabled && (
       <div className="payment-editor__subscription">
         <label className="payment-editor__toggle">
           <input
@@ -217,6 +234,7 @@ export function PaymentEditor({ content, provider, currencies, providerInfo, onC
           </>
         )}
       </div>
+      )}
 
       <p className="payment-editor__note">
         После оплаты бот сам продолжит сценарий по стрелке «дальше» — поставь туда блок «Выдача» с файлом или

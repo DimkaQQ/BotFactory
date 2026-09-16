@@ -40,6 +40,12 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Subscriptions ship switched off while the one-off sale is being shaken
+  // out, and the «Платная подписка» template is a promise of monthly
+  // charging from its first word — so it is not offered until the feature
+  // is back. Asked for only when the picker opens: the list screen has no
+  // business fetching the payment catalogue.
+  const [templates, setTemplates] = useState(() => BOT_TEMPLATES.filter((x) => !x.needsSubscriptions));
   useEscape(() => setPickerOpen(false), pickerOpen);
   const { sheetRef, handleProps } = useSwipeToDismiss(() => {
     if (!creatingTemplateId) setPickerOpen(false);
@@ -146,6 +152,18 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
       return;
     }
     setPickerOpen(true);
+    builderApi
+      .listPaymentProviders()
+      .then((catalogue) =>
+        setTemplates(
+          catalogue.subscriptions_enabled
+            ? BOT_TEMPLATES
+            : BOT_TEMPLATES.filter((x) => !x.needsSubscriptions),
+        ),
+      )
+      .catch(() => {
+        /* Offering fewer templates is the safe failure here. */
+      });
   }
 
   async function handleDelete(bot: Bot, e: React.MouseEvent) {
@@ -365,7 +383,7 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
               </button>
             </div>
             <div className="template-list">
-              {BOT_TEMPLATES.map((template) => (
+              {templates.map((template) => (
                 <button
                   key={template.id}
                   type="button"

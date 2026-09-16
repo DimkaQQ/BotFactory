@@ -76,6 +76,17 @@ def charges_itself(provider: str | None) -> bool:
 
 
 def is_subscription_block(content: dict | None) -> bool:
+    """Whether this payment block sells a period rather than a thing.
+
+    Gated on the feature switch so that turning subscriptions off really
+    turns them off: an existing block still carries `subscription: true` in
+    its content, and without this check it would keep opening subscriptions
+    and queueing charges while the constructor showed no sign of it.
+    """
+    from app.config import get_settings
+
+    if not get_settings().subscriptions_enabled:
+        return False
     return bool((content or {}).get("subscription"))
 
 
