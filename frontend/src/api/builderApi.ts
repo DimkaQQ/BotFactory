@@ -75,6 +75,8 @@ export interface Bot {
   block_count: number;
   /** Entry point of the dialogue graph — where the "▶ Старт" node points. */
   start_block_id: string | null;
+  /** End of the paid period, or null when the bot is not on a clock. */
+  paid_until: string | null;
 }
 
 export interface BotWithBlocks extends Bot {
@@ -269,6 +271,12 @@ export const builderApi = {
       method: "POST",
       body: JSON.stringify({ provider: provider ?? null }),
     }),
+  getBilling: (botId: string) => request<BillingState>(`/bots/${botId}/billing`),
+  startRenewalCheckout: (botId: string, provider?: string) =>
+    request<PaymentInfo>(`/bots/${botId}/renewal-checkout`, {
+      method: "POST",
+      body: JSON.stringify({ provider: provider ?? null }),
+    }),
   getPayment: (paymentId: string) => request<PaymentInfo>(`/payments/${paymentId}`),
   listOrders: (botId: string) => request<OrdersReport>(`/bots/${botId}/orders`),
   listSubscribers: (botId: string) => request<SubscribersReport>(`/bots/${botId}/subscribers`),
@@ -358,6 +366,12 @@ export interface PublicationInfo {
   /** Every way to pay, each with its own price: the same publication costs
    * $9, ₸4500 and 9 USDT, which one number cannot express. */
   methods: PublicationMethod[];
+  /** What keeping the bot on the air costs per period afterwards, 0 if the
+   * launch is all there is. Shown *before* the launch is paid for: finding
+   * out about a monthly a month later is how a refund request starts. */
+  renewal_price_minor: number;
+  renewal_period_days: number;
+  renewal_grace_days: number;
 }
 
 export interface PublicationMethod {
@@ -365,6 +379,20 @@ export interface PublicationMethod {
   title: string;
   price_minor: number;
   currency: string;
+  renewal_price_minor: number;
+}
+
+/** Where a live bot stands with us. `state`: "off" — nothing is charged per
+ * period; "active" — paid; "grace" — the period ended and the bot is still
+ * running on borrowed time; "suspended" — off the air until it is renewed. */
+export interface BillingState {
+  state: "off" | "active" | "grace" | "suspended";
+  paid_until: string | null;
+  grace_until: string | null;
+  days_left: number | null;
+  price_minor: number;
+  currency: string;
+  period_days: number;
 }
 
 export interface OrdersReport {

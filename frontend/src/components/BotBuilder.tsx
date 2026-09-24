@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
+  type BillingState,
   type BlockType,
   type BotBlock,
   type BotWithBlocks,
@@ -14,6 +15,7 @@ import { confirmDialog } from "../confirm";
 import { openExternal } from "../hooks/useTelegramWebApp";
 import { BLOCK_TYPE_BY_ID } from "../blockTypes";
 import { orphanBlocks } from "../reachability";
+import { BillingBanner, paidUntilLabel } from "./BillingBanner";
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { LivePreview } from "./LivePreview";
 import { PaymentSettingsPanel } from "./PaymentSettingsPanel";
@@ -50,6 +52,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   // sale is being shaken out.
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [publication, setPublication] = useState<PublicationInfo | null>(null);
+  const [billing, setBilling] = useState<BillingState | null>(null);
 
   // The fixed footer's height decides how much room the canvas gets and how
   // much the page must reserve below it. Guessing it with a constant was
@@ -170,19 +173,34 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     // loadState.
     (async () => {
       try {
-        const [providers, settings, publicationInfo] = await Promise.all([
+        const [providers, settings, publicationInfo, billingState] = await Promise.all([
           builderApi.listPaymentProviders(),
           builderApi.getPaymentSettings(botId),
           builderApi.getPublicationInfo(botId),
+          builderApi.getBilling(botId),
         ]);
         setPaymentProviders(providers.providers);
         setSubscriptionsEnabled(Boolean(providers.subscriptions_enabled));
         setPaymentSettings(settings);
         setPublication(publicationInfo);
+        setBilling(billingState);
       } catch {
         // leaves payments unconfigured in the UI; nothing else breaks
       }
     })();
+  }, [botId]);
+
+  // A renewal can put a stopped bot back on the air, so this re-reads the
+  // bot itself and not just the clock — the status drives the whole header.
+  const handleRenewed = useCallback(async () => {
+    try {
+      const [full, state] = await Promise.all([builderApi.getBot(botId), builderApi.getBilling(botId)]);
+      setBot(full);
+      setBilling(state);
+    } catch {
+      // The payment landed either way; a stale banner until the next load
+      // is a far smaller problem than an error over a successful payment.
+    }
   }, [botId]);
 
   const handleChangeContent = useCallback(
@@ -493,7 +511,11 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               </h1>
             )}
             <p className="app-header__greeting">
-              {bot.status === "active" ? "Опубликован — изменения применяются сразу" : "Черновик"}
+              {bot.status === "active"
+                ? "Опубликован — изменения применяются сразу"
+                : bot.status === "disabled"
+                  ? "Остановлен — правки сохраняются как обычно"
+                  : "Черновик"}
               {bot.name && bot.telegram_bot_username ? ` · @${bot.telegram_bot_username}` : ""}
               {!isMiniApp && saveStatus !== "idle" && (
                 <span className={`save-status save-status--${saveStatus}`}>
@@ -528,7 +550,25 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             <p className="published-banner__title">
               Бот работает: <strong>@{bot.telegram_bot_username}</strong>
             </p>
-            <p className="published-banner__hint">Правки в сообщениях применяются сразу, без повторной публикации.</p>
+            <p className="published-banner__hint">
+              Правки в сообщениях применяются сразу, без повторной публикации.
+              {billing && paidUntilLabel(billing) && ` · ${paidUntilLabel(billing)}`}
+            </p>
+          </div>
+        </div>
+      ) : bot.status === "disabled" ? (
+        /* Off the air, not gone. The editor below stays exactly as it was —
+           seeing the scenario still sitting there is most of the reassurance
+           this screen has to give. */
+        <div className="published-banner published-banner--stopped">
+          <div className="published-banner__badge" aria-hidden="true">
+            ⏸
+          </div>
+          <div>
+            <p className="published-banner__title">
+              Бот остановлен{bot.telegram_bot_username ? `: @${bot.telegram_bot_username}` : ""}
+            </p>
+            <p className="published-banner__hint">Сценарий, настройки и заказы на месте.</p>
           </div>
         </div>
       ) : (
@@ -545,6 +585,13 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             <p className="app-hint app-hint--narrow">Нажми на блок, чтобы изменить. Потяни от кружка — что дальше.</p>
           </>
         )
+      )}
+
+      {/* Its own box, below the status banner rather than inside it: an
+          orange "период закончился" nested in the green "бот работает" card
+          made the page say two opposite things at once. */}
+      {billing && bot.status !== "draft" && (
+        <BillingBanner botId={bot.id} billing={billing} onRenewed={handleRenewed} />
       )}
 
       <FlowCanvas

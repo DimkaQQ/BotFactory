@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, LargeBinary, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, LargeBinary, SmallInteger, String, func
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -57,6 +57,20 @@ class Bot(Base):
     # Set once this bot's publication has been paid for (see PaymentKind.
     # publication) — publishing checks this, not the payment rows.
     publication_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # End of the paid period, when the deployment charges one (see
+    # `renewal_price_minor`). NULL means the bot is not on a clock at all —
+    # either nothing is charged monthly here, or this bot predates the
+    # monthly and is left alone. A date in the past does *not* mean the bot
+    # is off: the grace period is counted from here, and only
+    # `platform_billing` decides what that adds up to.
+    paid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # How far the owner has already been warned about the current period
+    # (see `platform_billing.NOTICE_*`). Reset to 0 every time `paid_until`
+    # moves forward, which is what scopes it to one period and lets the
+    # hourly sweep remind once instead of every hour.
+    billing_notice_stage: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0, server_default="0")
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

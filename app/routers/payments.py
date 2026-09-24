@@ -30,6 +30,7 @@ from app.models.client import Client
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.schemas.payment import (
+    BillingStateOut,
     PaymentOut,
     PaymentSettingsIn,
     PaymentSettingsOut,
@@ -37,7 +38,7 @@ from app.schemas.payment import (
     PublicationInfoOut,
     PublicationMethodOut,
 )
-from app.services import payment_service
+from app.services import payment_service, platform_billing
 from app.services import payments as payment_providers
 from app.services.payments import ProviderError
 
@@ -354,10 +355,65 @@ async def publication_info(bot_id: uuid.UUID, bot: BotModel = Depends(get_owned_
         currency=methods[0].currency if methods else "",
         methods=[
             PublicationMethodOut(
-                provider=m.provider, title=m.title, price_minor=m.price_minor, currency=m.currency
+                provider=m.provider,
+                title=m.title,
+                price_minor=m.price_minor,
+                currency=m.currency,
+                renewal_price_minor=m.renewal_price_minor,
             )
             for m in methods
         ],
+        renewal_price_minor=platform_billing.renewal_price()[0],
+        renewal_period_days=platform_billing.period_days(),
+        renewal_grace_days=platform_billing.grace_days(),
+    )
+
+
+@router.get("/api/bots/{bot_id}/billing", response_model=BillingStateOut)
+async def billing_state(bot_id: uuid.UUID, bot: BotModel = Depends(get_owned_bot)) -> BillingStateOut:
+    state = platform_billing.state_of(bot)
+    return BillingStateOut(
+        state=state.state,
+        paid_until=state.paid_until,
+        grace_until=state.grace_until,
+        days_left=state.days_left,
+        price_minor=state.price_minor,
+        currency=state.currency,
+        period_days=platform_billing.period_days(),
+    )
+
+
+@router.post("/api/bots/{bot_id}/renewal-checkout", response_model=PaymentOut)
+async def renewal_checkout(
+    bot_id: uuid.UUID,
+    payload: PublicationCheckoutIn | None = None,
+    bot: BotModel = Depends(get_owned_bot),
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> PaymentOut:
+    """Buy the bot another period.
+
+    Allowed early as well as late: an owner going on holiday should be able
+    to pay three periods ahead, and `extend_period` counts them from the end
+    of the paid one rather than from today.
+    """
+    try:
+        payment, url = await payment_service.create_renewal_payment(
+            db, bot=bot, client_id=client.id, provider=payload.provider if payload else None
+        )
+    except ProviderError as exc:
+        logger.error("Renewal checkout failed for bot %s: %s", bot_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Этот способ оплаты сейчас недоступен. Попробуй другой или напиши нам.",
+        ) from exc
+
+    return PaymentOut(
+        id=payment.id,
+        status=payment.status,
+        amount_minor=payment.amount_minor,
+        currency=payment.currency,
+        checkout_url=url,
     )
 
 

@@ -8,7 +8,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.routers import auth, bots, builder, media, payments, webhook
-from app.services import background, bot_registry, payment_service, scheduler, subscription_service
+from app.services import (
+    background,
+    bot_registry,
+    payment_service,
+    platform_billing,
+    scheduler,
+    subscription_service,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -34,6 +41,12 @@ async def lifespan(app: FastAPI):
     # even if no step survived to say so.
     background.spawn(subscription_service.expire_due(), name="subscriptions-catchup")
     background.spawn(subscription_service.expire_forever(), name="subscriptions-expiry", daemon=True)
+    # What the bot owners owe *us*: remind while a period is running out,
+    # take the bot off the air once the grace period has run out too. Same
+    # shape as above and for the same reason — a period that ended during a
+    # deploy ended, whether or not anything was running to notice.
+    background.spawn(platform_billing.sweep_once(), name="billing-catchup")
+    background.spawn(platform_billing.sweep_forever(), name="billing-sweep", daemon=True)
     yield
     # Dialogues and deliveries scheduled off a request are still in flight;
     # give them a moment to finish rather than dropping a buyer's goods

@@ -19,6 +19,9 @@ class BotOut(BaseModel):
     published_at: datetime | None
     block_count: int = 0
     start_block_id: uuid.UUID | None = None
+    # End of the paid period, when this deployment charges one. None means
+    # the bot is not on a clock — see `Bot.paid_until`.
+    paid_until: datetime | None = None
 
 
 class BotWithBlocksOut(BotOut):

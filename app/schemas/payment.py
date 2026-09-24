@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -35,6 +36,9 @@ class PublicationMethodOut(BaseModel):
     title: str
     price_minor: int
     currency: str
+    #: What one more period costs through this method; 0 if the launch is
+    #: all this deployment charges.
+    renewal_price_minor: int = 0
 
 
 class PublicationInfoOut(BaseModel):
@@ -44,6 +48,23 @@ class PublicationInfoOut(BaseModel):
     price_minor: int
     currency: str
     methods: list[PublicationMethodOut] = []
+    # What happens after the launch, so the paywall can say it before the
+    # money is taken rather than in a message a month later.
+    renewal_price_minor: int = 0
+    renewal_period_days: int = 0
+    renewal_grace_days: int = 0
+
+
+class BillingStateOut(BaseModel):
+    """Where a live bot stands with us — see `platform_billing.BillingState`."""
+
+    state: str
+    paid_until: datetime | None = None
+    grace_until: datetime | None = None
+    days_left: int | None = None
+    price_minor: int = 0
+    currency: str = ""
+    period_days: int = 0
 
 
 class PublicationCheckoutIn(BaseModel):

@@ -57,6 +57,10 @@ class PlatformMethod:
     currency: str
     credentials: dict[str, str]
     is_test: bool
+    #: What one more period costs through this method, once the bot is on
+    #: the air. 0 — the default — means this deployment sells the launch
+    #: only, and the bot then runs forever.
+    renewal_price_minor: int = 0
 
     @property
     def title(self) -> str:
@@ -90,6 +94,7 @@ def platform_methods() -> list[PlatformMethod]:
                         currency=str(entry["currency"]).upper(),
                         credentials=dict(entry.get("credentials") or {}),
                         is_test=bool(entry.get("is_test", False)),
+                        renewal_price_minor=int(entry.get("renewal_price_minor") or 0),
                     )
                 )
             except (KeyError, TypeError, ValueError, ProviderError):
@@ -113,6 +118,7 @@ def platform_methods() -> list[PlatformMethod]:
             currency=settings.publication_currency.upper(),
             credentials=credentials,
             is_test=settings.platform_payment_is_test,
+            renewal_price_minor=settings.renewal_price_minor,
         )
     ]
 
@@ -433,6 +439,38 @@ async def create_publication_payment(
     )
 
 
+async def create_renewal_payment(
+    db: AsyncSession, *, bot: BotModel, client_id: uuid.UUID, provider: str | None = None
+) -> tuple[Payment, str]:
+    """A client paying us for the bot's next period.
+
+    The same checkout as the launch, at the renewal price — deliberately an
+    ordinary invoice rather than a charge against a saved card; see the
+    module docstring of `platform_billing` for why.
+    """
+    from app.services import platform_billing
+
+    settings = get_settings()
+    method = platform_method(provider)
+    if method.renewal_price_minor <= 0:
+        raise ProviderError("Продление не требуется — бот оплачен бессрочно")
+
+    period = platform_billing.period_days()
+    return await _create(
+        db,
+        kind=PaymentKind.renewal,
+        provider_slug=method.provider,
+        credentials=method.credentials,
+        is_test=method.is_test,
+        amount_minor=method.renewal_price_minor,
+        currency=method.currency,
+        description=f"Работа бота, {period} дн. · {bot.name or 'Новый бот'}",
+        return_url=f"{settings.public_base_url.rstrip('/')}/?paid={bot.id}",
+        bot_id=bot.id,
+        client_id=client_id,
+    )
+
+
 async def find_payment(db: AsyncSession, ref) -> Payment | None:
     if ref.payment_id is not None:
         result = await db.execute(select(Payment).where(Payment.id == ref.payment_id))
@@ -450,8 +488,8 @@ async def find_payment(db: AsyncSession, ref) -> Payment | None:
 
 async def credentials_for(db: AsyncSession, payment: Payment) -> tuple[dict[str, str], bool]:
     """Whose merchant account this payment belongs to — the bot owner's, or
-    ours for a publication."""
-    if payment.kind == PaymentKind.publication:
+    ours for a publication or a renewal."""
+    if payment.kind in (PaymentKind.publication, PaymentKind.renewal):
         # Keyed on the payment's own provider: several methods are offered at
         # once, and a callback about a Stripe payment must not be verified
         # with the crypto app's token.
@@ -927,6 +965,37 @@ async def reject_by_owner(db: AsyncSession, payment: Payment) -> None:
         logger.info("Could not tell the buyer that payment %s was rejected", payment.id, exc_info=True)
 
 
+async def _extend_paid_period(db: AsyncSession, payment: Payment, now: datetime) -> None:
+    """A launch or a renewal has landed — move the bot's clock.
+
+    Reached exactly once per payment: `mark_paid`'s conditional UPDATE has
+    already decided who settled it, so a replayed callback cannot buy a
+    second period with the same money.
+    """
+    from app.services import platform_billing
+
+    bot = (await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))).scalar_one_or_none()
+    if bot is None:
+        logger.error("Payment %s settled for bot %s, which no longer exists", payment.id, payment.bot_id)
+        return
+
+    if payment.kind == PaymentKind.publication:
+        if bot.publication_paid_at is not None:
+            return
+        bot.publication_paid_at = now
+        # The launch price includes the first period; charging for it again
+        # a moment later would be taking the same week twice.
+        platform_billing.open_first_period(bot, now)
+        return
+
+    platform_billing.extend_period(bot, now)
+    # Paying for the next period is also how a suspended bot comes back, and
+    # the owner should not have to find a second button for it. Committed
+    # inside, before the webhook is set, so the row says "active" by the
+    # time Telegram starts delivering again.
+    await platform_billing.resume(db, bot)
+
+
 async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str | None) -> bool:
     """Flip a payment to paid, exactly once. True means *this* call did it.
 
@@ -969,12 +1038,8 @@ async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str
         await db.refresh(payment)
         return False
 
-    if payment.kind == PaymentKind.publication and payment.bot_id:
-        await db.execute(
-            update(BotModel)
-            .where(BotModel.id == payment.bot_id, BotModel.publication_paid_at.is_(None))
-            .values(publication_paid_at=now)
-        )
+    if payment.kind in (PaymentKind.publication, PaymentKind.renewal) and payment.bot_id:
+        await _extend_paid_period(db, payment, now)
 
     await db.commit()
     # The in-memory object was not touched by the UPDATE; refresh it so the

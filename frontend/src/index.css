@@ -89,12 +89,17 @@
   --accent-delivery: #047857;
   --accent-delay: #475569;
   --accent-success: #059669;
+  /* "Something needs doing soon", between success and destructive. Used by
+     the billing banner, where red would say the bot is already off and
+     green would say nothing is wrong — and both would be untrue. */
+  --accent-warning: #d97706;
   /* The same green as *text*. #059669 is chosen to read as a fill/dot on the
      off-white page; set as a label on its own 16% tint — the "START" badge on
      the start block — it measured 3.68:1, under AA for a 9.5px bold label.
      A darker ink clears it at 6.2:1 and still reads as the same green. In
      dark mode the accent is already light enough to double as ink. */
   --accent-success-ink: #065f46;
+  --accent-warning-ink: #92400e;
 
   /* Desktop shell (web constructor only — the Mini App never reaches
      these widths).
@@ -178,6 +183,8 @@
   --accent-delay: #94a3b8;
   --accent-success: #34d399;
   --accent-success-ink: #34d399;
+  --accent-warning: #fbbf24;
+  --accent-warning-ink: #fbbf24;
 }
 
 @media (prefers-reduced-motion: reduce) {

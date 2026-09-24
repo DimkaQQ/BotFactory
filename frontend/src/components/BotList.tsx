@@ -23,6 +23,18 @@ const STATUS_LABEL: Record<Bot["status"], string> = {
   disabled: "Отключён",
 };
 
+/* Same five days the constructor and the Telegram reminder use, so the list
+   never says "оплачен" about a bot the banner is already nagging over. */
+const DUE_SOON_MS = 5 * 24 * 60 * 60 * 1000;
+
+function dueSoon(paidUntil: string): boolean {
+  return new Date(paidUntil).getTime() - Date.now() < DUE_SOON_MS;
+}
+
+function shortDay(paidUntil: string): string {
+  return new Date(paidUntil).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+}
+
 function botTitle(bot: Bot): string {
   if (bot.name) return bot.name;
   if (bot.telegram_bot_username) return `@${bot.telegram_bot_username}`;
@@ -335,6 +347,14 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
                     {bot.name && bot.telegram_bot_username && (
                       <>
                         <span className="bot-card__dot">·</span>@{bot.telegram_bot_username}
+                      </>
+                    )}
+                    {bot.paid_until && (
+                      <>
+                        <span className="bot-card__dot">·</span>
+                        <span className={`bot-card__due${dueSoon(bot.paid_until) ? " bot-card__due--soon" : ""}`}>
+                          {dueSoon(bot.paid_until) ? "нужно продлить" : `оплачен до ${shortDay(bot.paid_until)}`}
+                        </span>
                       </>
                     )}
                   </span>

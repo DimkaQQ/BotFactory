@@ -15,6 +15,11 @@ class PaymentKind(str, enum.Enum):
     order = "order"
     # A client paying *us* to publish a bot.
     publication = "publication"
+    # A client paying *us* for the bot's next period. Separate from
+    # `publication` because the two carry different prices and settle
+    # differently — one unlocks the publish button once, the other moves
+    # `paid_until` forward every time.
+    renewal = "renewal"
 
 
 class PaymentStatus(str, enum.Enum):

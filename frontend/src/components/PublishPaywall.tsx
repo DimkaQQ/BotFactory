@@ -86,7 +86,15 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
   // shows its own amount rather than one converted number.
   const methods = info.methods?.length
     ? info.methods
-    : [{ provider: "", title: "Оплатить публикацию", price_minor: info.price_minor, currency: info.currency }];
+    : [
+        {
+          provider: "",
+          title: "Оплатить публикацию",
+          price_minor: info.price_minor,
+          currency: info.currency,
+          renewal_price_minor: info.renewal_price_minor,
+        },
+      ];
 
   return (
     <div className="paywall">
@@ -97,9 +105,19 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
         <div>
           <p className="paywall__title">Публикация бота</p>
           <p className="paywall__hint">
-            Собирать и править сценарий можно бесплатно и сколько угодно. Оплата — один раз за запуск этого бота
-            в Telegram.
+            Собирать и править сценарий можно бесплатно и сколько угодно. Оплата — за запуск этого бота в
+            Telegram.
           </p>
+          {/* Said here, before the money is taken, and not in a message a
+              month later: "а почему с меня списали ещё раз" is the same
+              conversation as a refund request. */}
+          {info.renewal_price_minor > 0 && (
+            <p className="paywall__terms">
+              Дальше — {formatAmount(info.renewal_price_minor)} {money(info.currency)} за каждые{" "}
+              {info.renewal_period_days} дней работы. Первый период входит в эту оплату: следующий счёт придёт
+              через {info.renewal_period_days} дней, и бот напомнит заранее.
+            </p>
+          )}
         </div>
       </div>
 
@@ -146,6 +164,12 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
               </span>
               <span className="paywall__method-price">
                 {formatAmount(method.price_minor)} {money(method.currency)}
+                {method.renewal_price_minor > 0 && (
+                  <span className="paywall__method-renewal">
+                    затем {formatAmount(method.renewal_price_minor)} {money(method.currency)}/
+                    {info.renewal_period_days} дн.
+                  </span>
+                )}
               </span>
             </button>
           ))}

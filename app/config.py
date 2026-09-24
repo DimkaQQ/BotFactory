@@ -68,11 +68,18 @@ class Settings(BaseSettings):
     # Each entry carries its own price, because the same publication costs
     # $9, ₸4500 and 9 USDT — one number in one currency cannot express that.
     #
-    #   [{"provider": "stripe",    "price_minor": 900,    "currency": "USD",
+    # `renewal_price_minor` is what the bot costs per period afterwards; 0
+    # (or absent) means this method sells the launch only and the bot then
+    # runs forever.
+    #
+    #   [{"provider": "stripe",    "price_minor": 9900,   "renewal_price_minor": 990,
+    #     "currency": "USD",
     #     "credentials": {"secret_key": "sk_live_…", "webhook_secret": "whsec_…"}},
-    #    {"provider": "robokassa", "price_minor": 450000, "currency": "KZT",
+    #    {"provider": "robokassa", "price_minor": 450000, "renewal_price_minor": 45000,
+    #     "currency": "KZT",
     #     "credentials": {"merchant_login": "…", "password1": "…", "password2": "…"}},
-    #    {"provider": "cryptobot", "price_minor": 900,    "currency": "USDT",
+    #    {"provider": "cryptobot", "price_minor": 9900,   "renewal_price_minor": 990,
+    #     "currency": "USDT",
     #     "credentials": {"token": "…"}}]
     #
     # Empty falls back to the single-provider settings below, so an existing
@@ -92,6 +99,24 @@ class Settings(BaseSettings):
     # is actually configured, so a fresh deployment is never locked.
     publication_price_minor: int = 0
     publication_currency: str = "KZT"
+
+    # ---- Платформа: ежемесячная плата за работающего бота ----
+    # What the bot costs per period once it is on the air, in the same
+    # currency as the launch. 0 — the default — means there is no monthly at
+    # all: the launch is paid once and the bot runs forever. Nothing here is
+    # ever charged automatically; see `platform_billing` for why, and for
+    # what actually happens as a period runs out.
+    renewal_price_minor: int = 0
+    # Length of one paid period. 30 rather than "a calendar month" because
+    # the whole thing is arithmetic on a timestamp, and a period that is
+    # sometimes 28 and sometimes 31 days long is a support question nobody
+    # needs to answer.
+    renewal_period_days: int = 30
+    # After the period ends the bot keeps working for this long while the
+    # owner is reminded. Only once *this* runs out does it go off the air —
+    # a shop with paying customers must never be switched off the same hour
+    # a card expires.
+    renewal_grace_days: int = 7
 
     @property
     def webapp_url(self) -> str:
