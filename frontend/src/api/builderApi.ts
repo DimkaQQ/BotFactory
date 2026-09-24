@@ -195,7 +195,7 @@ export interface TelegramLoginPayload {
 
 export const builderApi = {
   getMe: () => request<ClientInfo>("/me"),
-  getPublicConfig: () => request<{ meta_bot_username: string }>("/config"),
+  getPublicConfig: () => request<PublicConfig>("/config"),
   loginWithTelegram: (payload: TelegramLoginPayload) =>
     request<{ token: string }>("/auth/telegram-login", { method: "POST", body: JSON.stringify(payload) }),
 
@@ -355,6 +355,15 @@ export interface PaymentInfo {
   amount_minor: number;
   currency: string;
   checkout_url: string | null;
+}
+
+/** What a browser may know before anyone has logged in. The acquirer list
+ * comes from the server rather than the page so the landing's claim about
+ * "17 касс" cannot drift away from the adapters that actually exist. */
+export interface PublicConfig {
+  meta_bot_username: string;
+  payment_regions: { slug: string; title: string; gateways: string[] }[];
+  gateway_count: number;
 }
 
 export interface PublicationInfo {

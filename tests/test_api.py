@@ -359,3 +359,23 @@ async def test_a_provider_with_no_callback_can_still_be_switched_off_test_mode(a
 
     assert get_provider("processingkz").uses_callback is False
     assert get_provider("processingkz").has_test_mode is True
+
+
+async def test_the_landing_is_told_the_truth_about_the_acquirers(api):
+    """The landing page's «17 касс» comes from here rather than from the
+    page, so the claim cannot outlive the adapters behind it. Unauthenticated
+    on purpose: nobody has logged in yet when it is read."""
+    config = (await api.get("/api/config")).json()
+
+    names = [name for region in config["payment_regions"] for name in region["gateways"]]
+    assert config["gateway_count"] == len(names)
+    assert "ЮKassa" in names and "Stripe" in names
+
+    # Neither of these is an acquirer, and listing them as one on a sales
+    # page is a lie: "Тестовая оплата" hands goods over without money, and
+    # "оплата по ссылке" is a human confirming a transfer by hand.
+    assert "Тестовая оплата" not in names
+    assert not any("ссылк" in name.lower() for name in names)
+
+    # An empty heading rendered as a section title with nothing under it.
+    assert all(region["gateways"] for region in config["payment_regions"])

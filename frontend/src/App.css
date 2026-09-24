@@ -2709,16 +2709,35 @@
   line-height: 1.5;
 }
 
-.login-hero__features {
+/* The three free-of-charge promises under the headline. A row of ticks
+   rather than a bulleted list: it has to read as a guarantee at a glance,
+   not as one more feature list to skim. */
+.landing-promise {
   list-style: none;
   margin: var(--sp-4) 0 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  text-align: left;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2) var(--sp-3);
   font-size: 14px;
+  font-weight: 600;
   color: var(--text-secondary);
+}
+
+.landing-promise li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-success) 12%, var(--tg-bg));
+  border: 1px solid color-mix(in srgb, var(--accent-success) 28%, transparent);
+}
+
+.landing-promise li span {
+  color: var(--accent-success-ink);
+  font-weight: 800;
 }
 
 .login-card {
@@ -3470,7 +3489,7 @@
     max-width: 440px;
   }
 
-  .login-hero__features {
+  .landing-promise {
     font-size: 15px;
   }
 
@@ -5288,4 +5307,269 @@
 .bot-card__due--soon {
   color: var(--accent-warning-ink);
   font-weight: 600;
+}
+
+
+/* =========================================================================
+   Landing — the sections added when the page was rebuilt around one promise:
+   everything except going live is free.
+   ========================================================================= */
+
+/* ---------- Who it's for ---------- */
+
+.landing-audiences {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-3);
+}
+
+.landing-audience {
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5) var(--sp-4);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.landing-audience__icon {
+  display: block;
+  font-size: 30px;
+  line-height: 1;
+  margin-bottom: var(--sp-3);
+}
+
+.landing-audience__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.landing-audience__text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+/* ---------- The free promise ----------
+
+   Four free tiles and one paid, and the paid one is deliberately the odd
+   one out rather than hidden: a page that only says "бесплатно" and then
+   meets you with a price at the publish button has lied, and the person
+   finds out at the exact moment they were about to trust us with money. */
+
+.landing-free {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-3);
+}
+
+.landing-free__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-4);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent-success) 7%, var(--tg-bg));
+  border: 1px solid color-mix(in srgb, var(--accent-success) 24%, transparent);
+}
+
+.landing-free__tile--paid {
+  background: color-mix(in srgb, var(--tg-button) 8%, var(--tg-bg));
+  border-color: color-mix(in srgb, var(--tg-button) 34%, transparent);
+}
+
+.landing-free__icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.landing-free__title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.landing-free__tag {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--accent-success);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.landing-free__tag--paid {
+  background: var(--tg-button);
+}
+
+.landing-free__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ---------- Acquirers ----------
+
+   The names come from the API (see /api/config), so this section cannot
+   claim a gateway the code does not have. */
+
+.landing-gateways {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-3);
+}
+
+.landing-gateway-group {
+  padding: var(--sp-4);
+  border-radius: var(--radius-lg);
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  box-shadow: var(--shadow-card);
+}
+
+.landing-gateway-group__title {
+  margin: 0 0 var(--sp-3);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.landing-gateway-group__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.landing-gateway-group__list li {
+  padding: 5px 10px;
+  border-radius: var(--radius-md);
+  background: var(--tg-secondary-bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.landing-gateways__note {
+  margin: var(--sp-4) auto 0;
+  max-width: 620px;
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+/* ---------- FAQ ---------- */
+
+.landing-faq {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.landing-faq__item {
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.landing-faq__q {
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+/* Safari renders its own triangle from the shadow DOM and ignores
+   list-style on the summary itself. */
+.landing-faq__q::-webkit-details-marker {
+  display: none;
+}
+
+.landing-faq__q::after {
+  content: "+";
+  flex-shrink: 0;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--accent-on-surface);
+  transition: transform var(--dur-base) var(--ease-smooth);
+}
+
+.landing-faq__item[open] .landing-faq__q::after {
+  transform: rotate(45deg);
+}
+
+.landing-faq__a {
+  margin: var(--sp-3) 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+@media (min-width: 720px) {
+  .landing-audiences {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .landing-free {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .landing-gateways {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .landing-promise {
+    justify-content: flex-start;
+  }
+
+  /* Four free tiles across, and the paid one spanning the row beneath —
+     it is the one thing on this page that costs money, and putting it on
+     its own line is the difference between stating it and burying it. */
+  .landing-free {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .landing-free__tile--paid {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+  }
+
+  .landing-free__tile--paid .landing-free__icon {
+    font-size: 30px;
+  }
+
+  .landing-free__tile--paid .landing-free__text {
+    flex: 1 1 320px;
+  }
+
+  .landing-gateways {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }

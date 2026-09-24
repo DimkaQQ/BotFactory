@@ -22,15 +22,52 @@ from app.services.telegram_validator import InvalidInitData, validate_login_widg
 router = APIRouter(prefix="/api", tags=["auth"])
 
 
+class GatewayRegion(BaseModel):
+    """One heading on the landing's list of supported acquirers."""
+
+    slug: str
+    title: str
+    gateways: list[str]
+
+
 class PublicConfig(BaseModel):
     meta_bot_username: str
+    # What the landing says about taking money. Served rather than written
+    # into the page so the claim cannot drift from the code: adding or
+    # removing an adapter moves the number on the landing with it.
+    payment_regions: list[GatewayRegion] = []
+    gateway_count: int = 0
+
+
+#: Not acquirers, and listing them as such would be a lie on a sales page.
+#: "test" hands goods over without money, and "link" is a human confirming a
+#: transfer by hand.
+_NOT_A_GATEWAY = frozenset({"test", "link"})
 
 
 @router.get("/config", response_model=PublicConfig)
 async def get_public_config() -> PublicConfig:
-    """Unauthenticated — just enough for the web frontend to render the
-    Telegram Login Widget for the right bot."""
-    return PublicConfig(meta_bot_username=get_settings().meta_bot_username)
+    """Unauthenticated — what a browser needs before anyone has logged in:
+    which bot to render the Telegram Login Widget for, and the acquirer list
+    the landing page sells."""
+    from app.services import payments as payment_providers
+
+    real = [p for p in payment_providers.describe_providers() if p["slug"] not in _NOT_A_GATEWAY]
+    regions = [
+        GatewayRegion(
+            slug=slug,
+            title=title,
+            gateways=[p["title"] for p in real if p["region"] == slug],
+        )
+        for slug, title in payment_providers.REGIONS
+    ]
+    return PublicConfig(
+        meta_bot_username=get_settings().meta_bot_username,
+        # An empty heading would render as a section title with nothing
+        # under it, which is exactly how "Украина" looked.
+        payment_regions=[r for r in regions if r.gateways],
+        gateway_count=len(real),
+    )
 
 
 class TelegramLoginPayload(BaseModel):

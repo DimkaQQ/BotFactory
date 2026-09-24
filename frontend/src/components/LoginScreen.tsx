@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 
-import { type BlockType, type TelegramLoginPayload, ApiError, builderApi, configureSessionAuth } from "../api/builderApi";
+import {
+  type BlockType,
+  type PublicConfig,
+  type TelegramLoginPayload,
+  ApiError,
+  builderApi,
+  configureSessionAuth,
+} from "../api/builderApi";
 import { BLOCK_TYPES } from "../blockTypes";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
 import { HeroMockup } from "./HeroMockup";
@@ -32,21 +39,74 @@ const FEATURE_SELL: Record<BlockType, string> = {
   delay: "Пауза между репликами — будто отвечает живой человек, а не скрипт.",
 };
 
+/** Who this is for, in their own words rather than in ours. Each one is a
+ * job somebody is already doing by hand in their own Telegram. */
+const AUDIENCES = [
+  {
+    icon: "📘",
+    title: "Гайды, курсы, файлы",
+    text: "Покупатель нажимает «Купить», платит — и файл приходит через секунду. В три часа ночи, в выходной, без тебя.",
+  },
+  {
+    icon: "📅",
+    title: "Услуги и запись",
+    text: "Клиент выбирает услугу и время кнопками, бот записывает и подтверждает. Конец переписке «а когда вам удобно».",
+  },
+  {
+    icon: "🔐",
+    title: "Закрытый доступ",
+    text: "Оплатил — бот сам пустил в канал или в группу. Не оплатил — не пустил. Никаких списков в блокноте.",
+  },
+];
+
+/** The heart of the pitch: everything except going live costs nothing. Laid
+ * out as four green tiles and one deliberately different fifth — hiding the
+ * paid step here would just move the surprise to the publish button. */
+const FREE_STEPS = [
+  { icon: "🔑", title: "Регистрация", text: "Вход через Telegram. Без пароля, без карты, без формы на десять полей." },
+  { icon: "🧩", title: "Сборка", text: "Сколько угодно ботов, сколько угодно правок. Ничего не блокируется на полпути." },
+  { icon: "💾", title: "Хранение", text: "Собранный сценарий лежит в аккаунте и ждёт. Можно вернуться через месяц." },
+  { icon: "▶", title: "Предпросмотр", text: "Пройди весь диалог сам — с кнопками и той же скоростью печати, что у живого бота." },
+];
+
 const STEPS = [
   {
     n: "1",
     title: "Выбери сценарий",
-    text: "Четыре готовых шаблона под разные модели — разовая продажа, подписка, запись на сессию, рассылка — или начни с чистого листа.",
+    text: "Готовые шаблоны под разные задачи — продажа файла, запись на услугу, рассылка — или начни с чистого листа.",
   },
   {
     n: "2",
     title: "Собери на холсте — блоки и стрелки",
-    text: "Как в Human Resource Machine: перетаскивай блоки, тяни стрелки от кнопок — сам решаешь, куда ведёт каждый выбор клиента.",
+    text: "Перетаскивай блоки, тяни стрелки от кнопок — сам решаешь, куда ведёт каждый выбор клиента. Как логическая схема, только работающая.",
   },
   {
     n: "3",
-    title: "Опубликуй за 2 минуты",
-    text: "Вставь токен от @BotFather — бот заработает мгновенно. Правки в сценарии применяются сразу, без повторной публикации.",
+    title: "Проверь и запусти",
+    text: "Пройди диалог в предпросмотре, вставь токен от @BotFather — и бот в эфире. Правки применяются сразу, без повторной публикации.",
+  },
+];
+
+const FAQ = [
+  {
+    q: "Сколько это стоит?",
+    a: "Собрать, сохранить, переделать и протестировать бота — бесплатно и без ограничений по времени. Деньги берутся один раз, когда ты решаешь запустить бота в Telegram, и цену видно на самой кнопке публикации — до того, как что-то спишется.",
+  },
+  {
+    q: "Кому идут деньги моих покупателей?",
+    a: "Тебе, напрямую на твой счёт в твоей кассе. Ключи от кассы твои, и мы их только шифруем и храним, чтобы бот мог выставить счёт. Через нас деньги покупателей не проходят вообще.",
+  },
+  {
+    q: "Нужен ли свой бот в Telegram?",
+    a: "Да, и он делается за минуту у @BotFather — это официальный бот Telegram, который выдаёт токен. Всё остальное берём на себя мы: вебхуки, сервер, доставка сообщений.",
+  },
+  {
+    q: "Надо что-то устанавливать или где-то арендовать сервер?",
+    a: "Нет. Бот живёт у нас и работает круглосуточно. Компьютер можно выключить — бот продолжит продавать.",
+  },
+  {
+    q: "Можно менять сценарий после запуска?",
+    a: "Да, и повторная публикация для этого не нужна: правки в тексте и в связях применяются сразу, на живом боте.",
   },
 ];
 
@@ -57,15 +117,17 @@ const STEPS = [
 export function LoginScreen({ onLoggedIn }: Props) {
   const widgetRef = useRef<HTMLDivElement | null>(null);
   const heroRef = useRef<HTMLDivElement | null>(null);
-  const [botUsername, setBotUsername] = useState<string | null>(null);
+  const [config, setConfig] = useState<PublicConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [widgetFailed, setWidgetFailed] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const botUsername = config?.meta_bot_username || null;
+
   useEffect(() => {
     builderApi
       .getPublicConfig()
-      .then((cfg) => setBotUsername(cfg.meta_bot_username || null))
+      .then(setConfig)
       .catch(() => setError("Не удалось связаться с сервером"));
   }, []);
 
@@ -144,9 +206,22 @@ export function LoginScreen({ onLoggedIn }: Props) {
         <p className="app-hint">Загрузка…</p>
       ) : null}
       {error && <p className="publish-form__error">{error}</p>}
-      <p className="login-card__trust">Бесплатно · Без кода · Публикация за 2 минуты</p>
+      <p className="login-card__trust">Регистрация и сборка — бесплатно · Платно только запустить</p>
     </div>
   );
+
+  // Subscriptions are built but switched off, so the landing must not sell
+  // one: a template promised here and missing in the picker is the worst
+  // kind of broken promise — the one made before the person signs up.
+  const templates = BOT_TEMPLATES.filter((t) => t.id !== "blank" && !t.needsSubscriptions);
+
+  // Counted from the list that is actually rendered, falling back on the
+  // server's own total — a headline that says "17 касс" above a list of
+  // twelve is worse than no number.
+  const gatewayCount =
+    config?.payment_regions?.reduce((total, region) => total + region.gateways.length, 0) ||
+    config?.gateway_count ||
+    0;
 
   return (
     <div className="screen screen--login">
@@ -161,15 +236,21 @@ export function LoginScreen({ onLoggedIn }: Props) {
             <div className="landing-eyebrow">
               <span aria-hidden="true">🏭</span> Bot Factory
             </div>
-            <h1 className="login-title">Telegram-бот, который продаёт, пока ты спишь</h1>
+            <h1 className="login-title">Бот, который сам продаёт и сам выдаёт</h1>
             <p className="login-hero__lead">
-              Собирай сценарий на визуальном холсте — блоки и стрелки, ветвления по нажатой кнопке, как в
-              настоящей логической схеме. Без кода, без разработчиков, без ожидания.
+              Собери сценарий на холсте — блоки и стрелки, как схему. Клиент нажимает кнопку, платит, и бот тут
+              же отдаёт файл, ссылку или доступ. Без кода, без разработчика, без ожидания.
             </p>
-            <ul className="login-hero__features">
-              <li>👋 Готовые шаблоны — товар, подписка, запись, рассылка</li>
-              <li>🧩 Визуальный конструктор — тяни стрелки от кнопок, задавай ветвления</li>
-              <li>🤖 Управляй несколькими ботами из одного аккаунта</li>
+            <ul className="landing-promise" aria-label="Что бесплатно">
+              <li>
+                <span aria-hidden="true">✓</span> Собирать — бесплатно
+              </li>
+              <li>
+                <span aria-hidden="true">✓</span> Хранить — бесплатно
+              </li>
+              <li>
+                <span aria-hidden="true">✓</span> Тестировать — бесплатно
+              </li>
             </ul>
           </div>
 
@@ -181,8 +262,85 @@ export function LoginScreen({ onLoggedIn }: Props) {
         </div>
       </section>
 
-      {/* ===== Feature grid — sells every block type ===== */}
+      {/* ===== Who it's for ===== */}
       <section className="landing-section">
+        <div className="landing-section__head">
+          <p className="landing-section__eyebrow">Для кого</p>
+          <h2 className="landing-section__title">Если ты уже продаёшь в личке — бот делает это за тебя</h2>
+          <p className="landing-section__lead">
+            Всё то же самое, что ты сейчас делаешь руками: ответить, выставить счёт, проверить оплату, прислать
+            файл. Только круглосуточно и без «извини, не увидел сообщение».
+          </p>
+        </div>
+        <div className="landing-audiences">
+          {AUDIENCES.map((item) => (
+            <div key={item.title} className="landing-audience">
+              <span className="landing-audience__icon" aria-hidden="true">
+                {item.icon}
+              </span>
+              <p className="landing-audience__title">{item.title}</p>
+              <p className="landing-audience__text">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ===== The free promise — the centre of the pitch ===== */}
+      <section className="landing-section landing-section--tint">
+        <div className="landing-section__head">
+          <p className="landing-section__eyebrow">Честно про деньги</p>
+          <h2 className="landing-section__title">Платишь только за запуск. Всё остальное — бесплатно</h2>
+          <p className="landing-section__lead">
+            Никакого пробного периода, который кончится, и никакой карты «просто для проверки». Собирай, ломай,
+            переделывай и передумывай сколько хочешь — это ничего не стоит.
+          </p>
+        </div>
+        <div className="landing-free">
+          {FREE_STEPS.map((step) => (
+            <div key={step.title} className="landing-free__tile">
+              <span className="landing-free__icon" aria-hidden="true">
+                {step.icon}
+              </span>
+              <p className="landing-free__title">
+                {step.title} <span className="landing-free__tag">бесплатно</span>
+              </p>
+              <p className="landing-free__text">{step.text}</p>
+            </div>
+          ))}
+          <div className="landing-free__tile landing-free__tile--paid">
+            <span className="landing-free__icon" aria-hidden="true">
+              🚀
+            </span>
+            <p className="landing-free__title">
+              Запуск в Telegram <span className="landing-free__tag landing-free__tag--paid">платно</span>
+            </p>
+            <p className="landing-free__text">
+              Единственный платный шаг. Цену увидишь на кнопке публикации — когда бот уже собран и ты уже
+              посмотрел, как он работает.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== How it works ===== */}
+      <section className="landing-section">
+        <div className="landing-section__head">
+          <p className="landing-section__eyebrow">Как это работает</p>
+          <h2 className="landing-section__title">От пустого экрана до работающего бота за один присест</h2>
+        </div>
+        <div className="landing-steps">
+          {STEPS.map((step) => (
+            <div key={step.n} className="landing-step">
+              <span className="landing-step__n">{step.n}</span>
+              <p className="landing-step__title">{step.title}</p>
+              <p className="landing-step__text">{step.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ===== Feature grid — sells every block type ===== */}
+      <section className="landing-section landing-section--tint">
         <div className="landing-section__head">
           <p className="landing-section__eyebrow">Библиотека блоков</p>
           <h2 className="landing-section__title">Каждый блок — рабочий инструмент, а не украшение</h2>
@@ -204,22 +362,41 @@ export function LoginScreen({ onLoggedIn }: Props) {
         </div>
       </section>
 
-      {/* ===== How it works ===== */}
-      <section className="landing-section landing-section--tint">
-        <div className="landing-section__head">
-          <p className="landing-section__eyebrow">Как это работает</p>
-          <h2 className="landing-section__title">От пустого экрана до работающего бота за один присест</h2>
-        </div>
-        <div className="landing-steps">
-          {STEPS.map((step) => (
-            <div key={step.n} className="landing-step">
-              <span className="landing-step__n">{step.n}</span>
-              <p className="landing-step__title">{step.title}</p>
-              <p className="landing-step__text">{step.text}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* ===== Acquirers — the list is served, not written here ===== */}
+      {/* Optional-chained rather than trusted: this page is the only door
+          into the product, and an API that answers without these fields —
+          an older deployment, a cached response — used to take the whole
+          landing down with it, login widget included. */}
+      {config?.payment_regions?.length ? (
+        <section className="landing-section">
+          <div className="landing-section__head">
+            <p className="landing-section__eyebrow">Приём оплаты</p>
+            <h2 className="landing-section__title">
+              Деньги идут тебе напрямую — {gatewayCount} касс на выбор
+            </h2>
+            <p className="landing-section__lead">
+              Ключи от кассы твои, счёт твой, деньги падают тебе. Мы не посредник и денег твоих покупателей не
+              касаемся — бот только выставляет счёт и ждёт, когда касса подтвердит оплату.
+            </p>
+          </div>
+          <div className="landing-gateways">
+            {config.payment_regions.map((region) => (
+              <div key={region.slug} className="landing-gateway-group">
+                <p className="landing-gateway-group__title">{region.title}</p>
+                <ul className="landing-gateway-group__list">
+                  {region.gateways.map((name) => (
+                    <li key={name}>{name}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <p className="landing-gateways__note">
+            Своей кассы и компании ещё нет? Telegram Stars и Crypto Bot работают без юрлица и без эквайринга —
+            начать можно сегодня, а подключить банк потом.
+          </p>
+        </section>
+      ) : null}
 
       {/* ===== Live preview callout ===== */}
       <section className="landing-callout">
@@ -248,7 +425,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
           </p>
         </div>
         <div className="landing-templates">
-          {BOT_TEMPLATES.filter((t) => t.id !== "blank").map((template) => (
+          {templates.map((template) => (
             <div key={template.id} className={`landing-template-card landing-template-card--${template.accent}`}>
               <span className="landing-template-card__icon" aria-hidden="true">
                 {template.icon}
@@ -264,10 +441,30 @@ export function LoginScreen({ onLoggedIn }: Props) {
         </div>
       </section>
 
+      {/* ===== FAQ — the questions that otherwise become support tickets or
+              silent closes of the tab. <details> so it works without JS and
+              is keyboard-navigable for free. ===== */}
+      <section className="landing-section landing-section--tint">
+        <div className="landing-section__head">
+          <p className="landing-section__eyebrow">Вопросы</p>
+          <h2 className="landing-section__title">То, что спрашивают до регистрации</h2>
+        </div>
+        <div className="landing-faq">
+          {FAQ.map((item) => (
+            <details key={item.q} className="landing-faq__item">
+              <summary className="landing-faq__q">{item.q}</summary>
+              <p className="landing-faq__a">{item.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
       {/* ===== Final CTA ===== */}
       <section className="landing-cta">
         <h2 className="landing-cta__title">Собери первого бота прямо сейчас</h2>
-        <p className="landing-cta__text">Вход через Telegram — без пароля, без формы регистрации.</p>
+        <p className="landing-cta__text">
+          Вход через Telegram — без пароля и без карты. Заплатишь, только если решишь запустить.
+        </p>
         <button type="button" className="landing-cta__button" onClick={scrollToLogin}>
           Начать бесплатно ↑
         </button>
