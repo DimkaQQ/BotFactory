@@ -1,8 +1,9 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -18,6 +19,7 @@ from app.services import (
 )
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -88,5 +90,32 @@ app.mount("/api/media", StaticFiles(directory=settings.media_upload_dir), name="
 
 
 @app.get("/health")
-async def health() -> dict:
-    return {"status": "ok"}
+async def health(response: Response) -> dict:
+    """Liveness *and* the database, because the two fail separately.
+
+    This used to return a constant. A constant answers "ok" while Postgres
+    is gone, the disk is full or the pool is exhausted — which is precisely
+    the moment a health check exists for, and precisely when both the
+    watchdog and any external uptime service would have said nothing.
+
+    A failure is reported with 503 rather than an exception: an uptime
+    monitor reads the status code, and a traceback would look like an
+    application bug rather than "the database is down".
+    """
+    from sqlalchemy import text
+
+    from app.database import AsyncSessionLocal
+
+    try:
+        # Bounded: an unreachable database otherwise holds this request for
+        # the pool's full timeout, and a health check that hangs reads as a
+        # dead server to some monitors and a healthy one to others.
+        async with asyncio.timeout(5):
+            async with AsyncSessionLocal() as db:
+                await db.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.error("Health check failed: %s", exc)
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": "error", "database": "unreachable"}
+
+    return {"status": "ok", "database": "ok"}

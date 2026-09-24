@@ -379,3 +379,29 @@ async def test_the_landing_is_told_the_truth_about_the_acquirers(api):
 
     # An empty heading rendered as a section title with nothing under it.
     assert all(region["gateways"] for region in config["payment_regions"])
+
+
+async def test_health_says_ok_only_when_the_database_answers(api, monkeypatch):
+    """This endpoint used to return a constant, which meant it reported "ok"
+    while Postgres was gone — exactly the moment a health check exists for,
+    and exactly when both the watchdog and any uptime service would have
+    said nothing."""
+    healthy = await api.get("/health")
+    assert healthy.status_code == 200
+    assert healthy.json() == {"status": "ok", "database": "ok"}
+
+    import app.main
+
+    class DeadPool:
+        def __call__(self):
+            raise OSError("connection refused")
+
+    monkeypatch.setattr(app.main, "AsyncSessionLocal", DeadPool(), raising=False)
+    monkeypatch.setattr("app.database.AsyncSessionLocal", DeadPool())
+
+    sick = await api.get("/health")
+    # 503 rather than an exception: an uptime monitor reads the status code,
+    # and a traceback would look like an application bug instead of "the
+    # database is down".
+    assert sick.status_code == 503
+    assert sick.json()["database"] == "unreachable"
