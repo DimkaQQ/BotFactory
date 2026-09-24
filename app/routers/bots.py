@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -17,6 +18,8 @@ from app.schemas.client import ClientOut
 from app.services import bot_registry
 from app.services.security import decrypt_token, encrypt_token
 from app.services.telegram_validator import InvalidBotToken, validate_bot_token
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["bots"])
 
@@ -61,6 +64,17 @@ async def create_bot(
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
 ) -> Bot:
+    settings = get_settings()
+    mine = await db.execute(select(func.count(Bot.id)).where(Bot.client_id == client.id))
+    if mine.scalar_one() >= settings.max_bots_per_client:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Больше {settings.max_bots_per_client} ботов на аккаунт пока нельзя. "
+                f"Удали ненужного или напиши нам — поднимем."
+            ),
+        )
+
     bot = Bot(client_id=client.id, status=BotStatus.draft)
     db.add(bot)
     await db.commit()
@@ -126,8 +140,17 @@ async def publish_bot(
 ) -> PublishResponse:
     bot = await _get_owned_bot(bot_id, client, db)
 
-    if bot.status != BotStatus.draft:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Бот уже опубликован")
+    # An already-live bot may publish again, and that is the repair button.
+    # Setting the webhook is a call to Telegram and can fail — a 5xx on their
+    # side, a rate limit — and when it did, the bot was already marked active
+    # and this check refused every retry. The client had paid for a launch and
+    # owned a corpse they could not revive. Only `disabled` is refused: that
+    # one is ours to lift, by paying for the next period.
+    if bot.status == BotStatus.disabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Бот остановлен — продли оплату, и он вернётся в строй сам.",
+        )
 
     # The test provider's checkout page marks an order paid the moment it is
     # opened — that is its entire purpose, and it is exactly why a live bot
@@ -157,13 +180,27 @@ async def publish_bot(
     except InvalidBotToken as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    # Telegram first, database second. The other way round — which is how
+    # this read until a failing setWebhook was actually tried — commits
+    # "active" and then makes a network call that may not come back: the row
+    # says the bot is on the air while Telegram has no webhook for it, so the
+    # bot is silent and nothing in the product will ever retry.
+    try:
+        await bot_registry.register_webhook(bot.id, payload.token.strip())
+    except Exception as exc:
+        logger.exception("Bot %s: Telegram refused the webhook", bot_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Telegram сейчас не принял бота — это бывает при сбое на их стороне. "
+                "Нажми «Опубликовать» ещё раз через минуту, оплата уже сохранена."
+            ),
+        ) from exc
+
     bot.bot_token_encrypted = encrypt_token(payload.token.strip())
     bot.telegram_bot_username = me.username
     bot.status = BotStatus.active
-    bot.published_at = datetime.now(timezone.utc)
+    bot.published_at = bot.published_at or datetime.now(timezone.utc)
     await db.commit()
-
-    # Register the webhook with Telegram, and warm the in-memory registry.
-    await bot_registry.register_webhook(bot.id, payload.token.strip())
 
     return PublishResponse(status=bot.status, telegram_bot_username=bot.telegram_bot_username)

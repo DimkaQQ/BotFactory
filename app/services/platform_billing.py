@@ -31,7 +31,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -191,9 +191,17 @@ async def sweep(db: AsyncSession) -> None:
         .where(
             BotModel.paid_until.is_not(None),
             BotModel.status.in_((BotStatus.active, BotStatus.disabled)),
-            # Everything still comfortably inside its period is nobody's
-            # business yet, and this is the whole point of the index.
-            BotModel.paid_until < now + timedelta(days=REMINDER_LEAD_DAYS),
+            or_(
+                # Everything still comfortably inside its period is nobody's
+                # business yet, and this is the whole point of the index.
+                BotModel.paid_until < now + timedelta(days=REMINDER_LEAD_DAYS),
+                # …except a bot that is paid up and still switched off. That
+                # is a renewal whose webhook Telegram refused, and its
+                # `paid_until` is a month out — outside the window above, so
+                # without this the self-repair in `_act_on` would never once
+                # get to run.
+                and_(BotModel.status == BotStatus.disabled, BotModel.paid_until > now),
+            ),
         )
         .order_by(BotModel.paid_until)
     )
@@ -206,47 +214,74 @@ async def sweep(db: AsyncSession) -> None:
             logger.exception("Billing sweep failed for bot %s", bot.id)
 
 
+async def _claim_notice(db: AsyncSession, bot: BotModel, stage: int) -> bool:
+    """Take the right to send this period's notice, or find it already taken.
+
+    One conditional UPDATE, the same shape `mark_paid` and `scheduler._claim`
+    use, and for the same reason: read-modify-write here meant two processes
+    both read `billing_notice_stage`, both decided to warn, and the owner got
+    the same message twice. That is also what stopped a second replica from
+    being safe to run at all.
+
+    Claimed *before* the message goes out. The other order can send twice; a
+    claim that sends nothing only loses one reminder, and the next sweep
+    picks the owner up at the following stage.
+    """
+    result = await db.execute(
+        update(BotModel)
+        .where(BotModel.id == bot.id, BotModel.billing_notice_stage < stage)
+        .values(billing_notice_stage=stage)
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        return False
+    bot.billing_notice_stage = stage
+    return True
+
+
 async def _act_on(db: AsyncSession, bot: BotModel) -> None:
     status = state_of(bot)
     if status.state == "off":
         return
 
+    # Paid for, and still off the air: the renewal landed but Telegram would
+    # not take the webhook at that moment. Nothing else would ever retry, so
+    # the shop stayed dark on a period it had paid for.
+    if status.state in ("active", "grace") and bot.status == BotStatus.disabled:
+        if await resume(db, bot):
+            await _tell_owner(db, bot, f"✅ Бот {_name(bot)} снова в эфире — оплата прошла.")
+            return
+
     if status.state == "active":
-        if bot.billing_notice_stage < NOTICE_SOON:
+        if await _claim_notice(db, bot, NOTICE_SOON):
             await _tell_owner(
                 db, bot,
                 f"⏳ Оплаченный период бота {_name(bot)} заканчивается через {status.days_left} дн. "
                 f"Продли в конструкторе — бот продолжит работать без перерыва.",
             )
-            bot.billing_notice_stage = NOTICE_SOON
-            await db.commit()
         return
 
     if status.state == "grace":
-        if bot.billing_notice_stage < NOTICE_GRACE:
-            left = max(0, (status.grace_until - datetime.now(timezone.utc)).days)
+        left = max(0, (status.grace_until - datetime.now(timezone.utc)).days)
+        if await _claim_notice(db, bot, NOTICE_GRACE):
             await _tell_owner(
                 db, bot,
                 f"⚠️ Период бота {_name(bot)} закончился. Бот пока работает — "
                 f"ещё {left} дн., потом уйдёт с эфира. Продли в конструкторе, "
                 f"сценарий и заказы никуда не денутся.",
             )
-            bot.billing_notice_stage = NOTICE_GRACE
-            await db.commit()
         return
 
     # Suspended. The message goes out before the webhook is pulled, so the
     # owner is told by us rather than by a customer asking why the bot is
     # silent.
-    if bot.billing_notice_stage < NOTICE_SUSPENDED:
+    if await _claim_notice(db, bot, NOTICE_SUSPENDED):
         await _tell_owner(
             db, bot,
             f"⛔️ Бот {_name(bot)} снят с эфира — период не продлён. "
             f"Всё сохранено: сценарий, настройки, заказы. Оплати продление в конструкторе, "
             f"и бот вернётся в строй сразу же.",
         )
-        bot.billing_notice_stage = NOTICE_SUSPENDED
-        await db.commit()
     if bot.status == BotStatus.active:
         await suspend(db, bot)
 
@@ -267,19 +302,33 @@ async def suspend(db: AsyncSession, bot: BotModel) -> None:
     logger.info("Bot %s suspended: period not renewed", bot.id)
 
 
-async def resume(db: AsyncSession, bot: BotModel) -> None:
+async def resume(db: AsyncSession, bot: BotModel) -> bool:
     """Back on the air after a renewal. A bot that was never suspended is
     left exactly as it is — including a draft, which must not be published
-    by a payment."""
+    by a payment.
+
+    Telegram first, status second, and a refusal is swallowed rather than
+    raised. This runs inside the provider's callback: the other order —
+    commit "active", then call Telegram — left the row claiming the bot was
+    live with no webhook behind it, and the exception turned the callback
+    into a 500, so the provider retried a payment that had in fact settled.
+    Now a bad minute at Telegram leaves the bot `disabled` with its period
+    paid, which `sweep` picks up and retries on its own.
+    """
     from app.services import bot_registry
     from app.services.security import decrypt_token
 
     if bot.status != BotStatus.disabled or not bot.bot_token_encrypted:
-        return
+        return False
+    try:
+        await bot_registry.register_webhook(bot.id, decrypt_token(bot.bot_token_encrypted))
+    except Exception:
+        logger.exception("Bot %s is paid for but Telegram refused the webhook — will retry", bot.id)
+        return False
     bot.status = BotStatus.active
     await db.commit()
-    await bot_registry.register_webhook(bot.id, decrypt_token(bot.bot_token_encrypted))
     logger.info("Bot %s back on the air after a renewal", bot.id)
+    return True
 
 
 def _name(bot: BotModel) -> str:

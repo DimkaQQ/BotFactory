@@ -1,9 +1,10 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
 from app.deps import get_owned_bot
 from app.models.bot import Bot
@@ -11,6 +12,41 @@ from app.models.bot_block import BotBlock
 from app.schemas.bot_block import BlockReorderRequest, BotBlockCreate, BotBlockOut, BotBlockUpdate
 
 router = APIRouter(prefix="/api/bots/{bot_id}/blocks", tags=["builder"])
+
+
+def _check_content_size(content: dict | None) -> None:
+    """Refuse a block nobody could have typed.
+
+    `content` is free-form JSONB with no shape and no bound, so a single
+    request could put megabytes into one row. The limit is far above any
+    real scenario; it exists so one account cannot fill the disk — which
+    takes Postgres down with it and pushes the backup past what Telegram
+    will carry.
+    """
+    if content is None:
+        return
+    import json
+
+    limit = get_settings().max_block_content_kb * 1024
+    size = len(json.dumps(content, ensure_ascii=False).encode())
+    if size > limit:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=(
+                f"Содержимое блока слишком большое ({size // 1024} КБ, можно до "
+                f"{limit // 1024} КБ). Вынеси длинный текст в файл и дай на него ссылку."
+            ),
+        )
+
+
+async def _check_block_count(db: AsyncSession, bot_id: uuid.UUID) -> None:
+    limit = get_settings().max_blocks_per_bot
+    total = await db.execute(select(func.count(BotBlock.id)).where(BotBlock.bot_id == bot_id))
+    if total.scalar_one() >= limit:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"В одном боте пока не больше {limit} блоков. Напиши нам, если упёрся — поднимем.",
+        )
 
 # Editing is allowed for both draft and already-published bots — the
 # dispatcher (app/services/bot_dispatcher.py) always reads blocks fresh
@@ -43,6 +79,9 @@ async def create_block(
     bot: Bot = Depends(get_owned_bot),
     db: AsyncSession = Depends(get_db),
 ) -> BotBlock:
+    await _check_block_count(db, bot_id)
+    _check_content_size(payload.content)
+
     if payload.order_index is None:
         result = await db.execute(select(BotBlock.order_index).where(BotBlock.bot_id == bot_id))
         existing = [row[0] for row in result.all()]
@@ -106,6 +145,7 @@ async def update_block(
     db: AsyncSession = Depends(get_db),
 ) -> BotBlock:
     block = await _get_owned_block(bot_id, block_id, db)
+    _check_content_size(payload.content)
     fields = payload.model_fields_set
     if payload.content is not None:
         block.content = payload.content

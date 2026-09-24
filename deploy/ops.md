@@ -57,7 +57,9 @@ Telegram нужна именно для этого: копия оказывае�
 Займёт десять минут:
 
 ```bash
-# 1. Распаковать (спросит пароль)
+# 1. Распаковать (спросит пароль). mkdir обязателен: tar не создаёт
+#    каталог сам и падает с «Cannot open: No such file or directory».
+mkdir -p /tmp/restore-test
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
   -in botfactory-2026-09-24_04-17.tar.gz.enc | tar xz -C /tmp/restore-test
 

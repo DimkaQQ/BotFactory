@@ -42,6 +42,19 @@ class Settings(BaseSettings):
     # nothing is deleted, and no data migrates either way.
     subscriptions_enabled: bool = False
 
+    # ---- Пределы на одного клиента ----
+    # Регистрация бесплатна и открыта всякому, у кого есть Telegram, а
+    # создание бота и блока стоит нам строки в базе. Без потолка один
+    # аккаунт заливает базу за минуты — и попутно ломает бэкап, упирая
+    # архив в лимит Telegram. Числа с большим запасом над тем, что нужно
+    # живому человеку: кто упрётся, тому мы поднимем руками.
+    max_bots_per_client: int = 20
+    max_blocks_per_bot: int = 200
+    # Размер содержимого одного блока в килобайтах. Текст «Выдачи» с
+    # длинным описанием — это единицы килобайт; 64 КБ уже ни на что
+    # осмысленное не похожи.
+    max_block_content_kb: int = 64
+
     # CORS - Mini App origin(s), comma separated. "*" for local dev.
     cors_origins: str = "*"
 

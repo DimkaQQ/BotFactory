@@ -117,8 +117,10 @@ BACKUP_DIR="${BACKUP_DIR:-$ROOT/backups}"
 NEWEST="$(ls -1t "$BACKUP_DIR"/botfactory-*.tar.gz.enc 2>/dev/null | head -n1)"
 if [ -z "$NEWEST" ]; then
   report backup no "ни одного бэкапа в $BACKUP_DIR — бэкап не настроен или падает молча."
+  FAILED=1
 elif [ "$(find "$NEWEST" -mtime +2 | wc -l)" -gt 0 ]; then
   report backup no "последний бэкап старше двух суток: $(basename "$NEWEST")"
+  FAILED=1
 else
   report backup yes ""
 fi

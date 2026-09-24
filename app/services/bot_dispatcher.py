@@ -487,7 +487,47 @@ async def _send_block(bot: Bot, chat_id: int, block: BotBlock, db: AsyncSession 
         else:
             await bot.send_document(chat_id, media_file_id, caption=caption, reply_markup=keyboard)
     else:
-        await bot.send_message(chat_id, text or "…", reply_markup=keyboard)
+        # Split rather than refused. Telegram rejects anything over 4096
+        # characters outright, and the block that most often runs long is
+        # «Выдача» — so the shop's own guide came out as an error instead of
+        # a message, after the buyer had already paid. The keyboard rides on
+        # the last piece, where it belongs.
+        chunks = _split_for_telegram(text or "…")
+        for piece in chunks[:-1]:
+            await bot.send_message(chat_id, piece)
+        await bot.send_message(chat_id, chunks[-1], reply_markup=keyboard)
+
+
+#: Telegram's own cap on a text message. Captions are capped far lower
+#: (1024) but are Telegram's to reject — splitting a caption would detach it
+#: from its picture, which is worse than the error.
+_TELEGRAM_TEXT_LIMIT = 4096
+
+
+def _split_for_telegram(text: str) -> list[str]:
+    """Break an over-long message on the nicest boundary available.
+
+    Paragraph, then line, then word, then — only if a single word really is
+    longer than the limit — mid-word. A guide chopped between paragraphs
+    reads as a guide; one chopped every 4096 characters reads as damage.
+    """
+    if len(text) <= _TELEGRAM_TEXT_LIMIT:
+        return [text]
+
+    pieces: list[str] = []
+    rest = text
+    while len(rest) > _TELEGRAM_TEXT_LIMIT:
+        window = rest[:_TELEGRAM_TEXT_LIMIT]
+        cut = max(window.rfind("\n\n"), window.rfind("\n"), window.rfind(" "))
+        # No breathing space anywhere in 4096 characters — one very long
+        # word, or a language that does not use spaces. Cut it squarely.
+        if cut <= 0:
+            cut = _TELEGRAM_TEXT_LIMIT
+        pieces.append(rest[:cut].rstrip())
+        rest = rest[cut:].lstrip()
+    if rest:
+        pieces.append(rest)
+    return pieces
 
 
 async def walk_chain(
@@ -498,10 +538,19 @@ async def walk_chain(
     db: AsyncSession,
     telegram_user_id: int | None = None,
     subscription_id: uuid.UUID | None = None,
-) -> None:
+) -> bool:
     """Send `start_block_id` and keep following next_block_id, pausing for
     typing/delay between steps, until the chain ends or hits a branch
     point (a buttons block with at least one connected button).
+
+    Returns False if any block failed to go out. A failure is still not
+    allowed to stop the rest of the chain — one broken image must not
+    swallow the four messages after it — but the caller has to be able to
+    tell. `resume_after_payment` stamps an order as delivered on the
+    strength of this answer, and while it was `None` a delivery block that
+    Telegram refused (text over 4096, an image it could not fetch, a buyer
+    who blocked the bot) was recorded as handed over: the retry sweep skips
+    anything stamped, so the money stayed taken and the goods never came.
 
     A long "Пауза" ends the walk too — the rest of the chain is handed to
     the scheduler and resumes from here, in a later process, whenever the
@@ -513,12 +562,15 @@ async def walk_chain(
     visited: set[uuid.UUID] = set()
     steps = 0
     first = True
+    # Flipped by the one `except` below and never flipped back: a chain is
+    # only "delivered" if everything in it went out.
+    delivered = True
 
     while next_id is not None:
         steps += 1
         if steps > _MAX_CHAIN_STEPS:
             logger.warning("Bot %s dialogue chain exceeded %d steps — stopping.", bot_id, _MAX_CHAIN_STEPS)
-            return
+            return delivered
         if next_id in visited:
             # A revisit means a cycle (a real, deliberate pattern in a
             # visual flow graph) with no branch point to break it up — each
@@ -527,13 +579,13 @@ async def walk_chain(
             # webhook request open for tens of seconds. Catch it the
             # instant it's actually detected instead.
             logger.warning("Bot %s dialogue hit a loop at block %s — stopping.", bot_id, next_id)
-            return
+            return delivered
         visited.add(next_id)
 
         result = await db.execute(select(BotBlock).where(BotBlock.id == next_id, BotBlock.bot_id == bot_id))
         block = result.scalar_one_or_none()
         if block is None:
-            return  # dangling/removed target — nothing left to do
+            return delivered  # dangling/removed target — nothing left to do
 
         try:
             if block.block_type == BlockType.payment:
@@ -543,7 +595,7 @@ async def walk_chain(
                 if await _send_payment_block(bot, chat_id, block, bot_id, db, telegram_user_id):
                     # Paid delivery waits for the provider's callback — see
                     # payment_service.resume_after_payment.
-                    return
+                    return delivered
             elif block.block_type == BlockType.delay:
                 # A bare pause — no message of its own, just stretches the
                 # gap before the next block.
@@ -568,7 +620,7 @@ async def walk_chain(
                         reason="delay",
                         subscription_id=subscription_id,
                     )
-                    return
+                    return delivered
                 await _pause(db, seconds)
             else:
                 if not first:
@@ -584,6 +636,7 @@ async def walk_chain(
                     await _send_block(bot, chat_id, block, db)
         except Exception:
             logger.exception("Failed to send block %s for bot %s", block.id, bot_id)
+            delivered = False
 
         first = False
 
@@ -593,9 +646,11 @@ async def walk_chain(
         # branch configured it's just another block in the chain (matches
         # every bot built before branching existed).
         if block.block_type == BlockType.buttons and _button_has_branches(block.content or {}):
-            return
+            return delivered
 
         next_id = block.next_block_id
+
+    return delivered
 
 
 async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:

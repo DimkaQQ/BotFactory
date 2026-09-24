@@ -90,7 +90,7 @@ const STEPS = [
 const FAQ = [
   {
     q: "Сколько это стоит?",
-    a: "Собрать, сохранить, переделать и протестировать бота — бесплатно и без ограничений по времени. Деньги берутся один раз, когда ты решаешь запустить бота в Telegram, и цену видно на самой кнопке публикации — до того, как что-то спишется.",
+    a: "Собрать, сохранить, переделать и протестировать бота — бесплатно и без ограничений по времени. Платный только запуск в Telegram: разовая плата за старт, дальше — за каждый период работы бота. Обе цифры видно на кнопке публикации, до того как что-то спишется.",
   },
   {
     q: "Кому идут деньги моих покупателей?",
@@ -206,7 +206,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
         <p className="app-hint">Загрузка…</p>
       ) : null}
       {error && <p className="publish-form__error">{error}</p>}
-      <p className="login-card__trust">Регистрация и сборка — бесплатно · Платно только запустить</p>
+      <p className="login-card__trust">Регистрация и сборка — бесплатно · Платный только запуск</p>
     </div>
   );
 
@@ -289,10 +289,11 @@ export function LoginScreen({ onLoggedIn }: Props) {
       <section className="landing-section landing-section--tint">
         <div className="landing-section__head">
           <p className="landing-section__eyebrow">Честно про деньги</p>
-          <h2 className="landing-section__title">Платишь только за запуск. Всё остальное — бесплатно</h2>
+          <h2 className="landing-section__title">Платный только запуск. Всё до него — бесплатно</h2>
           <p className="landing-section__lead">
             Никакого пробного периода, который кончится, и никакой карты «просто для проверки». Собирай, ломай,
-            переделывай и передумывай сколько хочешь — это ничего не стоит.
+            переделывай и передумывай сколько хочешь — это ничего не стоит. Деньги начинаются там, где бот
+            выходит в Telegram и начинает работать на тебя.
           </p>
         </div>
         <div className="landing-free">
@@ -312,11 +313,13 @@ export function LoginScreen({ onLoggedIn }: Props) {
               🚀
             </span>
             <p className="landing-free__title">
-              Запуск в Telegram <span className="landing-free__tag landing-free__tag--paid">платно</span>
+              Запуск и работа в Telegram{" "}
+              <span className="landing-free__tag landing-free__tag--paid">платно</span>
             </p>
             <p className="landing-free__text">
-              Единственный платный шаг. Цену увидишь на кнопке публикации — когда бот уже собран и ты уже
-              посмотрел, как он работает.
+              Здесь начинаются деньги: разовая плата за старт и дальше за каждый период, пока бот работает.
+              Обе цифры увидишь на кнопке публикации — когда бот уже собран и ты уже посмотрел, как он
+              работает.
             </p>
           </div>
         </div>
@@ -463,7 +466,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
       <section className="landing-cta">
         <h2 className="landing-cta__title">Собери первого бота прямо сейчас</h2>
         <p className="landing-cta__text">
-          Вход через Telegram — без пароля и без карты. Заплатишь, только если решишь запустить.
+          Вход через Telegram — без пароля и без карты. Платить — только если решишь запустить бота.
         </p>
         <button type="button" className="landing-cta__button" onClick={scrollToLogin}>
           Начать бесплатно ↑
