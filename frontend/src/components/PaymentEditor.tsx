@@ -13,6 +13,8 @@ interface Props {
   /** The chosen provider's catalogue entry, when it has been loaded: what it
    * needs per product, and whether it can confirm a payment by itself. */
   providerInfo?: PaymentProviderInfo | null;
+  /** Чего не хватает в настройках кассы, если чего-то не хватает. */
+  missingFields?: string[];
   /** Whether the constructor offers subscriptions at all right now. */
   subscriptionsEnabled?: boolean;
   onChange: (content: BlockContent) => void;
@@ -52,6 +54,7 @@ export function PaymentEditor({
   provider,
   currencies,
   providerInfo,
+  missingFields,
   subscriptionsEnabled,
   onChange,
   onOpenSettings,
@@ -81,14 +84,25 @@ export function PaymentEditor({
 
   return (
     <div className="payment-editor">
-      {!provider && (
+      {/* Предупреждение снимается только когда касса РЕАЛЬНО готова. Раньше
+          оно гасло от одного выбора провайдера — то есть ровно там, где
+          владелец переставал видеть проблему, она и начиналась. */}
+      {!provider ? (
         <button type="button" className="payment-editor__warning" onClick={onOpenSettings}>
           <span>
             ⚠️ Платёжная система не подключена — бот не сможет принять деньги, и этот блок остановит сценарий.
           </span>
           <span className="payment-editor__warning-cta">Подключить кассу →</span>
         </button>
-      )}
+      ) : missingFields && missingFields.length > 0 ? (
+        <button type="button" className="payment-editor__warning" onClick={onOpenSettings}>
+          <span>
+            ⚠️ В кассе не заполнено: {missingFields.join(", ")}. Оплата не откроется, покупатель увидит
+            ошибку.
+          </span>
+          <span className="payment-editor__warning-cta">Дозаполнить →</span>
+        </button>
+      ) : null}
 
       <label className="buttons-editor__field">
         <span className="buttons-editor__field-label">Сообщение перед кнопкой</span>
@@ -157,6 +171,15 @@ export function PaymentEditor({
           {field.hint && <span className="payment-editor__field-hint">{field.hint}</span>}
         </label>
       ))}
+
+      {/* Цена «0» проходила все проверки редактора и рисовалась на холсте
+          как «— 0 RUB»; узнавал об этом только покупатель, получив общую
+          ошибку. Продавец — никогда. */}
+      {content.price !== undefined && !(Number(String(content.price).replace(",", ".")) > 0) && (
+        <p className="payment-editor__note payment-editor__note--manual">
+          ⚠️ Без цены бот не сможет выставить счёт — покупатель увидит ошибку вместо оплаты.
+        </p>
+      )}
 
       <label className="buttons-editor__field">
         <span className="buttons-editor__field-label">Надпись на кнопке</span>

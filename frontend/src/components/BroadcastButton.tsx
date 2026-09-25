@@ -23,9 +23,25 @@ export function BroadcastButton({ botId, blockId, published }: Props) {
 
   async function send(audience: "all" | "subscribers") {
     const who = audience === "all" ? "всем, кто писал боту" : "только активным подписчикам";
+
+    // Сколько именно человек — до того, как нажать. «Всем» без числа может
+    // означать и троих, и три тысячи, а отменить отправку нельзя.
+    let howMany = "";
+    try {
+      const report = await builderApi.listSubscribers(botId);
+      const count = audience === "all" ? report.people.length : report.active_count;
+      howMany = ` (${count} чел.)`;
+    } catch {
+      // Не смогли посчитать — спрашиваем без числа, но спрашиваем.
+    }
+
     // Irreversible and outward-facing: once it is queued, those messages are
     // going to real people's phones.
-    if (!(await confirmDialog(`Отправить это сообщение ${who}? Отменить будет нельзя.`))) return;
+    const ok = await confirmDialog(
+      `Отправить это сообщение ${who}${howMany}? Отменить будет нельзя.`,
+      "Отправить",
+    );
+    if (!ok) return;
 
     setBusy(true);
     setResult(null);

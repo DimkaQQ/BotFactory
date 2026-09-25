@@ -223,7 +223,7 @@ async def _send_payment_block(
         payment, url = await payment_service.create_order_payment(
             db, bot=bot_row, block=block, chat_id=chat_id, telegram_user_id=telegram_user_id
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("Could not create a payment for block %s (bot %s)", block.id, bot_id)
         with contextlib.suppress(Exception):
             await bot.send_message(
@@ -231,6 +231,18 @@ async def _send_payment_block(
                 "Не получилось открыть оплату — попробуй ещё раз чуть позже. "
                 "Если не заработает, напиши продавцу.",
             )
+        # И — обязательно — продавцу. Это единственная ветка в файле, где
+        # покупатель уходит без товара, а владелец не узнавал ничего:
+        # ошибка падала в лог, покупателю приносили извинения от его имени,
+        # и он выяснял всё от учеников через неделю. Сюда попадает всё, что
+        # ломает продажу: пустые ключи кассы, упавший шлюз, цена «0».
+        await _tell_owner(
+            db, bot_id,
+            f"🔴 Покупатель нажал «{(content.get('title') or 'Оплата').strip()}», "
+            f"но счёт не выставился — продажа не состоялась.\n\n"
+            f"Причина: {_human_reason(exc)}\n\n"
+            f"Проверь настройки кассы и цену в блоке оплаты.",
+        )
         return True
 
     label = (content.get("button_label") or "").strip() or f"Оплатить {_money(payment)}"
@@ -383,6 +395,20 @@ async def _deliver_group_invite(
         f"{text}\n\n{invite}".strip() if text else invite,
     )
     return True
+
+
+def _human_reason(exc: Exception) -> str:
+    """Причина отказа словами, которые владелец может прочитать.
+
+    `ProviderError` мы формулируем сами и по-русски («ЮKassa: не заполнены
+    shopId или секретный ключ») — её видно как есть. Всё прочее — это сбой
+    на чужой стороне или наш, и владельцу от его текста пользы нет.
+    """
+    from app.services.payments import ProviderError
+
+    if isinstance(exc, ProviderError):
+        return str(exc)
+    return "касса не ответила или вернула ошибку"
 
 
 async def _tell_owner(db: AsyncSession, bot_id: uuid.UUID, message: str) -> None:

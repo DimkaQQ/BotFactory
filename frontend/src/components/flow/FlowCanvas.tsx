@@ -54,6 +54,7 @@ interface Props {
   paymentProvider: string | null;
   paymentCurrencies: string[];
   paymentProviderInfo: PaymentProviderInfo | null;
+  paymentMissingFields?: string[];
   onOpenPaymentSettings: () => void;
   /** Opens the "как в реальности" chat preview. Rendered inside the canvas
    * tool strip rather than as its own full-width row above it: two stacked
@@ -104,6 +105,7 @@ function Inner({
   paymentProvider,
   paymentCurrencies,
   paymentProviderInfo,
+  paymentMissingFields,
   onOpenPaymentSettings,
   onPreview,
   subscriptionsEnabled,
@@ -470,6 +472,7 @@ function Inner({
           paymentProvider={paymentProvider}
           paymentCurrencies={paymentCurrencies}
           paymentProviderInfo={paymentProviderInfo}
+          paymentMissingFields={paymentMissingFields}
           onOpenPaymentSettings={onOpenPaymentSettings}
           botPublished={bot.status === "active"}
           subscriptionsEnabled={subscriptionsEnabled}

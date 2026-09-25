@@ -166,6 +166,21 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
     }
   }
 
+  async function refund(order: Order) {
+    setBusyOrder(order.id);
+    setError(null);
+    try {
+      await builderApi.refundOrder(botId, order.id);
+      const refreshed = await builderApi.listOrders(botId);
+      setOrders(refreshed.orders);
+      setTotals(refreshed.totals ?? []);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось оформить возврат");
+    } finally {
+      setBusyOrder(null);
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
     setError(null);
@@ -411,6 +426,27 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                         <span className="orders__log-amount">
                           {formatAmount(order.amount_minor)} {unit(order.currency)}
                         </span>
+                        {order.status === "paid" && (
+                          <button
+                            type="button"
+                            className="orders__refund"
+                            disabled={busyOrder === order.id}
+                            title="Пометить возврат и закрыть доступ"
+                            onClick={() => {
+                              void confirmDialog(
+                                `Оформить возврат по заказу №${order.invoice_no}?\n\n` +
+                                  `Деньги вернёшь сам в кабинете кассы — через нас они не проходили. ` +
+                                  `Бот пометит заказ возвращённым, скажет покупателю и закроет доступ ` +
+                                  `в закрытый чат, если он выдавался.`,
+                                "Оформить возврат",
+                              ).then((ok) => {
+                                if (ok) void refund(order);
+                              });
+                            }}
+                          >
+                            ↩︎
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>

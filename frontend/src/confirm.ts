@@ -16,9 +16,15 @@
  */
 
 const CANCEL = "Отмена";
+//: Подпись по умолчанию — «Удалить», потому что почти всё здесь удаление.
+//: Но она была захардкожена на ВСЕ подтверждения, и рассылка спрашивала
+//: «Отправить это сообщение всем? Отменить будет нельзя» с красной кнопкой
+//: «Удалить» под вопросом. Человек, который не пишет код, на такую кнопку
+//: не нажмёт никогда — и рассылка, одна из причин купить продукт, была
+//: заблокирована одним словом.
 const CONFIRM = "Удалить";
 
-function webConfirm(message: string): Promise<boolean> {
+function webConfirm(message: string, confirmLabel: string, danger: boolean): Promise<boolean> {
   // No document (SSR, a test runner without a DOM) — refuse rather than
   // silently proceeding with something destructive.
   if (typeof document === "undefined" || typeof HTMLDialogElement === "undefined") {
@@ -43,8 +49,8 @@ function webConfirm(message: string): Promise<boolean> {
 
     const confirm = document.createElement("button");
     confirm.type = "button";
-    confirm.className = "confirm-dialog__button confirm-dialog__button--danger";
-    confirm.textContent = CONFIRM;
+    confirm.className = `confirm-dialog__button${danger ? " confirm-dialog__button--danger" : " confirm-dialog__button--go"}`;
+    confirm.textContent = confirmLabel;
 
     row.append(cancel, confirm);
     dialog.append(text, row);
@@ -80,10 +86,19 @@ function webConfirm(message: string): Promise<boolean> {
 
 /** Native-feeling confirmation — Telegram's own popup inside the Mini App,
  * the app's dialog everywhere else. */
-export function confirmDialog(message: string): Promise<boolean> {
+/**
+ * `confirmLabel` — что написано на кнопке согласия. По умолчанию «Удалить»,
+ * потому что большая часть подтверждений здесь про удаление; всё остальное
+ * обязано называть своё действие своим именем.
+ */
+export function confirmDialog(message: string, confirmLabel: string = CONFIRM): Promise<boolean> {
   const webApp = window.Telegram?.WebApp;
   if (webApp?.showConfirm) {
-    return new Promise((resolve) => webApp.showConfirm!(message, resolve));
+    // Нативный лист Telegram рисует свои «ОК/Отмена» и подписи не принимает,
+    // поэтому глагол уходит в сам вопрос — иначе внутри Telegram кнопка
+    // осталась бы безымянной.
+    const text = confirmLabel === CONFIRM ? message : `${message}\n\n${confirmLabel}?`;
+    return new Promise((resolve) => webApp.showConfirm!(text, resolve));
   }
-  return webConfirm(message);
+  return webConfirm(message, confirmLabel, confirmLabel === CONFIRM);
 }

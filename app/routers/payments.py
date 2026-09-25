@@ -218,7 +218,7 @@ async def test_payment_page(payment_id: uuid.UUID, db: AsyncSession = Depends(ge
             <div style="font-size:44px">✅</div>
             <h1 style="font-size:20px;margin:12px 0 6px">Тестовая оплата прошла</h1>
             <p style="color:#83829a;font-size:14px;margin:0">
-              {escape(payment.description or '')} — {amount} {escape(payment.currency)}.<br>Возвращайся в Telegram, бот уже всё прислал.
+              {escape(payment.description or '')} — {amount}.<br>Возвращайся в Telegram, бот уже всё прислал.
             </p>
           </div>
         </body></html>"""
@@ -274,11 +274,27 @@ async def get_payment_settings(
     bot: BotModel = Depends(get_owned_bot),
 ) -> PaymentSettingsOut:
     credentials = payment_service.decrypt_credentials(bot.payment_credentials_encrypted)
+    filled = {k for k, v in credentials.items() if str(v).strip()}
+
+    # «Подключена» = провайдер выбран И у него есть всё, что ему нужно.
+    # Раньше второй половины не было: пустая форма сохранялась как успех,
+    # красное предупреждение в блоке оплаты гасло, в шапке загоралось
+    # зелёное «Касса подключена» — а первый же покупатель получал «не
+    # получилось открыть оплату». Владелец узнавал об этом от учеников.
+    missing: list[str] = []
+    ready = False
+    if bot.payment_provider:
+        provider = payment_providers.get_provider(bot.payment_provider)
+        missing = [f.label for f in provider.credential_fields if f.key not in filled]
+        ready = not missing
+
     return PaymentSettingsOut(
         provider=bot.payment_provider,
         is_test=bot.payment_is_test,
+        ready=ready,
+        missing_fields=missing,
         # Which keys are filled in, never the keys themselves.
-        filled_fields=sorted(k for k, v in credentials.items() if str(v).strip()),
+        filled_fields=sorted(filled),
         # Only for providers that actually notify us. Stars, pay-by-link and
         # Processing.kz never call this address, and offering it invited a
         # shop owner to paste something into a dashboard that does nothing.
@@ -832,6 +848,32 @@ async def confirm_order(
     if delivered:
         payment_service.deliver_later(payment.id)
     return {"status": payment.status, "delivered": delivered}
+
+
+@router.post("/api/bots/{bot_id}/orders/{payment_id}/refund")
+async def refund_order(
+    bot_id: uuid.UUID,
+    payment_id: uuid.UUID,
+    _bot: BotModel = Depends(get_owned_bot),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Пометить заказ возвращённым и закрыть то, что по нему выдали.
+
+    Денег мы не двигаем и двигать не можем: касса чужая, деньги лежат у
+    владельца, возврат он делает в своём кабинете. Здесь закрывается всё
+    остальное, чего вручную не сделать: покупатель узнаёт, доступ в закрытый
+    чат снимается, заказ перестаёт считаться выручкой. Раньше не было и
+    этого — вернул деньги, а человек остался в канале навсегда.
+    """
+    payment = await _owned_order(bot_id, payment_id, db)
+    if payment.status != PaymentStatus.paid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Возврат возможен только по оплаченному заказу.",
+        )
+
+    removed = await payment_service.refund_by_owner(db, payment)
+    return {"status": payment.status, "access_revoked": removed}
 
 
 @router.post("/api/bots/{bot_id}/orders/{payment_id}/reject")

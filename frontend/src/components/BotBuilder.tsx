@@ -5,11 +5,13 @@ import {
   type BlockType,
   type BotBlock,
   type BotWithBlocks,
+  type OrdersReport,
   type PaymentProviderInfo,
   type PaymentSettings,
   type PublicationInfo,
   ApiError,
   builderApi,
+  formatAmount,
 } from "../api/builderApi";
 import { confirmDialog } from "../confirm";
 import { openExternal } from "../hooks/useTelegramWebApp";
@@ -53,6 +55,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [publication, setPublication] = useState<PublicationInfo | null>(null);
   const [billing, setBilling] = useState<BillingState | null>(null);
+  const [sales, setSales] = useState<OrdersReport | null>(null);
 
   // The fixed footer's height decides how much room the canvas gets and how
   // much the page must reserve below it. Guessing it with a constant was
@@ -184,11 +187,78 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         setPaymentSettings(settings);
         setPublication(publicationInfo);
         setBilling(billingState);
+        builderApi
+          .listOrders(botId)
+          .then(setSales)
+          // Не показать выручку — не повод ломать конструктор.
+          .catch(() => undefined);
       } catch {
         // leaves payments unconfigured in the UI; nothing else breaks
       }
     })();
   }, [botId]);
+
+  // Выручка этого бота одной строкой — чтобы не искать её под кнопкой с
+  // надписью «касса».
+  const salesLine = (() => {
+    if (!sales || sales.paid_count === 0) return null;
+    const best = [...(sales.totals ?? [])].sort((a, b) => b.total_minor - a.total_minor)[0];
+    if (!best) return `Продаж: ${sales.paid_count}`;
+    return `${sales.paid_count} · ${formatAmount(best.total_minor)} ${best.currency}`;
+  })();
+
+  // Что человек узнавал только после того, как заплатил 99 $: касса без
+  // ключей, кнопка в никуда, цена не указана. Считается прямо здесь, потому
+  // что все три факта уже загружены — отдельный запрос не нужен.
+  const publishProblems = (() => {
+    if (!bot) return [];
+    const found: string[] = [];
+    const payBlocks = bot.blocks.filter((b) => b.block_type === "payment");
+
+    if (payBlocks.length > 0 && !paymentSettings?.provider) {
+      found.push("Касса не подключена — бот не сможет принять оплату.");
+    } else if (payBlocks.length > 0 && paymentSettings && !paymentSettings.ready) {
+      found.push(`В кассе не заполнено: ${paymentSettings.missing_fields.join(", ")} — оплата не откроется.`);
+    }
+
+    const priceless = payBlocks.filter((b) => {
+      const raw = String(b.content.price ?? "").replace(",", ".").trim();
+      return !raw || Number(raw) <= 0;
+    });
+    if (priceless.length > 0) {
+      found.push(
+        priceless.length === 1
+          ? "В блоке оплаты не указана цена — покупатель получит ошибку."
+          : `Блоков оплаты без цены: ${priceless.length} — покупатели получат ошибку.`,
+      );
+    }
+
+    const orphans = orphanBlocks(bot.blocks, bot.start_block_id);
+    if (orphans.length > 0) {
+      found.push(
+        orphans.length === 1
+          ? "Один блок ни с чем не соединён — бот его не покажет."
+          : `Блоков ни с чем не соединено: ${orphans.length} — бот их не покажет.`,
+      );
+    }
+
+    const deadButtons = bot.blocks
+      .filter((b) => b.block_type === "buttons")
+      .flatMap((b) => b.content.buttons ?? [])
+      // Кнопка-ссылка ведёт наружу и продолжения не требует; молчит только
+      // та, у которой нет ни ссылки, ни стрелки на холсте.
+      .filter((button) => button.action_type !== "url" && !button.target_block_id);
+    if (deadButtons.length > 0) {
+      found.push(
+        `Кнопка без продолжения: ${deadButtons
+          .map((b) => `«${b.label || "без названия"}»`)
+          .slice(0, 3)
+          .join(", ")} — нажатие ничего не сделает.`,
+      );
+    }
+
+    return found;
+  })();
 
   // A renewal can put a stopped bot back on the air, so this re-reads the
   // bot itself and not just the clock — the status drives the whole header.
@@ -449,17 +519,50 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             {!isMiniApp && (
               <button
                 type="button"
-                className={`bot-payments-button ${paymentSettings?.provider ? "bot-payments-button--on" : ""}`}
+                className={`bot-payments-button ${
+                  paymentSettings?.ready
+                    ? "bot-payments-button--on"
+                    : paymentSettings?.provider
+                      ? "bot-payments-button--half"
+                      : ""
+                }`}
                 onClick={() => setPaymentPanelOpen(true)}
-                title="Платёжная система, через которую бот принимает деньги"
+                title={
+                  paymentSettings?.ready
+                    ? "Платёжная система, через которую бот принимает деньги"
+                    : paymentSettings?.provider
+                      ? `Касса выбрана, но не заполнено: ${paymentSettings.missing_fields.join(", ")}`
+                      : "Платёжная система, через которую бот принимает деньги"
+                }
               >
                 {/* Two labels, one shown at a time by CSS: on a 390px phone
                     this bar also carries "← Мои боты", and the long form
                     squeezed the way out of the builder to 49px. */}
-                💳 <span className="bot-payments-button__long">
-                  {paymentSettings?.provider ? "Касса подключена" : "Подключить кассу"}
+                {/* Три состояния, а не два. «Касса подключена» по факту
+                    выбранного провайдера было прямой ложью: ключи пустые,
+                    оплата не откроется, а владелец видит зелёное. */}
+                {paymentSettings?.ready ? "💳" : paymentSettings?.provider ? "⚠️" : "💳"}{" "}
+                <span className="bot-payments-button__long">
+                  {paymentSettings?.ready
+                    ? "Касса подключена"
+                    : paymentSettings?.provider
+                      ? "Касса не настроена"
+                      : "Подключить кассу"}
                 </span>
                 <span className="bot-payments-button__short">Касса</span>
+              </button>
+            )}
+            {/* Выручка жила под кнопкой «Касса подключена» — искать её там
+                владелец не догадывался. Теперь она на виду и ведёт туда же. */}
+            {!isMiniApp && salesLine && (
+              <button
+                type="button"
+                className="bot-sales-button"
+                onClick={() => setPaymentPanelOpen(true)}
+                title="Продажи этого бота"
+              >
+                💰 <span className="bot-payments-button__long">{salesLine}</span>
+                <span className="bot-payments-button__short">Продажи</span>
               </button>
             )}
             <button
@@ -605,6 +708,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         paymentProvider={paymentSettings?.provider ?? null}
         paymentCurrencies={paymentProviders.find((p) => p.slug === paymentSettings?.provider)?.currencies ?? []}
         paymentProviderInfo={paymentProviders.find((p) => p.slug === paymentSettings?.provider) ?? null}
+        paymentMissingFields={paymentSettings?.missing_fields ?? []}
         onPreview={bot.blocks.length > 0 ? () => setPreviewOpen(true) : undefined}
         subscriptionsEnabled={subscriptionsEnabled}
         onOpenPaymentSettings={() => setPaymentPanelOpen(true)}
@@ -616,6 +720,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           {publication?.required && !publication.paid ? (
             <PublishPaywall
               botId={bot.id}
+              problems={publishProblems}
               info={publication}
               onPaid={() => setPublication((prev) => (prev ? { ...prev, paid: true } : prev))}
             />

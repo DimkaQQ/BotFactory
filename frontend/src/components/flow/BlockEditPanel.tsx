@@ -35,6 +35,7 @@ interface Props {
   /** The chosen provider's catalogue entry — drives the per-product fields
    * the payment block asks for. */
   paymentProviderInfo?: PaymentProviderInfo | null;
+  paymentMissingFields?: string[];
   onOpenPaymentSettings: () => void;
   /** Broadcasting needs a token, which only a published bot has. */
   botPublished?: boolean;
@@ -55,6 +56,7 @@ export function BlockEditPanel({
   paymentProvider,
   paymentCurrencies,
   paymentProviderInfo,
+  paymentMissingFields,
   onOpenPaymentSettings,
   botPublished,
   subscriptionsEnabled,
@@ -98,12 +100,28 @@ export function BlockEditPanel({
               provider={paymentProvider}
               currencies={paymentCurrencies}
               providerInfo={paymentProviderInfo}
+              missingFields={paymentMissingFields}
               subscriptionsEnabled={subscriptionsEnabled}
               onChange={onChange}
               onOpenSettings={onOpenPaymentSettings}
             />
           ) : isMediaBlock ? (
             <MediaEditor kind={block.block_type as "image" | "video"} botId={botId} content={block.content} onChange={onChange} />
+          ) : isDeliveryBlock ? (
+            /* Выдача — это и есть товар: методичка, архив, запись. Текст плюс
+               файл, а не текст вместо файла. */
+            <>
+              <textarea
+                className="chat-bubble__textarea edit-panel__textarea"
+                autoFocus
+                value={block.content.text ?? ""}
+                placeholder={PLACEHOLDER[block.block_type]}
+                onChange={(e) => onChange({ ...block.content, text: e.target.value })}
+                rows={4}
+              />
+              <p className="edit-panel__section-label">Файл (придёт вместе с сообщением)</p>
+              <MediaEditor kind="file" botId={botId} content={block.content} onChange={onChange} />
+            </>
           ) : isPollBlock ? (
             <PollEditor content={block.content} onChange={onChange} />
           ) : (

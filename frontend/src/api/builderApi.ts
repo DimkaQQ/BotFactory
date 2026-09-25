@@ -293,6 +293,13 @@ export const builderApi = {
     }),
   confirmOrder: (botId: string, paymentId: string) =>
     request<{ status: string; delivered: boolean }>(`/bots/${botId}/orders/${paymentId}/confirm`, { method: "POST" }),
+  /** Деньги двигает владелец в кабинете своей кассы — через нас они не
+   * проходили. Здесь закрывается то, чего руками не сделать: доступ в
+   * закрытый чат и статус заказа. */
+  refundOrder: (botId: string, paymentId: string) =>
+    request<{ status: string; access_revoked: boolean }>(
+      `/bots/${botId}/orders/${paymentId}/refund`, { method: "POST" },
+    ),
   rejectOrder: (botId: string, paymentId: string) =>
     request<{ status: string }>(`/bots/${botId}/orders/${paymentId}/reject`, { method: "POST" }),
 };
@@ -353,6 +360,13 @@ export interface PaymentSettings {
    * themselves never leave the server. */
   filled_fields: string[];
   callback_url: string | null;
+  /** Может ли касса на самом деле принять деньги: провайдер выбран **и** все
+   * его ключи заполнены. Выбранный без ключей провайдер — это не
+   * подключённая касса, а интерфейс показывал зелёное «Касса подключена»
+   * ровно по факту выбора. */
+  ready: boolean;
+  /** Каких полей не хватает, человеческими названиями. */
+  missing_fields: string[];
 }
 
 export interface PaymentInfo {

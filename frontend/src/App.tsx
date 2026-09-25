@@ -92,7 +92,13 @@ export default function App() {
         setClientName(me.full_name ?? undefined);
         setBootState("ready");
       } catch (err) {
-        if (!initData) {
+        // Только отказ в доступе означает «сессия протухла». Раньше сюда
+        // попадала ЛЮБАЯ ошибка, включая обрыв связи, — и человека
+        // выбрасывало на лендинг посреди правки, со стёртым токеном и
+        // единственным путём назад через виджет Telegram. В метро с
+        // телефона это происходило бы постоянно.
+        const expired = err instanceof ApiError && (err.status === 401 || err.status === 403);
+        if (!initData && expired) {
           // Stored web session is stale/expired — send back to login rather
           // than a dead-end error screen.
           clearSessionAuth();

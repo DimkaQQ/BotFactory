@@ -14,6 +14,7 @@ owner and the checkout link points straight at their merchant account.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import uuid
@@ -1160,6 +1161,52 @@ async def confirm_by_owner(db: AsyncSession, payment: Payment, *, deliver: bool 
         WebhookResult(status=PaymentStatus.paid, provider_payment_id=payment.provider_payment_id),
         deliver=deliver,
     )
+
+
+async def refund_by_owner(db: AsyncSession, payment: Payment) -> bool:
+    """Заказ возвращён: снять доступ и сказать покупателю.
+
+    Деньги через нас не проходили и вернуть их отсюда нельзя — это делает
+    владелец в кабинете своей кассы. Всё остальное делаем мы, потому что
+    вручную это как раз и не сделать: одноразовое приглашение уже
+    использовано, и выставить человека из закрытого чата владельцу пришлось
+    бы руками, помня, кто это был.
+
+    Возвращает, удалось ли закрыть доступ в чат.
+    """
+    from app.services import bot_registry, group_access
+
+    payment.status = PaymentStatus.refunded
+    payment.meta = {
+        **(payment.meta or {}),
+        "refunded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.commit()
+
+    removed = False
+    target = (payment.meta or {}).get("deliver_from")
+    if target and payment.telegram_user_id is not None:
+        block = (
+            await db.execute(select(BotBlock).where(BotBlock.id == uuid.UUID(str(target))))
+        ).scalar_one_or_none()
+        chat = group_access.chat_ref((block.content if block else None) or {})
+        if chat:
+            removed = await group_access.remove_member(
+                db, bot_id=payment.bot_id, chat=chat, telegram_user_id=payment.telegram_user_id
+            )
+
+    # Покупателю — обязательно. Он заплатил, получил товар, а потом доступ
+    # исчез: без объяснения это выглядит как поломка, а не как возврат.
+    if payment.chat_id is not None:
+        with contextlib.suppress(Exception):
+            instance = await bot_registry.get_or_create(payment.bot_id, db)
+            if instance is not None:
+                await instance.send_message(
+                    payment.chat_id,
+                    f"Заказ №{payment.invoice_no} отменён, продавец оформляет возврат."
+                    + (" Доступ в закрытый чат закрыт." if removed else ""),
+                )
+    return removed
 
 
 async def reject_by_owner(db: AsyncSession, payment: Payment) -> None:

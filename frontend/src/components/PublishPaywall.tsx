@@ -5,6 +5,10 @@ import { openExternal } from "../hooks/useTelegramWebApp";
 
 interface Props {
   botId: string;
+  /** Что не так со сценарием прямо сейчас. Показывается ДО оплаты: человек
+   * платил 99 $, и только потом узнавал, что касса без ключей, а кнопка
+   * никуда не ведёт. */
+  problems: string[];
   info: PublicationInfo;
   onPaid: () => void;
 }
@@ -31,7 +35,7 @@ function money(currency: string): string {
 /** Building is free; putting the bot on the air is what's paid for. Opens
  * the provider's page in a new tab and polls the payment until the callback
  * settles it — the redirect back is never what we trust. */
-export function PublishPaywall({ botId, info, onPaid }: Props) {
+export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
   const [starting, setStarting] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +124,29 @@ export function PublishPaywall({ botId, info, onPaid }: Props) {
           )}
         </div>
       </div>
+
+      {problems.length > 0 && (
+        <div className="paywall__problems">
+          <p className="paywall__problems-title">Перед оплатой стоит поправить:</p>
+          <ul>
+            {problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+          <p className="paywall__problems-hint">
+            Оплатить можно и так — деньги за запуск не сгорят. Но бот выйдет в Telegram с этими проблемами.
+          </p>
+        </div>
+      )}
+
+      <p className="paywall__next">
+        Что дальше: после оплаты бот попросит токен. Получить его — минута: открой{" "}
+        <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">
+          @BotFather
+        </a>
+        , отправь ему <code>/newbot</code>, придумай имя — он пришлёт строку вида
+        <code> 123456789:AAH…</code>. Её и вставишь.
+      </p>
 
       {error && <p className="publish-form__error">{error}</p>}
 

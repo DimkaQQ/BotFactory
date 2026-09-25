@@ -4,7 +4,11 @@ import type { BlockContent } from "../api/builderApi";
 import { ApiError, builderApi } from "../api/builderApi";
 
 interface Props {
-  kind: "image" | "video";
+  /** "file" — для блока «Выдача»: методичка, архив, аудио. Лендинг обещает
+   * «файл, ссылка или доступ», плейсхолдер блока зовёт «пришли сюда ссылку
+   * или файл», а загрузить файл было негде — обложку можно, а товар,
+   * который человек продаёт, нет. */
+  kind: "image" | "video" | "file";
   botId: string;
   content: BlockContent;
   onChange: (content: BlockContent) => void;
@@ -16,6 +20,25 @@ interface Props {
  * too big for a direct upload to make sense (Telegram will fetch those
  * itself). Either way the field ends up holding a URL bot_dispatcher hands
  * straight to aiogram — a live thumbnail shows whichever one is set. */
+const ACCEPT: Record<Props["kind"], string> = {
+  image: "image/*",
+  video: "video/*",
+  // Ровно то, что принимает сервер (app/routers/media.py) — иначе человек
+  // выберет .docx и узнает об отказе только после загрузки.
+  file: ".pdf,.zip,.epub,.mp3,.m4a,.ogg,application/pdf,application/zip,application/epub+zip,audio/*",
+};
+const NOUN: Record<Props["kind"], string> = { image: "фото", video: "видео", file: "файл" };
+const PLACEHOLDER_URL: Record<Props["kind"], string> = {
+  image: "Ссылка на изображение (https://…)",
+  video: "Ссылка на видео (https://…)",
+  file: "Ссылка на файл (https://…)",
+};
+const URL_MEDIA_TYPE: Record<Props["kind"], string> = {
+  image: "photo",
+  video: "video",
+  file: "document",
+};
+
 export function MediaEditor({ kind, botId, content, onChange }: Props) {
   const url = content.media_file_id ?? "";
   const [broken, setBroken] = useState(false);
@@ -51,7 +74,12 @@ export function MediaEditor({ kind, botId, content, onChange }: Props) {
             ⏳
           </span>
         ) : url && !broken ? (
-          kind === "image" ? (
+          kind === "file" ? (
+            <div className="media-editor__video-badge">
+              <span aria-hidden="true">📎</span>
+              <span className="media-editor__video-url">{url.split("/").pop()}</span>
+            </div>
+          ) : kind === "image" ? (
             <img src={url} alt="" onError={() => setBroken(true)} />
           ) : (
             <div className="media-editor__video-badge">
@@ -65,7 +93,7 @@ export function MediaEditor({ kind, botId, content, onChange }: Props) {
           </span>
         ) : (
           <span className="media-editor__placeholder" aria-hidden="true">
-            {kind === "image" ? "🖼️" : "🎬"}
+            {kind === "image" ? "🖼️" : kind === "video" ? "🎬" : "📎"}
           </span>
         )}
       </div>
@@ -74,7 +102,7 @@ export function MediaEditor({ kind, botId, content, onChange }: Props) {
         <input
           ref={fileInputRef}
           type="file"
-          accept={kind === "image" ? "image/*" : "video/*"}
+          accept={ACCEPT[kind]}
           className="media-editor__file-input"
           onChange={handleFileSelected}
           onPointerDown={(e) => e.stopPropagation()}
@@ -86,7 +114,7 @@ export function MediaEditor({ kind, botId, content, onChange }: Props) {
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => fileInputRef.current?.click()}
         >
-          {uploading ? "Загружаем…" : `📤 Загрузить ${kind === "image" ? "фото" : "видео"}`}
+          {uploading ? "Загружаем…" : `📤 Загрузить ${NOUN[kind]}`}
         </button>
       </div>
       {uploadError && <p className="media-editor__upload-error">{uploadError}</p>}
@@ -94,9 +122,11 @@ export function MediaEditor({ kind, botId, content, onChange }: Props) {
       <p className="media-editor__or">или для тяжёлых файлов — вставь ссылку:</p>
       <input
         className="media-editor__url"
-        placeholder={kind === "image" ? "Ссылка на изображение (https://…)" : "Ссылка на видео (https://…)"}
+        placeholder={PLACEHOLDER_URL[kind]}
         value={url}
-        onChange={(e) => onChange({ ...content, media_file_id: e.target.value, media_type: kind === "image" ? "photo" : "video" })}
+        onChange={(e) =>
+          onChange({ ...content, media_file_id: e.target.value, media_type: URL_MEDIA_TYPE[kind] })
+        }
         onPointerDown={(e) => e.stopPropagation()}
       />
       <textarea

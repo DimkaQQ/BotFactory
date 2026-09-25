@@ -123,6 +123,31 @@ async def grant(
     return link.invite_link
 
 
+async def remove_member(db: AsyncSession, *, bot_id: uuid.UUID, chat: str | int, telegram_user_id: int) -> bool:
+    """Выставить человека из чата, оставив возможность вернуться.
+
+    Бан и сразу разбан: бан навсегда — это не «доступ закончился», а «ты
+    больше не наш покупатель», и для того, кто просто вернул деньги или у
+    кого кончился период, это неправда.
+
+    Никогда не бросает: и продление, и возврат должны доводиться до конца,
+    даже если у бота отобрали права администратора в группе.
+    """
+    from app.services import bot_registry
+
+    try:
+        bot_instance = await bot_registry.get_or_create(bot_id, db)
+        if bot_instance is None:
+            return False
+        await bot_instance.ban_chat_member(chat_id=chat, user_id=telegram_user_id)
+        await bot_instance.unban_chat_member(chat_id=chat, user_id=telegram_user_id, only_if_banned=True)
+        logger.info("Removed user %s from chat %s (bot %s)", telegram_user_id, chat, bot_id)
+        return True
+    except Exception:
+        logger.exception("Could not remove user %s from chat %s (bot %s)", telegram_user_id, chat, bot_id)
+        return False
+
+
 async def revoke(db: AsyncSession, subscription: Subscription) -> bool:
     """Remove a lapsed subscriber from the chat they were let into.
 
