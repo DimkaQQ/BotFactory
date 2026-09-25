@@ -297,8 +297,12 @@ async def test_a_poll_answer_is_recorded_against_the_block_that_asked(db, owner,
     await bot_dispatcher.process_update(
         telegram, {"message": {"chat": {"id": CHAT_ID}, "from": {"id": USER_ID}, "text": "/start"}}, bot.id, db
     )
-    await db.refresh(poll_block)
-    assert poll_block.content["telegram_poll_id"] == "tg_poll_77", "иначе ответ не привязать к блоку"
+    from app.models.poll_send import PollSend
+
+    sent = (
+        await db.execute(select(PollSend).where(PollSend.telegram_poll_id == "tg_poll_77"))
+    ).scalar_one_or_none()
+    assert sent is not None and sent.block_id == poll_block.id, "иначе ответ не привязать к блоку"
 
     await bot_dispatcher.process_update(
         telegram,

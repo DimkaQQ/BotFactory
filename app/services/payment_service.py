@@ -20,7 +20,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import Integer, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -76,7 +76,7 @@ def platform_methods() -> list[PlatformMethod]:
     settings = get_settings()
     raw = settings.platform_payment_methods.strip()
 
-    if raw:
+    if raw:  # noqa: SIM108 — the two branches build the list quite differently
         try:
             entries = json.loads(raw)
         except json.JSONDecodeError:
@@ -99,7 +99,7 @@ def platform_methods() -> list[PlatformMethod]:
                 )
             except (KeyError, TypeError, ValueError, ProviderError):
                 logger.error("Skipping a malformed entry in PLATFORM_PAYMENT_METHODS: %r", entry)
-        return methods
+        return _without_test_till(methods)
 
     # Nothing configured as a list — fall back to the single-provider
     # settings, so a deployment set up before this keeps working.
@@ -111,7 +111,7 @@ def platform_methods() -> list[PlatformMethod]:
             credentials = json.loads(settings.platform_payment_credentials)
         except json.JSONDecodeError:
             logger.error("PLATFORM_PAYMENT_CREDENTIALS is not valid JSON — publication payments will fail")
-    return [
+    return _without_test_till([
         PlatformMethod(
             provider=settings.platform_payment_provider,
             price_minor=settings.publication_price_minor,
@@ -120,7 +120,26 @@ def platform_methods() -> list[PlatformMethod]:
             is_test=settings.platform_payment_is_test,
             renewal_price_minor=settings.renewal_price_minor,
         )
-    ]
+    ])
+
+
+def _without_test_till(methods: list[PlatformMethod]) -> list[PlatformMethod]:
+    """Drop our own till if it is the one that pays itself.
+
+    Failing to free publishing rather than to fake-paid publishing: a lost
+    sale is recoverable and visible, a `paid` row with no money behind it is
+    neither.
+    """
+    if get_settings().platform_allow_test_till:
+        return methods
+    kept = [m for m in methods if m.provider != "test"]
+    if len(kept) != len(methods):
+        logger.error(
+            "«Тестовая оплата» настроена как касса платформы — она отмечает счёт оплаченным "
+            "без денег. Способ отключён, публикация остаётся бесплатной. Поставь настоящего "
+            "провайдера или PLATFORM_ALLOW_TEST_TILL=true, если это стенд."
+        )
+    return kept
 
 
 def platform_method(provider: str | None) -> PlatformMethod:
@@ -747,9 +766,15 @@ async def redeliver_undelivered(limit: int = 100) -> None:
             if fresh is None or (fresh.meta or {}).get("delivered_at"):
                 continue
 
-            attempts = int((fresh.meta or {}).get("delivery_attempts") or 0) + 1
-            fresh.meta = {**(fresh.meta or {}), "delivery_attempts": attempts}
-            await db.commit()
+            attempts = await _claim_delivery(db, fresh)
+            if attempts is None:
+                # Someone else is handing this order over right now. Read
+                # the row, decide, write — the shape every other money path
+                # here deliberately avoids — let two passes both get past
+                # the `delivered_at` check and deliver the same goods twice.
+                # For a block that hands out a group invite that is a second
+                # single-use link, which can be passed on.
+                continue
 
             await resume_after_payment(db, fresh)
 
@@ -766,6 +791,40 @@ async def redeliver_undelivered(limit: int = 100) -> None:
                 fresh.id, attempts,
             )
             await _notify_owner_gave_up(db, fresh)
+
+
+async def _claim_delivery(db: AsyncSession, payment: Payment) -> int | None:
+    """Take the right to hand this order over, or find it already taken.
+
+    One conditional UPDATE, the same shape `mark_paid` uses: the attempt
+    counter is raised only if it still holds the value this caller read, so
+    exactly one of several concurrent sweeps wins and the rest step aside.
+    Returns the attempt number on success, None when somebody else has it.
+
+    Reachable inside a single process, not just across replicas: delivery
+    runs in a background task, a chain with typing pauses easily takes
+    longer than a minute, and the sweep picks up anything paid over a minute
+    ago with no `delivered_at`.
+    """
+    was = int((payment.meta or {}).get("delivery_attempts") or 0)
+    result = await db.execute(
+        update(Payment)
+        .where(
+            Payment.id == payment.id,
+            func.coalesce(Payment.meta["delivery_attempts"].astext.cast(Integer), 0) == was,
+            ~Payment.meta.has_key("delivered_at"),  # noqa: W601
+        )
+        # `meta || jsonb_build_object(...)` rather than jsonb_set: the path
+        # argument of jsonb_set is text[], and handing it a plain string is
+        # a runtime "function does not exist", not a type error anything
+        # catches earlier.
+        .values(meta=Payment.meta.op("||")(func.jsonb_build_object("delivery_attempts", was + 1)))
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        return None
+    await db.refresh(payment)
+    return was + 1
 
 
 async def _notify_owner_gave_up(db: AsyncSession, payment: Payment) -> None:

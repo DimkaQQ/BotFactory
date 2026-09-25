@@ -32,7 +32,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bot_block import BotBlock
@@ -56,6 +56,26 @@ MAX_ATTEMPTS = 5
 _BACKOFF = (timedelta(minutes=1), timedelta(minutes=5), timedelta(minutes=30), timedelta(hours=2))
 
 
+#: Сколько раз одна переписка может пройти через длинную «Паузу» за окно.
+#: Настоящий сценарий — подписка с уроками — это единицы шагов в сутки;
+#: сотня означает, что владелец замкнул стрелку на себя.
+_MAX_PAUSED_HOPS = 100
+_LOOP_WINDOW_HOURS = 24
+
+
+async def _loop_is_sane(db: AsyncSession, bot_id: uuid.UUID, chat_id: int) -> bool:
+    since = datetime.now(timezone.utc) - timedelta(hours=_LOOP_WINDOW_HOURS)
+    hops = await db.execute(
+        select(func.count(ScheduledStep.id)).where(
+            ScheduledStep.bot_id == bot_id,
+            ScheduledStep.chat_id == chat_id,
+            ScheduledStep.reason == "delay",
+            ScheduledStep.created_at > since,
+        )
+    )
+    return hops.scalar_one() < _MAX_PAUSED_HOPS
+
+
 async def schedule(
     db: AsyncSession,
     *,
@@ -74,6 +94,19 @@ async def schedule(
     of a chain has no next block, and queueing a walk from nowhere would
     just be a row that wakes up and does nothing.
     """
+    if reason == "delay" and not await _loop_is_sane(db, bot_id, chat_id):
+        # A cycle that goes through a long «Пауза» has no brake of its own:
+        # `_MAX_CHAIN_STEPS` and the `visited` set live inside one walk, and a
+        # scheduled hop starts a fresh walk with both reset. So [сообщение] →
+        # [Пауза] → назад ran forever, growing the queue, hammering Telegram's
+        # rate limit and spamming from a published bot with nothing to stop it
+        # short of editing the database.
+        logger.error(
+            "Bot %s chat %s: too many paused hops in %d h — refusing to queue another. "
+            "Похоже на цикл в сценарии.", bot_id, chat_id, _LOOP_WINDOW_HOURS,
+        )
+        return None
+
     if block_id is None:
         return None
 

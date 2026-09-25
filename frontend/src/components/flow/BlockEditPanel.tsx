@@ -93,6 +93,7 @@ export function BlockEditPanel({
             <DelayEditor content={block.content} onChange={onChange} />
           ) : isPaymentBlock ? (
             <PaymentEditor
+              blockId={block.id}
               content={block.content}
               provider={paymentProvider}
               currencies={paymentCurrencies}

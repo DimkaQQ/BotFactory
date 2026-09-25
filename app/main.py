@@ -12,6 +12,7 @@ from app.routers import auth, bots, builder, media, payments, webhook
 from app.services import (
     background,
     bot_registry,
+    media_gc,
     payment_service,
     platform_billing,
     scheduler,
@@ -47,6 +48,10 @@ async def lifespan(app: FastAPI):
     # take the bot off the air once the grace period has run out too. Same
     # shape as above and for the same reason — a period that ended during a
     # deploy ended, whether or not anything was running to notice.
+    # Загруженные файлы, на которые больше никто не ссылается: они
+    # переживали и блок, и бота, и клиента, а каталог лежит на том же томе,
+    # что и база.
+    background.spawn(media_gc.sweep_forever(), name="media-gc", daemon=True)
     background.spawn(platform_billing.sweep_once(), name="billing-catchup")
     background.spawn(platform_billing.sweep_forever(), name="billing-sweep", daemon=True)
     yield
@@ -62,6 +67,7 @@ async def lifespan(app: FastAPI):
     await background.wait_for_all(timeout=25.0)
     await background.cancel_all()
     await bot_registry.close_all()
+    await platform_billing.close_meta_bot()
 
 
 app = FastAPI(title="Bot Factory API", version="0.1.0", lifespan=lifespan)

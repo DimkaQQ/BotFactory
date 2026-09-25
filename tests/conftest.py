@@ -42,6 +42,19 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
+@pytest.fixture(autouse=True)
+def _allow_the_test_till(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Почти всё здесь платит платформе «Тестовой оплатой».
+
+    В бою она запрещена как наша касса (отмечает счёт оплаченным по открытию
+    ссылки), поэтому тесты включают её явным флагом — а то, что без флага она
+    действительно отключается, проверяется отдельно в test_audit_fixes.
+    """
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "platform_allow_test_till", True, raising=False)
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def _fresh_pool() -> AsyncIterator[None]:
     """Drop the engine's pooled connections between tests.

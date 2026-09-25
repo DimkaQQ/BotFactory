@@ -5573,3 +5573,24 @@
     grid-template-columns: repeat(4, 1fr);
   }
 }
+
+/* Разовая покупка или повторяемая — выбор, который решает, получит ли
+   продавец деньги за второй заказ. Радиокнопки, а не галочка: у обоих
+   вариантов есть последствия, и их надо прочитать. */
+.payment-editor__repeat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-secondary-bg);
+}
+
+.payment-editor__repeat .payment-editor__toggle {
+  margin: 0;
+}
+
+.payment-editor__repeat .payment-editor__field-hint {
+  margin: 2px 0 0;
+}

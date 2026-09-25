@@ -34,6 +34,12 @@ export interface BlockContent {
   price?: string;
   currency?: string;
   button_label?: string;
+  /** Payment block: the same person may buy this again. Off by default, so
+   * a guide or a course is sold once and a returning buyer just gets it
+   * back; on for anything genuinely repeatable — a consultation, a
+   * donation, a re-order — where "уже оплачено" would mean the seller works
+   * for free. */
+  repeatable?: boolean;
   /** Payment block: charge for a period at a time rather than once.
    * Telegram Stars then bills every 30 days on its own; every other
    * provider re-invoices, which the editor says out loud. */

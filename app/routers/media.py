@@ -113,10 +113,26 @@ async def upload_media(
     if doc and not data.startswith(doc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Файл не похож на заявленный формат")
 
-    upload_dir = Path(settings.media_upload_dir)
+    # A folder per client, which is what makes both the quota below and the
+    # sweep in `media_gc` possible at all: with everything in one flat
+    # directory there was no way to tell whose bytes were whose. Files
+    # uploaded before this stay at the root and keep being served.
+    upload_dir = Path(settings.media_upload_dir) / str(bot.client_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
+
+    quota = settings.media_quota_mb_per_client * 1024 * 1024
+    used = sum(f.stat().st_size for f in upload_dir.glob("*") if f.is_file())
+    if used + len(data) > quota:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=(
+                f"Занято {used // 1024 // 1024} МБ из {settings.media_quota_mb_per_client} МБ. "
+                f"Удали ненужные файлы из блоков или вставляй ссылки вместо загрузки."
+            ),
+        )
+
     filename = f"{uuid.uuid4().hex}{ext}"
     (upload_dir / filename).write_bytes(data)
 
-    url = f"{settings.public_base_url.rstrip('/')}/api/media/{filename}"
+    url = f"{settings.public_base_url.rstrip('/')}/api/media/{bot.client_id}/{filename}"
     return {"url": url, "media_type": media_type}

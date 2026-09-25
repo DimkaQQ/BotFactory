@@ -193,7 +193,20 @@ async def _send_payment_block(
     # buyer pressing /start used to be offered том 1 a second time, with
     # nothing anywhere to stop them paying for it — and a live subscriber
     # coming back mid-period is the same question with the same answer.
-    if telegram_user_id is not None and await subscription_service.has_paid_for(db, bot_id, telegram_user_id, block.id):
+    #
+    # But only for things that are bought once. This used to apply to every
+    # payment block, and that quietly broke every repeatable sale there is:
+    # a coach selling a second consultation to the same client got no money
+    # and the client got the session, because the chain falls through into
+    # the delivery block. Anything sold again and again — a consultation, a
+    # donation, a re-order — says so on the block (`repeatable`), and then
+    # a returning buyer is simply sold to again.
+    one_off = not content.get("repeatable")
+    if (
+        one_off
+        and telegram_user_id is not None
+        and await subscription_service.has_paid_for(db, bot_id, telegram_user_id, block.id)
+    ):
         what = (content.get("title") or "").strip()
         with contextlib.suppress(Exception):
             await bot.send_message(
@@ -388,12 +401,26 @@ async def _remember_poll(db: AsyncSession | None, block: BotBlock, sent) -> None
     nothing of ours — so without this the answer cannot be attributed to a
     block, a question, or a bot.
     """
+    from app.models.poll_send import PollSend
+
     poll = getattr(sent, "poll", None)
     poll_id = getattr(poll, "id", None)
     if db is None or not poll_id:
         return
+    # A row per send, not a field on the block. Telegram mints a new poll id
+    # for every chat, so one field held only the most recent one — and every
+    # other subscriber's answer was dropped on the floor, silently, in a
+    # block the constructor sells as a way to find out what they want.
     with contextlib.suppress(Exception):
-        block.content = {**(block.content or {}), "telegram_poll_id": str(poll_id)}
+        db.add(
+            PollSend(
+                id=uuid.uuid4(),
+                bot_id=block.bot_id,
+                block_id=block.id,
+                telegram_poll_id=str(poll_id),
+                chat_id=getattr(getattr(sent, "chat", None), "id", None),
+            )
+        )
         await db.commit()
 
 
@@ -412,12 +439,12 @@ async def _handle_poll_answer(answer: dict, bot_id: uuid.UUID, db: AsyncSession)
     if not poll_id or user_id is None:
         return
 
+    from app.models.poll_send import PollSend
+
     result = await db.execute(
-        select(BotBlock).where(
-            BotBlock.bot_id == bot_id,
-            BotBlock.block_type == BlockType.poll,
-            BotBlock.content["telegram_poll_id"].astext == poll_id,
-        )
+        select(BotBlock)
+        .join(PollSend, PollSend.block_id == BotBlock.id)
+        .where(PollSend.telegram_poll_id == poll_id, PollSend.bot_id == bot_id)
     )
     block = result.scalar_one_or_none()
     if block is None:
@@ -477,15 +504,24 @@ async def _send_block(bot: Bot, chat_id: int, block: BotBlock, db: AsyncSession 
         return
 
     if media_file_id:
-        caption = text or None
+        # A caption is capped at 1024, a quarter of a message — and the block
+        # that runs long is «Выдача», which is exactly the one that also
+        # carries the file. The whole call used to be refused, so the buyer
+        # paid and got nothing. What fits stays with the file; the rest
+        # follows as ordinary messages, which is also the order it reads in.
+        caption, overflow = _caption_and_rest(text)
         if media_type == "photo":
-            await bot.send_photo(chat_id, media_file_id, caption=caption, reply_markup=keyboard)
+            await bot.send_photo(chat_id, media_file_id, caption=caption, reply_markup=None if overflow else keyboard)
         elif media_type == "audio":
-            await bot.send_audio(chat_id, media_file_id, caption=caption, reply_markup=keyboard)
+            await bot.send_audio(chat_id, media_file_id, caption=caption, reply_markup=None if overflow else keyboard)
         elif media_type == "video":
-            await bot.send_video(chat_id, media_file_id, caption=caption, reply_markup=keyboard)
+            await bot.send_video(chat_id, media_file_id, caption=caption, reply_markup=None if overflow else keyboard)
         else:
-            await bot.send_document(chat_id, media_file_id, caption=caption, reply_markup=keyboard)
+            await bot.send_document(chat_id, media_file_id, caption=caption, reply_markup=None if overflow else keyboard)
+        for index, piece in enumerate(overflow):
+            # The keyboard belongs on the last thing sent, wherever that is.
+            last = index == len(overflow) - 1
+            await bot.send_message(chat_id, piece, reply_markup=keyboard if last else None)
     else:
         # Split rather than refused. Telegram rejects anything over 4096
         # characters outright, and the block that most often runs long is
@@ -498,10 +534,34 @@ async def _send_block(bot: Bot, chat_id: int, block: BotBlock, db: AsyncSession 
         await bot.send_message(chat_id, chunks[-1], reply_markup=keyboard)
 
 
-#: Telegram's own cap on a text message. Captions are capped far lower
-#: (1024) but are Telegram's to reject — splitting a caption would detach it
-#: from its picture, which is worse than the error.
+#: Telegram's own caps. A message is 4096 characters; a caption attached to
+#: a photo or a document is a quarter of that, and going over means the send
+#: is refused outright rather than truncated.
 _TELEGRAM_TEXT_LIMIT = 4096
+_TELEGRAM_CAPTION_LIMIT = 1024
+
+
+def _caption_and_rest(text: str) -> tuple[str | None, list[str]]:
+    """What can ride with the file, and what has to follow it.
+
+    Cut on a paragraph or line break where there is one in the last fifth of
+    the caption, so the split lands between thoughts rather than mid-sentence
+    — a guide that breaks after "Шаг 3." reads as intended, one that breaks
+    after "Шаг" reads as damage.
+    """
+    text = (text or "").strip()
+    if not text:
+        return None, []
+    if len(text) <= _TELEGRAM_CAPTION_LIMIT:
+        return text, []
+
+    window = text[:_TELEGRAM_CAPTION_LIMIT]
+    cut = max(window.rfind("\n\n"), window.rfind("\n"))
+    if cut < _TELEGRAM_CAPTION_LIMIT * 4 // 5:
+        cut = window.rfind(" ")
+    if cut <= 0:
+        cut = _TELEGRAM_CAPTION_LIMIT
+    return text[:cut].rstrip(), _split_for_telegram(text[cut:].lstrip())
 
 
 def _split_for_telegram(text: str) -> list[str]:
@@ -570,7 +630,16 @@ async def walk_chain(
         steps += 1
         if steps > _MAX_CHAIN_STEPS:
             logger.warning("Bot %s dialogue chain exceeded %d steps — stopping.", bot_id, _MAX_CHAIN_STEPS)
-            return delivered
+            # Раньше обрыв был молчаливым с обеих сторон: покупатель видел
+            # оборванный разговор, владелец не узнавал ничего — а конструктор
+            # при этом позволяет собрать 200 блоков в одну цепочку.
+            await _tell_owner(
+                db, bot_id,
+                f"⚠️ Сценарий оборвался: подряд идёт больше {_MAX_CHAIN_STEPS} блоков без кнопки "
+                f"или паузы, и бот остановился на полпути. Разбей цепочку кнопкой «дальше» "
+                f"или блоком «Пауза».",
+            )
+            return False
         if next_id in visited:
             # A revisit means a cycle (a real, deliberate pattern in a
             # visual flow graph) with no branch point to break it up — each

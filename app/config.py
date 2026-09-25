@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     # длинным описанием — это единицы килобайт; 64 КБ уже ни на что
     # осмысленное не похожи.
     max_block_content_kb: int = 64
+    # Сколько всего мегабайт загруженных файлов может держать один клиент.
+    # Отдельный потолок от media_max_upload_mb: тот ограничивает один файл,
+    # а без общего один аккаунт заливал по 20 МБ сколько угодно раз — ~7 ГБ
+    # в минуту в тот же том, где лежит база. Кончившийся диск останавливает
+    # Postgres, то есть гасит ботов всех клиентов сразу.
+    media_quota_mb_per_client: int = 300
+    # Через сколько часов неприкаянный файл считается мусором. Файл живёт
+    # между загрузкой и сохранением блока, поэтому не «сразу»: сутки — это с
+    # огромным запасом на «загрузил и ушёл пить чай».
+    media_orphan_ttl_hours: int = 24
 
     # CORS - Mini App origin(s), comma separated. "*" for local dev.
     cors_origins: str = "*"
@@ -107,6 +117,14 @@ class Settings(BaseSettings):
     # instead of a field per provider, since each wants a different set.
     platform_payment_credentials: str = ""
     platform_payment_is_test: bool = True
+    # Разрешить провайдер `test` в качестве НАШЕЙ кассы. Выключено, и это
+    # предохранитель: «Тестовая оплата» помечает счёт оплаченным по открытию
+    # ссылки. Для кассы клиента это давно запрещено словами «она отдаёт
+    # товар без денег» — а нашу собственную не защищало ничто, при том что
+    # `test` стоял дефолтом. Поставил цену, не заметил строку рядом — и
+    # каждая публикация бесплатна, с аккуратной записью `paid` в базе.
+    # Включать только на стенде.
+    platform_allow_test_till: bool = False
     # Price of publishing one bot, in minor units (kopeks/tiyn/cents).
     # 0 disables the paywall entirely — publishing stays free until a price
     # is actually configured, so a fresh deployment is never locked.

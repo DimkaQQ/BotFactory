@@ -27,6 +27,7 @@ for a guide and would just see a dead bot.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -214,29 +215,45 @@ async def sweep(db: AsyncSession) -> None:
             logger.exception("Billing sweep failed for bot %s", bot.id)
 
 
-async def _claim_notice(db: AsyncSession, bot: BotModel, stage: int) -> bool:
-    """Take the right to send this period's notice, or find it already taken.
+async def _notify_once(db: AsyncSession, bot: BotModel, stage: int, text: str) -> None:
+    """Tell the owner exactly once about this stage of this period.
 
-    One conditional UPDATE, the same shape `mark_paid` and `scheduler._claim`
-    use, and for the same reason: read-modify-write here meant two processes
-    both read `billing_notice_stage`, both decided to warn, and the owner got
-    the same message twice. That is also what stopped a second replica from
-    being safe to run at all.
+    A conditional UPDATE keeps two processes from both warning — the same
+    shape `mark_paid` and `scheduler._claim` use. What it must not do is
+    claim the stage and then lose the message, which is how this was first
+    written: the stage moved first, and if the send then failed the notice
+    was gone for good.
 
-    Claimed *before* the message goes out. The other order can send twice; a
-    claim that sends nothing only loses one reminder, and the next sweep
-    picks the owner up at the following stage.
+    And the send does fail, routinely: a bot cannot write first to someone
+    who has never written to it, so Telegram answers `Forbidden: bot can't
+    initiate conversation with a user` for every owner who signed in through
+    the web and never opened the constructor's bot. That is the main way
+    into the product. The claim was taken, the message never arrived, the
+    next sweep saw the stage occupied and said nothing — and the first
+    warning those owners got was their shop going dark.
+
+    So: send first, record second. The cost of the other order is a repeated
+    reminder if the process dies in between, which is a far smaller bill
+    than a silently suspended shop.
     """
+    if bot.billing_notice_stage >= stage:
+        return
+    try:
+        await _tell_owner(db, bot, text)
+    except Exception:
+        # Left unrecorded on purpose: unreachable today, reachable tomorrow
+        # (the owner opens the bot), and the next sweep will try again.
+        logger.warning("Could not reach the owner of bot %s about billing", bot.id, exc_info=True)
+        return
+
     result = await db.execute(
         update(BotModel)
         .where(BotModel.id == bot.id, BotModel.billing_notice_stage < stage)
         .values(billing_notice_stage=stage)
     )
     await db.commit()
-    if result.rowcount == 0:
-        return False
-    bot.billing_notice_stage = stage
-    return True
+    if result.rowcount:
+        bot.billing_notice_stage = stage
 
 
 async def _act_on(db: AsyncSession, bot: BotModel) -> None:
@@ -249,39 +266,43 @@ async def _act_on(db: AsyncSession, bot: BotModel) -> None:
     # the shop stayed dark on a period it had paid for.
     if status.state in ("active", "grace") and bot.status == BotStatus.disabled:
         if await resume(db, bot):
-            await _tell_owner(db, bot, f"✅ Бот {_name(bot)} снова в эфире — оплата прошла.")
+            # Good news only — an owner we cannot reach still gets the bot
+            # back, so a failed send must not undo any of the above.
+            with contextlib.suppress(Exception):
+                await _tell_owner(db, bot, f"✅ Бот {_name(bot)} снова в эфире — оплата прошла.")
             return
 
     if status.state == "active":
-        if await _claim_notice(db, bot, NOTICE_SOON):
-            await _tell_owner(
-                db, bot,
-                f"⏳ Оплаченный период бота {_name(bot)} заканчивается через {status.days_left} дн. "
-                f"Продли в конструкторе — бот продолжит работать без перерыва.",
-            )
+        await _notify_once(
+            db, bot, NOTICE_SOON,
+            f"⏳ Оплаченный период бота {_name(bot)} заканчивается через {status.days_left} дн. "
+            f"Продли в конструкторе — бот продолжит работать без перерыва.",
+        )
         return
 
     if status.state == "grace":
         left = max(0, (status.grace_until - datetime.now(timezone.utc)).days)
-        if await _claim_notice(db, bot, NOTICE_GRACE):
-            await _tell_owner(
-                db, bot,
-                f"⚠️ Период бота {_name(bot)} закончился. Бот пока работает — "
-                f"ещё {left} дн., потом уйдёт с эфира. Продли в конструкторе, "
-                f"сценарий и заказы никуда не денутся.",
-            )
+        await _notify_once(
+            db, bot, NOTICE_GRACE,
+            f"⚠️ Период бота {_name(bot)} закончился. Бот пока работает — "
+            f"ещё {left} дн., потом уйдёт с эфира. Продли в конструкторе, "
+            f"сценарий и заказы никуда не денутся.",
+        )
         return
 
     # Suspended. The message goes out before the webhook is pulled, so the
     # owner is told by us rather than by a customer asking why the bot is
     # silent.
-    if await _claim_notice(db, bot, NOTICE_SUSPENDED):
-        await _tell_owner(
-            db, bot,
-            f"⛔️ Бот {_name(bot)} снят с эфира — период не продлён. "
-            f"Всё сохранено: сценарий, настройки, заказы. Оплати продление в конструкторе, "
-            f"и бот вернётся в строй сразу же.",
-        )
+    await _notify_once(
+        db, bot, NOTICE_SUSPENDED,
+        f"⛔️ Бот {_name(bot)} снят с эфира — период не продлён. "
+        f"Всё сохранено: сценарий, настройки, заказы. Оплати продление в конструкторе, "
+        f"и бот вернётся в строй сразу же.",
+    )
+    # Suspension does not wait for the message to land. An owner we cannot
+    # reach is still an owner who has not paid, and the alternative — keeping
+    # every unreachable shop on the air forever — is worse than a silent
+    # switch-off. `_notify_once` keeps trying on later sweeps.
     if bot.status == BotStatus.active:
         await suspend(db, bot)
 
@@ -345,25 +366,48 @@ async def _tell_owner(db: AsyncSession, bot: BotModel, text: str) -> None:
     webhook we are about to remove — and «ваш бот выключен» arriving *from
     that bot* reads like a message to its customers.
     """
-    from aiogram import Bot as AiogramBot
-
     from app.models.client import Client
-    from app.services.telegram_session import build_bot_session
-
-    settings = get_settings()
-    if not settings.meta_bot_token:
-        logger.warning("No meta bot token — bot %s owner cannot be told about billing", bot.id)
-        return
 
     owner = (await db.execute(select(Client).where(Client.id == bot.client_id))).scalar_one_or_none()
     if owner is None or not owner.telegram_user_id:
         return
+    meta = _meta_bot()
+    if meta is None:
+        logger.warning("No meta bot token — bot %s owner cannot be told about billing", bot.id)
+        return
+    await meta.send_message(owner.telegram_user_id, text)
 
-    bot_api = AiogramBot(token=settings.meta_bot_token, session=build_bot_session())
-    try:
-        await bot_api.send_message(owner.telegram_user_id, text)
-    finally:
-        await bot_api.session.close()
+
+#: One shared instance rather than one per message. The sweep runs hourly
+#: over every bot whose period is ending, and building an `aiogram.Bot` each
+#: time meant a fresh aiohttp session — a thousand TCP connections an hour
+#: on a thousand bots, all from the one process.
+_meta_bot_instance = None
+
+
+def _meta_bot():
+    global _meta_bot_instance
+
+    from aiogram import Bot as AiogramBot
+
+    from app.services.telegram_session import build_bot_session
+
+    token = get_settings().meta_bot_token
+    if not token:
+        return None
+    if _meta_bot_instance is None:
+        _meta_bot_instance = AiogramBot(token=token, session=build_bot_session())
+    return _meta_bot_instance
+
+
+async def close_meta_bot() -> None:
+    """Let the shared session go at shutdown, like `bot_registry.close_all`."""
+    global _meta_bot_instance
+
+    if _meta_bot_instance is not None:
+        with contextlib.suppress(Exception):
+            await _meta_bot_instance.session.close()
+        _meta_bot_instance = None
 
 
 async def sweep_forever(every_seconds: float = SWEEP_SECONDS) -> None:

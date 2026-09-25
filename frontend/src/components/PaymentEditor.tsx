@@ -3,6 +3,8 @@ import { useEffect } from "react";
 import type { BlockContent, PaymentProviderInfo } from "../api/builderApi";
 
 interface Props {
+  /** Only used to keep this block's radio group to itself. */
+  blockId?: string;
   content: BlockContent;
   /** Which provider the bot is set up with — a payment block with none is
    * inert, and saying so here beats letting a customer hit a dead button. */
@@ -45,6 +47,7 @@ function PeriodField({
 }
 
 export function PaymentEditor({
+  blockId,
   content,
   provider,
   currencies,
@@ -53,6 +56,10 @@ export function PaymentEditor({
   onChange,
   onOpenSettings,
 }: Props) {
+  // Radio groups are keyed by `name`; without the block's own id two payment
+  // blocks open in turn would share one group, and picking a mode on the
+  // second would silently clear it on the first.
+  const blockKey = blockId ?? "payment";
   const options = currencies.length > 0 ? currencies : FALLBACK_CURRENCIES;
   const currency = content.currency && options.includes(content.currency) ? content.currency : options[0];
 
@@ -160,6 +167,37 @@ export function PaymentEditor({
           onChange={(e) => onChange({ ...content, button_label: e.target.value })}
         />
       </label>
+
+      {/* Покупают один раз или каждый раз заново. Выбор обязателен именно
+          здесь: по умолчанию бот считает товар разовым и вернувшемуся
+          покупателю говорит «уже оплачено» — для гайда это правильно, а для
+          консультации значит, что продавец работает бесплатно. */}
+      <div className="payment-editor__repeat">
+        <span className="buttons-editor__field-label">Как часто это покупают</span>
+        <label className="payment-editor__toggle">
+          <input
+            type="radio"
+            name={`repeat-${blockKey}`}
+            checked={!content.repeatable}
+            onChange={() => onChange({ ...content, repeatable: false })}
+          />
+          <span>Покупают один раз — потом бот просто выдаёт купленное</span>
+        </label>
+        <label className="payment-editor__toggle">
+          <input
+            type="radio"
+            name={`repeat-${blockKey}`}
+            checked={Boolean(content.repeatable)}
+            onChange={() => onChange({ ...content, repeatable: true })}
+          />
+          <span>Покупают снова и снова — каждый раз новый счёт</span>
+        </label>
+        <p className="payment-editor__field-hint">
+          {content.repeatable
+            ? "Подходит для услуг, записи, донатов и повторных заказов: тот же человек сможет купить ещё раз."
+            : "Подходит для гайда, курса, файла: вернувшийся покупатель получит купленное снова, но платить второй раз не будет."}
+        </p>
+      </div>
 
       {/* Subscription — the one place in the product where the difference
           between the providers actually changes what the owner is selling,

@@ -185,6 +185,14 @@ async def publish_bot(
     # "active" and then makes a network call that may not come back: the row
     # says the bot is on the air while Telegram has no webhook for it, so the
     # bot is silent and nothing in the product will ever retry.
+    # Перевыпуск на другой токен: снять вебхук со старого бота, иначе он
+    # продолжает слать апдейты на тот же /webhook/{bot_id} — секрет выводится
+    # из id бота, а не из токена, — и диспетчер отвечает на них от имени
+    # нового. Пользователи первого бота получают ответы второго.
+    previous = decrypt_token(bot.bot_token_encrypted) if bot.bot_token_encrypted else None
+    if previous and previous != payload.token.strip():
+        await bot_registry.remove(bot.id, previous)
+
     try:
         await bot_registry.register_webhook(bot.id, payload.token.strip())
     except Exception as exc:

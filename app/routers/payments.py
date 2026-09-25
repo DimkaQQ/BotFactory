@@ -24,7 +24,7 @@ from app.database import get_db
 from app.deps import get_current_client, get_owned_bot
 from app.models.bot import Bot as BotModel
 from app.models.bot import BotStatus
-from app.models.bot_block import BotBlock
+from app.models.bot_block import BlockType, BotBlock
 from app.models.bot_subscriber import BotSubscriber
 from app.models.client import Client
 from app.models.subscription import Subscription, SubscriptionStatus
@@ -367,6 +367,64 @@ async def publication_info(bot_id: uuid.UUID, bot: BotModel = Depends(get_owned_
         renewal_period_days=platform_billing.period_days(),
         renewal_grace_days=platform_billing.grace_days(),
     )
+
+
+@router.get("/api/bots/{bot_id}/polls")
+async def poll_results(
+    bot_id: uuid.UUID,
+    bot: BotModel = Depends(get_owned_bot),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Что ответили в опросах этого бота.
+
+    До этого ответы записывались в таблицу, которую никто не читал: ни
+    эндпоинта, ни экрана. Блок продавался как способ «узнать, чего хотят
+    подписчики», а узнать было негде.
+    """
+    from app.models.poll_answer import PollAnswer
+
+    blocks = (
+        await db.execute(
+            select(BotBlock).where(BotBlock.bot_id == bot_id, BotBlock.block_type == BlockType.poll)
+        )
+    ).scalars().all()
+
+    counts = dict(
+        (row[0], row[1])
+        for row in (
+            await db.execute(
+                select(PollAnswer.block_id, func.count(PollAnswer.id))
+                .where(PollAnswer.bot_id == bot_id)
+                .group_by(PollAnswer.block_id)
+            )
+        ).all()
+    )
+
+    answers = (
+        await db.execute(select(PollAnswer.block_id, PollAnswer.option_ids).where(PollAnswer.bot_id == bot_id))
+    ).all()
+
+    polls = []
+    for block in blocks:
+        content = block.content or {}
+        options = [str(o) for o in (content.get("options") or [])]
+        tally = [0] * len(options)
+        for block_id, option_ids in answers:
+            if block_id != block.id:
+                continue
+            for index in option_ids or []:
+                if 0 <= index < len(tally):
+                    tally[index] += 1
+        polls.append({
+            "block_id": str(block.id),
+            "question": content.get("question") or "",
+            "answered": counts.get(block.id, 0),
+            # Анонимный опрос Telegram присылает без пользователя, то есть
+            # ответов не будет вовсе — это надо сказать, а не показывать ноль.
+            "anonymous": bool(content.get("anonymous")),
+            "options": [{"label": label, "votes": tally[i]} for i, label in enumerate(options)],
+        })
+    return {"polls": polls}
 
 
 @router.get("/api/bots/{bot_id}/billing", response_model=BillingStateOut)
