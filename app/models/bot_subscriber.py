@@ -46,6 +46,13 @@ class BotSubscriber(Base):
     #: instead of burning a retry on every run, forever.
     blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    #: Set when the person asked to stop (/stop). Deliberately separate from
+    #: `blocked_at`: that one is reset the moment they write again — as it
+    #: should be, it means "Telegram lets us through once more" — and reusing
+    #: it for consent meant a single «привет» silently re-subscribed someone
+    #: who had opted out. Only another /start clears this.
+    unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

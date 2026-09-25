@@ -46,6 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bot import Bot as BotModel
 from app.models.bot_block import BlockType, BotBlock
+from app.services import dates
 from app.services import scheduler, subscribers
 
 logger = logging.getLogger(__name__)
@@ -590,6 +591,23 @@ def _split_for_telegram(text: str) -> list[str]:
     return pieces
 
 
+async def _send_media_only(bot: Bot, chat_id: int, block: BotBlock) -> None:
+    """Вложение блока без его текста — текст уже ушёл с приглашением."""
+    content = block.content or {}
+    file_id = content.get("media_file_id")
+    media_type = content.get("media_type")
+    if not file_id:
+        return
+    if media_type == "photo":
+        await bot.send_photo(chat_id, file_id)
+    elif media_type == "audio":
+        await bot.send_audio(chat_id, file_id)
+    elif media_type == "video":
+        await bot.send_video(chat_id, file_id)
+    else:
+        await bot.send_document(chat_id, file_id)
+
+
 async def walk_chain(
     bot: Bot,
     chat_id: int,
@@ -701,7 +719,15 @@ async def walk_chain(
                     handled = await _deliver_group_invite(
                         bot, chat_id, block, bot_id, db, telegram_user_id
                     )
-                if not handled:
+                # Приглашение в группу и файл — не «или-или». Продавец,
+                # который продаёт «доступ в клуб + методичку», прикладывает к
+                # блоку и то и другое, а получал покупатель только клуб:
+                # приглашение считалось обработкой всего блока, и файл молча
+                # не уходил. Текст при этом уже ушёл вместе с приглашением,
+                # поэтому дальше отправляется только вложение.
+                if handled and (block.content or {}).get("media_file_id"):
+                    await _send_media_only(bot, chat_id, block)
+                elif not handled:
                     await _send_block(bot, chat_id, block, db)
         except Exception:
             logger.exception("Failed to send block %s for bot %s", block.id, bot_id)
@@ -874,7 +900,7 @@ async def _handle_successful_payment(bot: Bot, message: dict, bot_id: uuid.UUID,
 async def _tell_them_renewed(bot: Bot, subscription) -> None:
     """A charge nobody initiated should still be announced — silence after
     money leaves an account is how a subscription becomes a complaint."""
-    until = subscription.current_period_end.strftime("%d.%m.%Y")
+    until = dates.day(subscription.current_period_end)
     with contextlib.suppress(Exception):
         await bot.send_message(
             subscription.chat_id,
@@ -944,6 +970,19 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
     if chat_id is None:
         return
 
+    # Отписка. До этого выйти из рассылки можно было только заблокировав
+    # бота — а `blocked_at` сбрасывается первым же сообщением от человека,
+    # так что одно «спасибо» возвращало его в рассылку. Человек, который не
+    # может отписаться, жалуется не боту, а Telegram.
+    if text.startswith("/stop"):
+        await subscribers.set_unsubscribed(db, bot_id, sender_id, value=True)
+        await bot.send_message(
+            chat_id,
+            "Готово — рассылку больше не пришлю 👍\nПокупки и доступы это не отменяет. "
+            "Если передумаешь, напиши /start.",
+        )
+        return
+
     result = await db.execute(select(BotModel.start_block_id).where(BotModel.id == bot_id))
     start_block_id = result.scalar_one_or_none()
 
@@ -957,6 +996,10 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
                 "Я отвечаю на кнопки под сообщениями 🙂\nНапиши /start, чтобы начать сначала.",
             )
         return
+
+    # Явный /start — единственное, что снимает отписку: вернуться человек
+    # должен сам, а не потому, что однажды что-то написал.
+    await subscribers.set_unsubscribed(db, bot_id, sender_id, value=False)
 
     if start_block_id is None:
         await bot.send_message(chat_id, "Этот бот пока пуст 🤷")

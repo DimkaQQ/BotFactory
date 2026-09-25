@@ -30,6 +30,24 @@ class Settings(BaseSettings):
     # Fernet master key used to encrypt client bot tokens at rest.
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     fernet_key: str = ""
+    # Прежние ключи, через запятую: ими только РАСШИФРОВЫВАЮТ. Нужны, чтобы
+    # смену ключа можно было пережить, а не устроить катастрофу: до этого
+    # ключ был один на всё — токены ботов, ключи касс клиентов, секреты
+    # вебхуков, сессии веб-входа, — и на вопрос «что делать, если он утёк»
+    # ответа не было вовсе. Замена ключа разом разлогинивала всех и делала
+    # нечитаемыми все токены и все чужие кассы, без пути назад.
+    #
+    # Ротация: новый ключ в FERNET_KEY, старый — сюда, перезапуск, затем
+    # `python -m app.rotate_keys` (перешифрует всё хранимое новым ключом),
+    # и только после этого старый ключ можно убрать отсюда.
+    fernet_keys_retired: str = ""
+    # Ключ, из которого выводится `secret_token` вебхука. Пуст — берётся
+    # FERNET_KEY, как было. Задать его отдельно стоит именно перед первой
+    # ротацией: иначе смена FERNET_KEY меняет секреты всех вебхуков разом, и
+    # Telegram продолжает слать старые, пока `refresh_all_webhooks` не
+    # переставит их при следующем запуске (он это делает, но в этом окне
+    # боты молчат).
+    webhook_secret_key: str = ""
 
     # Subscriptions (recurring billing + the scheduler behind it) are built
     # and tested but switched off while the one-off sale is being shaken out
@@ -64,6 +82,12 @@ class Settings(BaseSettings):
     # между загрузкой и сохранением блока, поэтому не «сразу»: сутки — это с
     # огромным запасом на «загрузил и ушёл пить чай».
     media_orphan_ttl_hours: int = 24
+
+    # Часовой пояс, в котором боты называют даты покупателям и владельцам
+    # («доступ до 24.10.2026»). Всё хранится в UTC и считается в UTC — это
+    # правильно, — но показывать UTC человеку в UTC+6 значит иногда назвать
+    # дату на сутки раньше. Имя из базы IANA: Europe/Moscow, Asia/Almaty.
+    display_timezone: str = "UTC"
 
     # CORS - Mini App origin(s), comma separated. "*" for local dev.
     cors_origins: str = "*"
@@ -148,6 +172,14 @@ class Settings(BaseSettings):
     # a shop with paying customers must never be switched off the same hour
     # a card expires.
     renewal_grace_days: int = 7
+
+    @property
+    def retired_key_list(self) -> list[str]:
+        return [k.strip() for k in self.fernet_keys_retired.split(",") if k.strip()]
+
+    @property
+    def webhook_key(self) -> str:
+        return self.webhook_secret_key or self.fernet_key
 
     @property
     def webapp_url(self) -> str:

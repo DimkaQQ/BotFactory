@@ -37,6 +37,7 @@ from app.models.bot import Bot as BotModel
 from app.models.bot_block import BotBlock
 from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
+from app.services import dates
 from app.services import scheduler
 from app.services.payments import get_provider
 from app.services.payments.base import ProviderError, RecurringMode, RecurringSetup
@@ -428,7 +429,7 @@ async def _tell_them_the_charge_failed(db: AsyncSession, subscription: Subscript
         instance = await bot_registry.get_or_create(subscription.bot_id, db)
         if instance is None:
             return
-        ends = subscription.current_period_end.strftime("%d.%m.%Y")
+        ends = dates.day(subscription.current_period_end)
         await instance.send_message(
             subscription.chat_id,
             f"⚠️ Не получилось списать оплату за «{subscription.title}».\n"
@@ -447,7 +448,7 @@ async def _tell_them_it_renewed(db: AsyncSession, subscription: Subscription) ->
     with contextlib.suppress(Exception):
         instance = await bot_registry.get_or_create(subscription.bot_id, db)
         if instance is not None:
-            until = subscription.current_period_end.strftime("%d.%m.%Y")
+            until = dates.day(subscription.current_period_end)
             await instance.send_message(
                 subscription.chat_id,
                 f"🔁 Подписка «{subscription.title}» продлена — доступ открыт до {until}.",

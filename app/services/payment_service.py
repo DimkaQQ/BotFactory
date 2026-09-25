@@ -27,6 +27,7 @@ from app.config import get_settings
 from app.models.bot import Bot as BotModel
 from app.models.bot_block import BotBlock
 from app.models.payment import Payment, PaymentKind, PaymentStatus
+from app.services import dates
 from app.services import payments as payment_providers
 from app.services.payments import CheckoutRequest, ProviderError
 from app.services.security import decrypt_token, encrypt_token
@@ -1142,7 +1143,7 @@ async def _notify_owner_of_sale(db: AsyncSession, payment: Payment) -> None:
             f"Покупатель: {who}",
         ]
         if subscription is not None:
-            until = subscription.current_period_end.strftime("%d.%m.%Y")
+            until = dates.day(subscription.current_period_end)
             lines.append(f"Доступ оплачен до {until}")
         await instance.send_message(owner_id, "\n".join(lines))
     except Exception:

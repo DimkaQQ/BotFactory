@@ -8,11 +8,12 @@ order), and the scheduler (where to send next week's video).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,6 +102,25 @@ async def get(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None)
         )
     )
     return result.scalar_one_or_none()
+
+
+async def set_unsubscribed(
+    db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None, *, value: bool
+) -> None:
+    """Записать «больше не пишите» или снять его.
+
+    Снимается только явным /start: человек, который вернулся и написал
+    «спасибо», согласия на рассылку этим не давал.
+    """
+    if telegram_user_id is None:
+        return
+    with contextlib.suppress(Exception):
+        await db.execute(
+            update(BotSubscriber)
+            .where(BotSubscriber.bot_id == bot_id, BotSubscriber.telegram_user_id == telegram_user_id)
+            .values(unsubscribed_at=datetime.now(timezone.utc) if value else None)
+        )
+        await db.commit()
 
 
 async def mark_blocked(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None) -> None:

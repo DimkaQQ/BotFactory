@@ -170,6 +170,56 @@ async def _give_up_or_retry(db: AsyncSession, step: ScheduledStep, error: str) -
     await db.commit()
 
 
+#: Сколько ждать возвращения снятого бота, прежде чем признать, что он не
+#: вернётся. Заметно больше грейса (7 дней) и больше периода (30): владелец,
+#: который оплатил через три недели, должен получить свою очередь целой.
+_HOLD_LIMIT = timedelta(days=45)
+#: Как часто проверять, не вернулся ли он. Не чаще: ожидание измеряется
+#: днями, а каждая проверка — это строка, поднятая из очереди.
+_HOLD_RECHECK = timedelta(hours=1)
+
+
+async def _bot_is_merely_off_the_air(db: AsyncSession, bot_id: uuid.UUID) -> bool:
+    """Бот выключен, но жив: токен на месте, вернуть его может одна оплата."""
+    from app.models.bot import Bot as BotModel
+    from app.models.bot import BotStatus
+
+    row = (
+        await db.execute(
+            select(BotModel.status, BotModel.bot_token_encrypted).where(BotModel.id == bot_id)
+        )
+    ).first()
+    return bool(row and row[0] == BotStatus.disabled and row[1])
+
+
+async def _hold(db: AsyncSession, step: ScheduledStep, reason: str) -> None:
+    """Отложить, не тратя попытку.
+
+    Попытки считают отказы, а это не отказ: слать некуда не потому, что
+    что-то сломалось, а потому что бот ждёт оплаты. Шаг остаётся pending и
+    возвращается через час — и так до `_HOLD_LIMIT`, после чего сдаёмся
+    честно, с причиной, которую видно в очереди.
+    """
+    now = datetime.now(timezone.utc)
+    created = step.created_at if step.created_at.tzinfo else step.created_at.replace(tzinfo=timezone.utc)
+    if now - created > _HOLD_LIMIT:
+        step.status = StepStatus.cancelled
+        step.last_error = f"{reason}: не дождались за {_HOLD_LIMIT.days} дн."
+        step.ran_at = now
+        await db.commit()
+        logger.warning("Scheduled step %s cancelled: %s", step.id, step.last_error)
+        return
+    step.status = StepStatus.pending
+    step.run_at = now + _HOLD_RECHECK
+    step.last_error = reason
+    # `_claim` увеличивает счётчик попыток на входе — а удержание попыткой не
+    # является. Без отката ожидание само сожгло бы лимит за пять часов, и
+    # смысл удержания пропал бы полностью: шаг дождался бы возвращения бота
+    # уже помеченным failed.
+    step.attempts = max(0, step.attempts - 1)
+    await db.commit()
+
+
 async def _still_entitled(db: AsyncSession, step: ScheduledStep) -> str | None:
     """Reason not to send, or None to go ahead."""
     if step.subscription_id is None:
@@ -266,6 +316,17 @@ async def _run_step(step_id: uuid.UUID) -> None:
         try:
             bot_instance = await bot_registry.get_or_create(step.bot_id, db)
             if bot_instance is None:
+                # "Бот не отвечает" бывает двух совершенно разных сортов, и
+                # раньше оба считались неудачей. Снятый за неоплату бот
+                # сжигал пять попыток за пять часов, после чего ВСЁ, что
+                # было запланировано его подписчикам, помечалось failed
+                # навсегда. Владелец платил на следующий день, бот
+                # возвращался — а уроки, за которые люди уже отдали деньги,
+                # не приходили никогда. Грейс-период существует ровно
+                # затем, чтобы такого не было, и обрывался на полпути.
+                if await _bot_is_merely_off_the_air(db, step.bot_id):
+                    await _hold(db, step, "бот снят с эфира — ждём продления")
+                    return
                 await _give_up_or_retry(db, step, "у бота нет токена")
                 return
             await bot_dispatcher.walk_chain(

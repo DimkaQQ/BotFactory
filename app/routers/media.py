@@ -43,11 +43,29 @@ _IMAGE_MAGIC: dict[str, bytes] = {
 _RIFF_MAGIC: dict[str, tuple[bytes, bytes]] = {
     "image/webp": (b"RIFF", b"WEBP"),
 }
-#: Documents are sniffed too, and these two have unambiguous signatures.
+#: Documents are sniffed too. Every declared type gets an entry — the two
+#: that did not (`application/epub+zip` and `application/x-zip-compressed`)
+#: happily accepted an ELF binary or a page of HTML, which made this a free
+#: file host on our own domain for anything at all.
 _DOC_MAGIC: dict[str, bytes] = {
     "application/pdf": b"%PDF-",
     # Every zip-family container, .epub and modern Office files included.
     "application/zip": b"PK\x03\x04",
+    "application/epub+zip": b"PK\x03\x04",
+    "application/x-zip-compressed": b"PK\x03\x04",
+}
+
+#: Audio and video, sniffed to the extent their containers allow. MP3 comes
+#: either with an ID3 tag or with a bare frame header, and MP4/MOV/M4A put
+#: their `ftyp` box four bytes in — so these are matched at an offset rather
+#: than at the start.
+_AUDIO_VIDEO_MAGIC: dict[str, tuple[int, tuple[bytes, ...]]] = {
+    "audio/mpeg": (0, (b"ID3", b"\xff\xfb", b"\xff\xf3", b"\xff\xf2", b"\xff\xfa")),
+    "audio/ogg": (0, (b"OggS",)),
+    "audio/mp4": (4, (b"ftyp",)),
+    "video/mp4": (4, (b"ftyp",)),
+    "video/quicktime": (4, (b"ftyp", b"moov", b"mdat", b"free", b"wide")),
+    "video/webm": (0, (b"\x1a\x45\xdf\xa3",)),
 }
 _ALLOWED: dict[str, tuple[str, str]] = {
     "image/jpeg": (".jpg", "photo"),
@@ -112,6 +130,14 @@ async def upload_media(
     doc = _DOC_MAGIC.get(content_type)
     if doc and not data.startswith(doc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Файл не похож на заявленный формат")
+
+    media_magic = _AUDIO_VIDEO_MAGIC.get(content_type)
+    if media_magic:
+        offset, signatures = media_magic
+        if not any(data[offset:offset + len(sig)] == sig for sig in signatures):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Файл не похож на заявленный формат"
+            )
 
     # A folder per client, which is what makes both the quota below and the
     # sweep in `media_gc` possible at all: with everything in one flat

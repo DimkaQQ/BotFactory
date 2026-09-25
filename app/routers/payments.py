@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Literal
 
@@ -27,6 +28,7 @@ from app.models.bot import BotStatus
 from app.models.bot_block import BlockType, BotBlock
 from app.models.bot_subscriber import BotSubscriber
 from app.models.client import Client
+from app.models.scheduled_step import ScheduledStep
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.schemas.payment import (
@@ -686,6 +688,13 @@ class BroadcastIn(BaseModel):
     audience: Literal["all", "subscribers"] = "all"
 
 
+#: Окно, в которое повторная рассылка того же блока считается случайной.
+#: Достаточно длинное, чтобы покрыть «нажал ещё раз, потому что не понял,
+#: сработало ли», и достаточно короткое, чтобы не мешать исправить опечатку
+#: и отправить заново осознанно.
+_BROADCAST_COOLDOWN = timedelta(minutes=10)
+
+
 @router.post("/api/bots/{bot_id}/broadcast")
 async def broadcast(
     bot_id: uuid.UUID,
@@ -720,11 +729,37 @@ async def broadcast(
             detail="Бот не опубликован — рассылать пока некому и нечем.",
         )
 
+    # Двойной клик, повторная отправка формы, вкладка, которую переоткрыли —
+    # и каждый подписчик получает сообщение дважды. Рассылка необратима, её
+    # нельзя «отменить после отправки», поэтому защита стоит до постановки в
+    # очередь, а не после.
+    recent = await db.execute(
+        select(func.count(ScheduledStep.id)).where(
+            ScheduledStep.bot_id == bot_id,
+            ScheduledStep.block_id == block.id,
+            ScheduledStep.reason == "broadcast",
+            ScheduledStep.created_at > datetime.now(timezone.utc) - _BROADCAST_COOLDOWN,
+        )
+    )
+    if recent.scalar_one():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Эта рассылка уже отправлена — повтор возможен через "
+                f"{int(_BROADCAST_COOLDOWN.total_seconds() // 60)} мин. "
+                f"Так двойной клик не дублирует сообщение подписчикам."
+            ),
+        )
+
     query = select(BotSubscriber).where(
         BotSubscriber.bot_id == bot_id,
         # Someone who blocked the bot cannot be written to, and trying would
         # burn a retry on every sweep from now on.
         BotSubscriber.blocked_at.is_(None),
+        # И тот, кто попросил не писать. Отписка — это не «заблокировал»:
+        # человек остаётся покупателем и сохраняет доступы, он лишь не хочет
+        # рассылки.
+        BotSubscriber.unsubscribed_at.is_(None),
     )
     if payload.audience == "subscribers":
         query = query.where(

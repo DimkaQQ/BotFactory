@@ -10,25 +10,41 @@ import hashlib
 import hmac
 from functools import lru_cache
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from app.config import get_settings
 
 
 @lru_cache
-def _fernet() -> Fernet:
+def _fernet() -> MultiFernet:
+    """Encrypt with the current key, decrypt with any key we still hold.
+
+    A single key was the one thing here with no way out: it protects bot
+    tokens, the shops' own acquirer credentials, webhook secrets and web
+    sessions at once, so the standard answer to a leak — change the key —
+    logged everyone out, made every bot token unreadable and destroyed every
+    client's payment credentials, irreversibly. There was no rotation path
+    at all, which is a poor thing to discover on the day you need one.
+
+    `MultiFernet` encrypts with the first key and tries all of them when
+    decrypting, so a rotation is: put the new key first, keep the old one in
+    `FERNET_KEYS_RETIRED`, re-encrypt at leisure (`python -m app.rotate_keys`),
+    then drop the old one.
+    """
     settings = get_settings()
     if not settings.fernet_key:
         raise RuntimeError(
             "FERNET_KEY is not set. Generate one with: "
             "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
         )
-    return Fernet(settings.fernet_key.encode())
+    keys = [Fernet(settings.fernet_key.encode())]
+    keys += [Fernet(old.encode()) for old in settings.retired_key_list]
+    return MultiFernet(keys)
 
 
-def get_fernet() -> Fernet:
-    """Shared Fernet instance, for other modules that need authenticated
-    encryption under the same master key (e.g. web session tokens)."""
+def get_fernet() -> MultiFernet:
+    """Shared instance, for other modules that need authenticated encryption
+    under the same master key (e.g. web session tokens)."""
     return _fernet()
 
 
@@ -55,5 +71,10 @@ def webhook_secret(bot_id) -> str:
     no migration, and it differs per bot so one leaked secret says nothing
     about any other. Telegram allows 1-256 chars of `A-Za-z0-9_-`; hex fits.
     """
-    key = get_settings().fernet_key.encode()
+    # `webhook_key`, а не сам FERNET_KEY: иначе ротация ключа меняет секреты
+    # всех вебхуков разом, Telegram продолжает слать старые, и каждый бот
+    # молчит до следующего запуска процесса. Пока WEBHOOK_SECRET_KEY не
+    # задан, это тот же ключ — то есть для существующих деплоев не меняется
+    # ничего.
+    key = get_settings().webhook_key.encode()
     return hmac.new(key, f"webhook:{bot_id}".encode(), hashlib.sha256).hexdigest()
