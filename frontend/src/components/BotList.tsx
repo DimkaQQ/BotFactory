@@ -180,7 +180,19 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
 
   async function handleDelete(bot: Bot, e: React.MouseEvent) {
     e.stopPropagation();
-    const confirmed = await confirmDialog(`Удалить бота ${botTitle(bot)}? Это нельзя отменить.`);
+    // Диалог говорил только «это нельзя отменить», умалчивая о том, что
+    // уходит вместе с ботом: история продаж (в базе каскад по bot_id),
+    // оплаченный период и сама оплата запуска. Для человека, которому
+    // однажды понадобится доказать, что ему заплатили, это дорого.
+    const extra = [
+      bot.status !== "draft" ? "оплата запуска" : "",
+      bot.paid_until ? "оставшийся оплаченный период" : "",
+    ].filter(Boolean);
+    const confirmed = await confirmDialog(
+      `Удалить бота ${botTitle(bot)}?\n\nВместе с ним навсегда пропадёт история продаж и заказы` +
+        (extra.length ? `, а также ${extra.join(" и ")}` : "") +
+        ". Это нельзя отменить.",
+    );
     if (!confirmed) return;
 
     setDeletingId(bot.id);

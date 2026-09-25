@@ -312,12 +312,12 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                     </label>
                   )}
 
-                  {settings?.callback_url && settings.provider === active.slug && active.uses_callback && (
+                  {settings?.callback_base && !active.sends_own_callback_url && active.uses_callback && (
                     <div className="payment-settings__callback">
                       <span className="buttons-editor__field-label">
                         Этот адрес нужно указать в кабинете платёжной системы как уведомление об оплате
                       </span>
-                      <code>{settings.callback_url}</code>
+                      <code>{`${settings.callback_base}/${active.slug}`}</code>
                     </div>
                   )}
                 </>
@@ -421,6 +421,16 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                           <span className="orders__log-meta">
                             {STATUS_LABEL[order.status]} · {when(order.paid_at ?? order.created_at)}
                             {order.buyer && ` · ${order.buyer.title}`}
+                            {/* Оплачено — ещё не значит доставлено, и это
+                                единственное место, где продавец может об
+                                этом узнать сам. */}
+                            {order.status === "paid" && !order.delivered && (
+                              <span className="orders__undelivered">
+                                {order.delivery_gave_up
+                                  ? " · ⛔️ товар не выдан"
+                                  : " · ⏳ товар ещё не доставлен"}
+                              </span>
+                            )}
                           </span>
                         </span>
                         <span className="orders__log-amount">

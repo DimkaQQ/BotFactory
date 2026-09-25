@@ -219,6 +219,10 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       found.push("Касса не подключена — бот не сможет принять оплату.");
     } else if (payBlocks.length > 0 && paymentSettings && !paymentSettings.ready) {
       found.push(`В кассе не заполнено: ${paymentSettings.missing_fields.join(", ")} — оплата не откроется.`);
+    } else if (payBlocks.length > 0 && paymentSettings && !paymentSettings.live) {
+      // Галочка «тестовый режим» стоит по умолчанию — то есть по умолчанию
+      // бот выходит в эфир, не принимая настоящих денег.
+      found.push("Касса в тестовом режиме — платежи будут ненастоящими. Выключи его в настройках кассы.");
     }
 
     const priceless = payBlocks.filter((b) => {
@@ -466,7 +470,15 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   async function handleDeleteBot() {
     if (!bot) return;
     const label = bot.telegram_bot_username ? `@${bot.telegram_bot_username}` : "этого бота";
-    const confirmed = await confirmDialog(`Удалить ${label}? Это нельзя отменить.`);
+    // То же, что и в списке ботов: сказать, что именно уходит. Здесь корзина
+    // стоит рядом с «Касса подключена», то есть под рукой в самый обычный
+    // день работы.
+    const sold = sales && sales.paid_count > 0 ? ` (продаж: ${sales.paid_count})` : "";
+    const confirmed = await confirmDialog(
+      `Удалить ${label}?\n\nВместе с ним навсегда пропадёт история продаж и заказы${sold}` +
+        (bot.paid_until ? ", а также оставшийся оплаченный период" : "") +
+        ". Это нельзя отменить.",
+    );
     if (!confirmed) return;
 
     setDeleting(true);
@@ -520,7 +532,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               <button
                 type="button"
                 className={`bot-payments-button ${
-                  paymentSettings?.ready
+                  paymentSettings?.live
                     ? "bot-payments-button--on"
                     : paymentSettings?.provider
                       ? "bot-payments-button--half"
@@ -528,11 +540,13 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 }`}
                 onClick={() => setPaymentPanelOpen(true)}
                 title={
-                  paymentSettings?.ready
+                  paymentSettings?.live
                     ? "Платёжная система, через которую бот принимает деньги"
-                    : paymentSettings?.provider
-                      ? `Касса выбрана, но не заполнено: ${paymentSettings.missing_fields.join(", ")}`
-                      : "Платёжная система, через которую бот принимает деньги"
+                    : paymentSettings?.ready
+                      ? "Касса в тестовом режиме — платежи ненастоящие"
+                      : paymentSettings?.provider
+                        ? `Касса выбрана, но не заполнено: ${paymentSettings.missing_fields.join(", ")}`
+                        : "Платёжная система, через которую бот принимает деньги"
                 }
               >
                 {/* Two labels, one shown at a time by CSS: on a 390px phone
@@ -541,13 +555,15 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 {/* Три состояния, а не два. «Касса подключена» по факту
                     выбранного провайдера было прямой ложью: ключи пустые,
                     оплата не откроется, а владелец видит зелёное. */}
-                {paymentSettings?.ready ? "💳" : paymentSettings?.provider ? "⚠️" : "💳"}{" "}
+                {paymentSettings?.live ? "💳" : paymentSettings?.provider ? "⚠️" : "💳"}{" "}
                 <span className="bot-payments-button__long">
-                  {paymentSettings?.ready
+                  {paymentSettings?.live
                     ? "Касса подключена"
-                    : paymentSettings?.provider
-                      ? "Касса не настроена"
-                      : "Подключить кассу"}
+                    : paymentSettings?.ready
+                      ? "Касса в тестовом режиме"
+                      : paymentSettings?.provider
+                        ? "Касса не настроена"
+                        : "Подключить кассу"}
                 </span>
                 <span className="bot-payments-button__short">Касса</span>
               </button>

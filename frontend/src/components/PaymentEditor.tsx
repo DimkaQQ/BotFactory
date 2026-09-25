@@ -24,6 +24,32 @@ interface Props {
 // Only used before a provider is chosen; once one is, its own list wins.
 const FALLBACK_CURRENCIES = ["RUB", "KZT", "USD", "EUR"];
 
+/** Оставить из набранного число, которое означает ровно то, что человек имел
+ * в виду.
+ *
+ * Прежний фильтр пропускал любые точки и запятые, и «1.500» — привычная
+ * запись полутора тысяч — молча становилась счётом на 1.50 ₽. Владелец видел
+ * свою цифру в поле и узнавал правду от покупателя.
+ *
+ * Правило простое: копейки — это одна или две цифры. Разделитель, за которым
+ * идут ровно три цифры, разделяет тысячи и выбрасывается; несколько
+ * разделителей — тем более. Всё остальное остаётся как набрано, иначе
+ * фильтр воевал бы с человеком, который посреди набора «1500.5» успел
+ * поставить точку. */
+function cleanPrice(raw: string, isStars: boolean): string {
+  // Звёзды бывают только целыми — дробная часть всё равно не дойдёт до кассы.
+  if (isStars) return raw.replace(/[^\d]/g, "");
+
+  const text = raw.replace(/[^\d.,]/g, "");
+  const parts = text.split(/[.,]/);
+  if (parts.length === 1) return text;
+  // «1.000.000» — разделители тысяч, все до одного.
+  if (parts.length > 2) return parts.join("");
+  // «1.500» — тоже тысячи: копеек из трёх цифр не бывает.
+  if (parts[1].length === 3) return parts.join("");
+  return text;
+}
+
 /** Editor for a payment block: what's being sold, for how much, and what
  * the button says. What happens *after* the money lands is the block's
  * plain arrow on the canvas — usually a delivery block. */
@@ -76,6 +102,15 @@ export function PaymentEditor({
     }
   }, [content, currency, onChange]);
   const isStars = currency === "XTR";
+  // Надпись считается устаревшей, только если в ней есть какое-то число и
+  // это не число из поля цены: «Купить курс» без суммы — нормальная подпись,
+  // которая ничего не обещает.
+  const price = String(content.price ?? "").replace(",", ".").trim();
+  const labelNumbers = (content.button_label ?? "").match(/\d+(?:[.,]\d+)?/g) ?? [];
+  const staleLabel =
+    price !== "" &&
+    labelNumbers.length > 0 &&
+    !labelNumbers.some((found) => found.replace(",", ".") === price);
   // What this particular gateway can do about the next period. Three
   // genuinely different answers, and the owner is choosing a business
   // model here, not a checkbox.
@@ -138,7 +173,7 @@ export function PaymentEditor({
                 ...content,
                 // Stars come only in whole units — letting a "990.50" be
                 // typed here would just fail later, at the checkout.
-                price: e.target.value.replace(isStars ? /[^\d]/g : /[^\d.,]/g, ""),
+                price: cleanPrice(e.target.value, isStars),
               })
             }
           />
@@ -178,6 +213,24 @@ export function PaymentEditor({
       {content.price !== undefined && !(Number(String(content.price).replace(",", ".")) > 0) && (
         <p className="payment-editor__note payment-editor__note--manual">
           ⚠️ Без цены бот не сможет выставить счёт — покупатель увидит ошибку вместо оплаты.
+        </p>
+      )}
+
+      {/* Своя надпись живёт отдельно от цены, и это ловушка: написал
+          «Оплатить 990 ₽», поднял цену — кнопка осталась прежней, а счёт
+          уходит на новую сумму. Ни редактор, ни предпросмотр об этом не
+          говорили, и первым замечал покупатель. */}
+      {staleLabel && (
+        <p className="payment-editor__note payment-editor__note--manual">
+          ⚠️ На кнопке написана другая сумма, а счёт уйдёт на {content.price} {currency}.{" "}
+          <button
+            type="button"
+            className="payment-editor__fix-link"
+            onClick={() => onChange({ ...content, button_label: "" })}
+          >
+            Убрать свою надпись
+          </button>{" "}
+          — тогда она будет подставляться сама.
         </p>
       )}
 

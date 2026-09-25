@@ -5702,3 +5702,20 @@
 .bot-sales-button:hover {
   border-color: var(--accent-success);
 }
+
+/* Ссылка-починка внутри предупреждения: «убрать свою надпись». */
+.payment-editor__fix-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-on-surface);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* «Оплачен, но не доставлен» — в журнале продаж это важнее самой оплаты. */
+.orders__undelivered {
+  color: var(--tg-destructive);
+  font-weight: 600;
+}

@@ -49,16 +49,19 @@ class Settings(BaseSettings):
     # боты молчат).
     webhook_secret_key: str = ""
 
-    # Subscriptions (recurring billing + the scheduler behind it) are built
-    # and tested but switched off while the one-off sale is being shaken out
-    # on real shops. Off means two things at once, deliberately: the payment
-    # block stops offering the toggle, *and* a block already marked as a
-    # subscription is treated as an ordinary sale — hiding the control alone
-    # would leave old blocks quietly charging on a cycle nobody can see.
+    # Подписки: регулярная оплата и планировщик за ней. Были выключены, пока
+    # обкатывалась разовая продажа; включены обратно, потому что без них
+    # продукт не закрывает самый частый сценарий своей аудитории — закрытый
+    # канал за деньги в месяц. Клиент, который пришёл именно за этим, собрать
+    # его не мог, а лендинг доступ в канал обещал.
     #
-    # Flip to true (SUBSCRIPTIONS_ENABLED=1) to turn it all back on;
-    # nothing is deleted, and no data migrates either way.
-    subscriptions_enabled: bool = False
+    # Выключение (SUBSCRIPTIONS_ENABLED=0) по-прежнему означает две вещи
+    # сразу: блок оплаты перестаёт предлагать переключатель, *и* блок, уже
+    # помеченный подпиской, продаётся как обычная разовая покупка — прятать
+    # одну галочку мало, иначе старые блоки продолжали бы списывать по циклу,
+    # которого в интерфейсе не видно. Ничего не удаляется и не мигрирует ни в
+    # ту, ни в другую сторону.
+    subscriptions_enabled: bool = True
 
     # ---- Пределы на одного клиента ----
     # Регистрация бесплатна и открыта всякому, у кого есть Telegram, а

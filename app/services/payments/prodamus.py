@@ -116,6 +116,8 @@ _FAILED = {"failed", "fail", "canceled", "cancelled", "rejected", "error", "expi
 
 
 class ProdamusProvider(ProviderDefaults):
+    #: Адрес уведомления уходит в самом счёте — вписывать его в кабинете не нужно.
+    sends_own_callback_url = True
     slug = "prodamus"
     title = "Prodamus"
     hint = (

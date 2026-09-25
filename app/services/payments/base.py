@@ -156,6 +156,12 @@ class PaymentProvider(Protocol):
     block_fields: tuple[CredentialField, ...]
     #: Whether this provider notifies us over `/webhook/pay/{slug}` at all.
     uses_callback: bool
+    #: Отправляем ли мы адрес уведомления сами, в каждом счёте. Отдельно от
+    #: `uses_callback`: тот отвечает «шлюз нам звонит», а этот — «нужно ли
+    #: владельцу что-то вписывать у себя в кабинете». Настройки показывали
+    #: обе подсказки сразу — «подставляем сами» и тут же «укажи в кабинете»,
+    #: — и человек шёл вписывать адрес туда, где он уже есть.
+    sends_own_callback_url: bool
     #: Whether "тестовый режим" means anything for this provider.
     has_test_mode: bool
     #: Whether this gateway can be charged a second time, and by whom.
@@ -270,6 +276,7 @@ class ProviderDefaults:
     #: provider. Drives whether the settings form shows a callback address to
     #: paste into a merchant dashboard.
     uses_callback = True
+    sends_own_callback_url = False
     #: Whether "тестовый режим" means anything here, and so whether the
     #: settings form offers the switch. Kept separate from `uses_callback`:
     #: tying the two together left Processing.kz — which has no callback but

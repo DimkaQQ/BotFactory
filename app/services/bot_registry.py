@@ -9,10 +9,12 @@ only an already-constructed `Bot` instance.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 
 from aiogram import Bot
+from aiogram.types import BotCommand
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,6 +93,21 @@ async def register_webhook(bot_id: uuid.UUID, token: str) -> None:
         logger.exception("Failed to set webhook for bot %s", bot_id)
         await instance.session.close()
         raise
+
+    # Меню команд. /stop существовал и отвечал как надо, но узнать о нём было
+    # неоткуда: в меню Telegram его не было, в рассылке не подписывалось, в
+    # кабинете не упоминалось. Человеку оставалось заблокировать бота — а
+    # вместе с ботом он терял и купленный доступ. Отдельной попыткой, а не
+    # внутри try выше: меню — приятная мелочь, а вебхук — работа бота, и
+    # падать из-за первого второму незачем.
+    with contextlib.suppress(Exception):
+        await instance.set_my_commands(
+            [
+                BotCommand(command="start", description="Начать сначала"),
+                BotCommand(command="stop", description="Не присылать рассылку"),
+            ]
+        )
+
     put(bot_id, instance)
 
 

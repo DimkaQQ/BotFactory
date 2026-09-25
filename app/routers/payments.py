@@ -28,7 +28,7 @@ from app.models.bot import BotStatus
 from app.models.bot_block import BlockType, BotBlock
 from app.models.bot_subscriber import BotSubscriber
 from app.models.client import Client
-from app.models.scheduled_step import ScheduledStep
+from app.models.scheduled_step import ScheduledStep, StepStatus
 from app.models.subscription import Subscription, SubscriptionStatus
 from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.schemas.payment import (
@@ -283,26 +283,40 @@ async def get_payment_settings(
     # получилось открыть оплату». Владелец узнавал об этом от учеников.
     missing: list[str] = []
     ready = False
+    live = False
     if bot.payment_provider:
         provider = payment_providers.get_provider(bot.payment_provider)
         missing = [f.label for f in provider.credential_fields if f.key not in filled]
         ready = not missing
+        # «Готова» и «берёт настоящие деньги» — разные вещи, и вторую я
+        # пропустил, когда чинил первую. Тестовый режим стоит по умолчанию,
+        # ключи заполнены, касса объявляется подключённой — а платежи
+        # ненастоящие. Владелец объявляет боту подписчикам и не получает
+        # ничего.
+        live = ready and not (bot.payment_is_test and provider.has_test_mode)
 
     return PaymentSettingsOut(
         provider=bot.payment_provider,
         is_test=bot.payment_is_test,
         ready=ready,
+        live=live,
         missing_fields=missing,
         # Which keys are filled in, never the keys themselves.
         filled_fields=sorted(filled),
         # Only for providers that actually notify us. Stars, pay-by-link and
         # Processing.kz never call this address, and offering it invited a
         # shop owner to paste something into a dashboard that does nothing.
+        # Показываем адрес только тем, кому его действительно надо вписать
+        # руками. Раньше он показывался всем, кто нам звонит, — и у Prodamus
+        # соседствовал с собственной подсказкой «мы подставляем его сами».
         callback_url=(
             f"{get_settings().public_base_url.rstrip('/')}/webhook/pay/{bot.payment_provider}"
-            if bot.payment_provider and payment_providers.get_provider(bot.payment_provider).uses_callback
+            if bot.payment_provider
+            and payment_providers.get_provider(bot.payment_provider).uses_callback
+            and not payment_providers.get_provider(bot.payment_provider).sends_own_callback_url
             else None
         ),
+        callback_base=f"{get_settings().public_base_url.rstrip('/')}/webhook/pay",
     )
 
 
@@ -613,6 +627,12 @@ async def list_orders(
                 "buyer": _buyer_of(buyers.get(o.telegram_user_id)),
                 "created_at": o.created_at,
                 "paid_at": o.paid_at,
+                # Доставлен ли товар. Раньше этого не было в ответе вовсе, и
+                # заказ, по которому выдача не ушла, выглядел в кабинете
+                # ровно как успешный: «оплачен · Марина · 990 RUB». Продавец
+                # узнавал о недостаче от покупателя.
+                "delivered": bool((o.meta or {}).get("delivered_at")),
+                "delivery_gave_up": bool((o.meta or {}).get("delivery_gave_up_at")),
                 # Set when the buyer tapped «Я оплатил» on a provider we
                 # can't ask — these are the ones waiting on the owner.
                 "claimed_at": (o.meta or {}).get("claimed_at"),
@@ -788,6 +808,9 @@ async def broadcast(
         )
     people = list((await db.execute(query)).scalars().all())
 
+    # Подпись про отписку: команда есть и работает, но человек о ней не
+    # узнает ниоткуда — а тот, кто не может отписаться, блокирует бота и
+    # теряет вместе с ним купленный доступ.
     for person in people:
         await scheduler.schedule(
             db,
@@ -801,6 +824,60 @@ async def broadcast(
 
     logger.info("Broadcast of block %s queued for %d people of bot %s", block.id, len(people), bot_id)
     return {"queued": len(people)}
+
+
+@router.get("/api/bots/{bot_id}/broadcasts")
+async def broadcast_report(
+    bot_id: uuid.UUID,
+    bot: BotModel = Depends(get_owned_bot),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Чем закончились последние рассылки.
+
+    Интерфейс говорил «Отправляем 12 чел.» и на этом заканчивал — а шаги
+    могли все до одного упасть, и владелец не узнавал ничего. При девятистах
+    подписчиках «половине не дошло» не заметить вообще никак.
+    """
+    rows = (
+        await db.execute(
+            select(
+                ScheduledStep.block_id,
+                func.min(ScheduledStep.created_at).label("started"),
+                func.count(ScheduledStep.id).label("total"),
+                func.count(ScheduledStep.id).filter(ScheduledStep.status == StepStatus.sent).label("sent"),
+                func.count(ScheduledStep.id).filter(ScheduledStep.status == StepStatus.pending).label("waiting"),
+                func.count(ScheduledStep.id).filter(ScheduledStep.status == StepStatus.failed).label("failed"),
+                func.count(ScheduledStep.id).filter(ScheduledStep.status == StepStatus.cancelled).label("cancelled"),
+            )
+            .where(ScheduledStep.bot_id == bot_id, ScheduledStep.reason == "broadcast")
+            .group_by(ScheduledStep.block_id)
+            .order_by(func.min(ScheduledStep.created_at).desc())
+            .limit(10)
+        )
+    ).all()
+
+    titles = {
+        b.id: (b.content or {}).get("text") or (b.content or {}).get("title") or ""
+        for b in (
+            await db.execute(select(BotBlock).where(BotBlock.bot_id == bot_id))
+        ).scalars().all()
+    }
+
+    return {
+        "broadcasts": [
+            {
+                "block_id": str(row.block_id),
+                "title": (titles.get(row.block_id) or "")[:80],
+                "started_at": row.started,
+                "total": row.total,
+                "sent": row.sent,
+                "waiting": row.waiting,
+                "failed": row.failed,
+                "cancelled": row.cancelled,
+            }
+            for row in rows
+        ]
+    }
 
 
 def _buyer_of(subscriber: BotSubscriber | None) -> dict | None:

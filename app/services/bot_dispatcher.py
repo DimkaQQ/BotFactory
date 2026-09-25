@@ -497,7 +497,13 @@ async def _handle_poll_answer(answer: dict, bot_id: uuid.UUID, db: AsyncSession)
         await db.commit()
 
 
-async def _send_block(bot: Bot, chat_id: int, block: BotBlock, db: AsyncSession | None = None) -> None:
+async def _send_block(
+    bot: Bot, chat_id: int, block: BotBlock, db: AsyncSession | None = None, footer: str = ""
+) -> None:
+    """`footer` дописывается к тексту блока. Нужен рассылке: подпись «чтобы
+    не получать — /stop» обязана быть в самом сообщении, иначе человек, до
+    которого мы дотянулись сами, не знает, как это прекратить, и блокирует
+    бота вместе с купленным доступом."""
     content = block.content or {}
 
     if block.block_type == BlockType.poll:
@@ -523,6 +529,8 @@ async def _send_block(bot: Bot, chat_id: int, block: BotBlock, db: AsyncSession 
     # Whitespace is not content: a block holding only spaces used to pass the
     # emptiness check and send a bubble containing "   ".
     text = (content.get("text") or "").strip()
+    if footer:
+        text = f"{text}\n\n{footer}" if text else footer
     media_file_id = content.get("media_file_id")
     media_type = content.get("media_type")
     keyboard = _build_keyboard(block.id, content) if block.block_type == BlockType.buttons else None
@@ -642,6 +650,7 @@ async def walk_chain(
     db: AsyncSession,
     telegram_user_id: int | None = None,
     subscription_id: uuid.UUID | None = None,
+    footer: str = "",
 ) -> bool:
     """Send `start_block_id` and keep following next_block_id, pausing for
     typing/delay between steps, until the chain ends or hits a branch
@@ -754,7 +763,9 @@ async def walk_chain(
                 if handled and (block.content or {}).get("media_file_id"):
                     await _send_media_only(bot, chat_id, block)
                 elif not handled:
-                    await _send_block(bot, chat_id, block, db)
+                    # Подпись — только на первом блоке цепочки: повторять её
+                    # под каждым сообщением рассылки незачем.
+                    await _send_block(bot, chat_id, block, db, footer=footer if first else "")
         except Exception:
             logger.exception("Failed to send block %s for bot %s", block.id, bot_id)
             delivered = False

@@ -70,6 +70,8 @@ def _sign(script: str, params: dict[str, str], secret: str) -> str:
 
 
 class FreedomPayProvider(ProviderDefaults):
+    #: Адрес уведомления уходит в самом счёте — вписывать его в кабинете не нужно.
+    sends_own_callback_url = True
     slug = "freedompay"
     title = "Freedom Pay"
     hint = (

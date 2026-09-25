@@ -69,6 +69,8 @@ def _periodicity(period_days: int) -> str:
 
 
 class LiqPayProvider(ProviderDefaults):
+    #: Адрес уведомления уходит в самом счёте — вписывать его в кабинете не нужно.
+    sends_own_callback_url = True
     slug = "liqpay"
     title = "LiqPay"
     hint = (

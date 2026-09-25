@@ -31,6 +31,8 @@ _FAILED = {20, 30, "20", "30", "fail"}
 
 
 class LifePayProvider(ProviderDefaults):
+    #: Адрес уведомления уходит в самом счёте — вписывать его в кабинете не нужно.
+    sends_own_callback_url = True
     slug = "lifepay"
     title = "LIFE PAY"
     hint = (

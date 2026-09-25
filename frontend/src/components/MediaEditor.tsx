@@ -119,7 +119,12 @@ export function MediaEditor({ kind, botId, content, onChange }: Props) {
       </div>
       {uploadError && <p className="media-editor__upload-error">{uploadError}</p>}
 
-      <p className="media-editor__or">или для тяжёлых файлов — вставь ссылку:</p>
+      {/* Лимит назван до загрузки, а не после неудачной: 90-страничный PDF в
+          20 МБ не влезет, и узнавать об этом, прождав загрузку, — худший из
+          возможных моментов. */}
+      <p className="media-editor__or">
+        до 20 МБ · тяжелее — вставь ссылку:
+      </p>
       <input
         className="media-editor__url"
         placeholder={PLACEHOLDER_URL[kind]}

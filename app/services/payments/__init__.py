@@ -125,6 +125,9 @@ def describe_providers() -> list[dict]:
             # or has to ask the shop owner to confirm.
             "supports_status_check": bool(provider.supports_status_check),
             "uses_callback": bool(provider.uses_callback),
+            # Нужно ли владельцу вписывать адрес уведомления в своём
+            # кабинете, или мы отправляем его в каждом счёте сами.
+            "sends_own_callback_url": bool(provider.sends_own_callback_url),
             # Whether to offer the "тестовый режим" switch at all.
             "has_test_mode": bool(provider.has_test_mode),
         }

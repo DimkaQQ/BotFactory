@@ -343,6 +343,9 @@ export interface PaymentProviderInfo {
   /** Whether this provider posts to our callback URL at all — Stars and
    * pay-by-link don't, so there is no address to paste anywhere. */
   uses_callback: boolean;
+  /** Отправляем ли адрес уведомления сами — тогда владельцу вписывать
+   * ничего не нужно, и просить его об этом нельзя. */
+  sends_own_callback_url: boolean;
   has_test_mode: boolean;
 }
 
@@ -360,11 +363,18 @@ export interface PaymentSettings {
    * themselves never leave the server. */
   filled_fields: string[];
   callback_url: string | null;
+  /** Корень адресов уведомлений — чтобы показать адрес для кассы, которую
+   * настраивают прямо сейчас, а не только для уже сохранённой. */
+  callback_base: string;
   /** Может ли касса на самом деле принять деньги: провайдер выбран **и** все
    * его ключи заполнены. Выбранный без ключей провайдер — это не
    * подключённая касса, а интерфейс показывал зелёное «Касса подключена»
    * ровно по факту выбора. */
   ready: boolean;
+  /** Готова **и** берёт настоящие деньги: тестовый режим стоит по умолчанию,
+   * и касса с заполненными ключами выглядит подключённой, пока платежи
+   * ненастоящие. */
+  live: boolean;
   /** Каких полей не хватает, человеческими названиями. */
   missing_fields: string[];
 }
@@ -453,6 +463,11 @@ export interface Order {
   buyer: Buyer | null;
   created_at: string;
   paid_at: string | null;
+  /** Дошёл ли товар до покупателя. Оплаченный, но не выданный заказ
+   * выглядел в кабинете как успешный. */
+  delivered: boolean;
+  /** Бот перестал пытаться выдать — дальше нужен человек. */
+  delivery_gave_up: boolean;
   /** When the buyer tapped «Я оплатил» on a provider we can't verify. */
   claimed_at: string | null;
   /** Waiting on the owner to say whether the money arrived. */

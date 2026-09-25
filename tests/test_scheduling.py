@@ -403,7 +403,13 @@ async def test_a_broadcast_reaches_everyone_the_bot_knows(db, owner, make_bot, a
     assert response.json()["queued"] == 3, "заблокировавший бота в очередь не попадает"
 
     await scheduler.run_due()
-    assert sorted(telegram.sent()) == ["Скидка 20% до воскресенья!"] * 3
+    sent = sorted(telegram.sent())
+    assert len(sent) == 3
+    assert all(message.startswith("Скидка 20% до воскресенья!") for message in sent)
+    # Рассылку человек не просил — значит, в ней обязано быть сказано, как её
+    # прекратить. Иначе остаётся только заблокировать бота, а вместе с ним
+    # теряется и купленный доступ.
+    assert all("/stop" in message for message in sent)
 
 
 async def test_a_broadcast_to_subscribers_only_skips_everyone_else(db, owner, make_bot, api, auth, as_bot):
