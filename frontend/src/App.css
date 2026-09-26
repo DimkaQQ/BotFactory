@@ -5635,6 +5635,32 @@
   font-weight: 600;
 }
 
+/* Тот же чек-лист, но у опубликованного бота: не «перед публикацией», а
+   «прямо сейчас, у живых покупателей». Поэтому он стоит под шапкой, а не в
+   подвале — до подвала на длинном сценарии ещё надо доскроллить. */
+.live-problems {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--accent-warning) 46%, transparent);
+  background: color-mix(in srgb, var(--accent-warning) 12%, var(--tg-bg));
+}
+
+.live-problems__title {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--accent-warning-ink);
+}
+
+.live-problems ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 /* Предполётная проверка на пейволле: что сломано, пока не заплатили. */
 .paywall__problems {
   padding: var(--sp-3);
@@ -5703,6 +5729,40 @@
 .orders__refund:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* «Отправить ещё раз» — рядом с возвратом и заметно спокойнее его: при
+   недоставленном заказе это то, что стоит попробовать первым. */
+.orders__redeliver {
+  flex: 0 0 auto;
+  margin-left: var(--sp-2);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.orders__redeliver:hover:not(:disabled) {
+  border-color: var(--tg-link);
+  color: var(--tg-link);
+}
+
+.orders__redeliver:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.orders__notice {
+  margin: 0 0 var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--tg-link) 10%, var(--tg-bg));
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 /* Выручка в шапке конструктора. Раньше её можно было найти только внутри
@@ -5841,4 +5901,9 @@
 
 .orders__export:hover {
   text-decoration: underline;
+}
+
+.poll-editor__anonymous {
+  margin-top: var(--sp-3);
+  font-size: 12.5px;
 }

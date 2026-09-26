@@ -74,13 +74,26 @@ export function PollEditor({ content, onChange, botId, blockId }: Props) {
         </button>
       )}
 
+      {/* Сама галочка. Её не было: текст ниже звал «снять галочку», а снимать
+          было нечего — и все опросы создавались анонимными, то есть ответы
+          не приходили никогда. Подсказка указывала на несуществующий
+          переключатель, что хуже, чем отсутствие подсказки. */}
+      <label className="payment-editor__toggle poll-editor__anonymous">
+        <input
+          type="checkbox"
+          checked={Boolean(content.anonymous)}
+          onChange={(e) => onChange({ ...content, anonymous: e.target.checked })}
+        />
+        <span>Анонимный опрос — не видно, кто как ответил</span>
+      </label>
+
       {/* Ответы. Анонимный опрос Telegram присылает без пользователя, то
           есть ответов не будет вовсе — это надо сказать, а не показывать
           вечный ноль. */}
       {content.anonymous ? (
         <p className="poll-editor__answers-note">
-          Опрос анонимный — Telegram не присылает ответы, посчитать их не получится. Сними галочку, если
-          хочешь видеть результаты.
+          Пока опрос анонимный, Telegram не присылает ответы — посчитать их не получится. Сними галочку
+          выше, если хочешь видеть результаты.
         </p>
       ) : answers && answers.answered > 0 ? (
         <div className="poll-editor__answers">

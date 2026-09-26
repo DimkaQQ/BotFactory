@@ -321,6 +321,12 @@ export const builderApi = {
     ),
   rejectOrder: (botId: string, paymentId: string) =>
     request<{ status: string }>(`/bots/${botId}/orders/${paymentId}/reject`, { method: "POST" }),
+  /** Провести выдачу заново — после того, как продавец поправил то, из-за
+   * чего она не прошла. Отправка идёт фоном, ответ приходит сразу. */
+  redeliverOrder: (botId: string, paymentId: string) =>
+    request<{ status: string; queued: boolean }>(
+      `/bots/${botId}/orders/${paymentId}/redeliver`, { method: "POST" },
+    ),
 };
 
 export interface PaymentRegion {

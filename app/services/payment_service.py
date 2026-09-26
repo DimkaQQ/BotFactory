@@ -645,7 +645,9 @@ async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
             logger.warning("Payment %s: bot %s has no token — cannot deliver", payment.id, payment.bot_id)
             return
 
-        await bot_instance.send_message(payment.chat_id, "✅ Оплата получена, спасибо!")
+        await bot_instance.send_message(
+            payment.chat_id, "✅ Оплата получена, спасибо!" + await _how_to_stop(db, payment)
+        )
         if target:
             delivered = await bot_dispatcher.walk_chain(
                 bot_instance,
@@ -683,6 +685,31 @@ async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
         await _stamp_delivered(db, payment)
     except Exception:
         logger.exception("Payment %s: paid but delivery failed", payment.id)
+
+
+async def _how_to_stop(db: AsyncSession, payment: Payment) -> str:
+    """Приписка к первому чеку по подписке: как перестать платить.
+
+    Команда `/cancel` в боте была, а узнать о ней покупателю было неоткуда —
+    ни в одном сообщении она не называлась. Списание с сохранённой карты,
+    которое нечем остановить, человек останавливает через банк, и для
+    продавца это уже не отписка, а спор по платежу.
+    """
+    from app.models.subscription import BillingMode
+    from app.services import subscription_service
+
+    try:
+        subscription = await subscription_service.find_for_payment(db, payment)
+    except Exception:  # noqa: BLE001 — чек важнее приписки к нему
+        logger.exception("Payment %s: could not look up the subscription", payment.id)
+        return ""
+    if subscription is None:
+        return ""
+    if subscription.billing_mode == BillingMode.auto:
+        return "\nЭто подписка, она продлевается сама. Остановить списания — команда /cancel."
+    # Автосписания нет: следующий период человек оплатит сам. Про /cancel
+    # всё равно говорим — по ней бот перестанет присылать счета.
+    return "\nЭто подписка: счёт на следующий период придёт сюда же. Отказаться — команда /cancel."
 
 
 async def _stamp_delivered(db: AsyncSession, payment: Payment) -> None:

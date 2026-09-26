@@ -18,6 +18,10 @@ interface Props {
   botId: string;
   onClose: () => void;
   onSaved: (settings: PaymentSettings) => void;
+  /** Заказы изменились здесь — значит, устарела и выручка в шапке. Возврат
+   * оформлялся, строка в журнале становилась «возврат», а чип наверху
+   * продолжал показывать старую сумму до перезагрузки страницы. */
+  onOrdersChanged?: (report: OrdersReport) => void;
 }
 
 /** One line per provider, so choosing does not require having integrated one
@@ -81,7 +85,7 @@ function when(iso: string): string {
 /** Per-bot payment provider setup. The form is rendered from whatever
  * GET /payments/providers returns, so adding a provider on the backend
  * makes it appear here with no frontend change. */
-export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
+export function PaymentSettingsPanel({ botId, onClose, onSaved, onOrdersChanged }: Props) {
   useEscape(onClose);
 
   const [providers, setProviders] = useState<PaymentProviderInfo[] | null>(null);
@@ -98,6 +102,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [totals, setTotals] = useState<OrdersReport["totals"]>([]);
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -159,6 +164,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
       const refreshed = await builderApi.listOrders(botId);
       setOrders(refreshed.orders);
       setTotals(refreshed.totals ?? []);
+      onOrdersChanged?.(refreshed);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось обновить заказ");
     } finally {
@@ -174,8 +180,28 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
       const refreshed = await builderApi.listOrders(botId);
       setOrders(refreshed.orders);
       setTotals(refreshed.totals ?? []);
+      onOrdersChanged?.(refreshed);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось оформить возврат");
+    } finally {
+      setBusyOrder(null);
+    }
+  }
+
+  async function redeliver(order: Order) {
+    setBusyOrder(order.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await builderApi.redeliverOrder(botId, order.id);
+      // Выдача уходит фоном, с настоящими паузами между сообщениями —
+      // ответ «готово» здесь означал бы не то, что случилось.
+      setNotice(
+        `Заказ №${order.invoice_no} отправляем заново. Через минуту обнови панель: ` +
+          `если пометка «товар не выдан» осталась, значит выдача снова не прошла.`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось отправить заново");
     } finally {
       setBusyOrder(null);
     }
@@ -324,6 +350,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
               )}
 
               {error && <p className="publish-form__error">{error}</p>}
+              {notice && <p className="orders__notice">{notice}</p>}
 
               <button type="button" className="payment-settings__save" onClick={handleSave} disabled={saving}>
                 {saving ? "Сохраняем…" : saved ? "✓ Сохранено" : "Сохранить"}
@@ -453,6 +480,22 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
                         <span className="orders__log-amount">
                           {formatAmount(order.amount_minor)} {unit(order.currency)}
                         </span>
+                        {/* Журнал честно писал «товар не выдан» — и на этом
+                            всё: отправить ещё раз было нельзя, оставался
+                            только возврат. Почти всегда чинится за минуту:
+                            укоротить текст, заменить картинку — и провести
+                            выдачу заново. */}
+                        {order.status === "paid" && !order.delivered && (
+                          <button
+                            type="button"
+                            className="orders__redeliver"
+                            disabled={busyOrder === order.id}
+                            title="Отправить покупателю ещё раз"
+                            onClick={() => void redeliver(order)}
+                          >
+                            {busyOrder === order.id ? "…" : "↻"}
+                          </button>
+                        )}
                         {order.status === "paid" && (
                           <button
                             type="button"

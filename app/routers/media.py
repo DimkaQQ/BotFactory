@@ -89,6 +89,57 @@ _ALLOWED: dict[str, tuple[str, str]] = {
 }
 
 
+#: Покупатель видит в чате имя файла из URL — и до этого видел там
+#: `3f9c1a…e7.pdf`. Человек платил за гайд, а получал строку из хекса и
+#: писал продавцу «это точно тот файл?». Кириллицу в пути пришлось бы
+#: процентно кодировать, и до покупателя она доехала бы в том же нечитаемом
+#: виде, поэтому русские имена переводятся в латиницу, а не выбрасываются.
+_TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+    "і": "i", "ї": "yi", "є": "e", "ґ": "g",
+}
+_SLUG_MAX = 60
+
+
+def _slug(original: str | None, ext: str) -> str:
+    """`Гайд по продажам.pdf` -> `Gayd-po-prodazham.pdf`.
+
+    Имя приходит от клиента, поэтому от него остаётся только то, что
+    заведомо безопасно в пути: латиница, цифры, дефис. Расширение берётся
+    наше — то, что мы вывели из Content-Type и уже сверили с магическими
+    байтами, а не то, что написано в присланном имени.
+    """
+    # Обратный слэш заменяется на прямой до разбора: браузеры на Windows
+    # присылают полный путь, и `Path` на сервере-линуксе увидел бы в нём
+    # одно длинное имя `C-Users-me-otchet`.
+    stem = Path((original or "").replace("\\", "/")).name
+    if stem.lower().endswith(ext):
+        stem = stem[: -len(ext)]
+    else:
+        stem = stem.rsplit(".", 1)[0] if "." in stem else stem
+
+    out: list[str] = []
+    for char in stem:
+        lower = char.lower()
+        if lower in _TRANSLIT:
+            mapped = _TRANSLIT[lower]
+            out.append(mapped.capitalize() if char != lower and mapped else mapped)
+        elif char.isascii() and char.isalnum():
+            out.append(char)
+        else:
+            out.append("-")
+
+    safe = "".join(out).strip("-")
+    while "--" in safe:
+        safe = safe.replace("--", "-")
+    safe = safe[:_SLUG_MAX].strip("-")
+    return f"{safe or 'file'}{ext}"
+
+
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_media(
     file: UploadFile = File(...),
@@ -157,7 +208,7 @@ async def upload_media(
             ),
         )
 
-    filename = f"{uuid.uuid4().hex}{ext}"
+    filename = f"{uuid.uuid4().hex[:10]}-{_slug(file.filename, ext)}"
     (upload_dir / filename).write_bytes(data)
 
     url = f"{settings.public_base_url.rstrip('/')}/api/media/{bot.client_id}/{filename}"

@@ -59,7 +59,11 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     icon: "📊",
     accent: "poll",
     hint: "Вопрос с вариантами ответа",
-    defaultContent: () => ({ question: "", options: ["", ""], anonymous: true }),
+    // Не анонимный по умолчанию. У анонимного опроса Telegram не присылает
+    // ответы вовсе — в них нет пользователя, — то есть блок, который
+    // продаётся как способ «узнать, чего хотят подписчики», не собирал бы
+    // ничего. Анонимность остаётся выбором, но выбором осознанным.
+    defaultContent: () => ({ question: "", options: ["", ""], anonymous: false }),
   },
   {
     type: "delivery",

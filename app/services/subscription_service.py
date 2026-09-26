@@ -451,7 +451,8 @@ async def _tell_them_it_renewed(db: AsyncSession, subscription: Subscription) ->
             until = dates.day(subscription.current_period_end)
             await instance.send_message(
                 subscription.chat_id,
-                f"🔁 Подписка «{subscription.title}» продлена — доступ открыт до {until}.",
+                f"🔁 Подписка «{subscription.title}» продлена — доступ открыт до {until}.\n"
+                f"Остановить списания — команда /cancel.",
             )
 
 

@@ -979,7 +979,8 @@ async def _tell_them_renewed(bot: Bot, subscription) -> None:
     with contextlib.suppress(Exception):
         await bot.send_message(
             subscription.chat_id,
-            f"🔁 Подписка «{subscription.title}» продлена — доступ открыт до {until}.",
+            f"🔁 Подписка «{subscription.title}» продлена — доступ открыт до {until}.\n"
+            f"Остановить списания — команда /cancel.",
         )
 
 

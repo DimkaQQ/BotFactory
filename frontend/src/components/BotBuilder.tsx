@@ -254,7 +254,11 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     const looped = loopedBlocks(bot.blocks, bot.start_block_id);
     if (looped.length > 0) {
       found.push(
-        `Стрелки «дальше» замкнуты в кольцо (${looped.length} бл.) — бот дойдёт до него и остановится молча.`,
+        // Раньше здесь было «дойдёт и остановится молча» — и это описывало
+        // не то, что происходит. Блоки кольца бот успевает отправить по
+        // разу, замолкает он уже после них, на втором заходе.
+        `Стрелки «дальше» замкнуты в кольцо (${looped.length} бл.) — эти сообщения придут по одному разу, ` +
+          `и дальше сценарий остановится.`,
       );
     }
 
@@ -734,6 +738,26 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         <BillingBanner botId={bot.id} billing={billing} onRenewed={handleRenewed} />
       )}
 
+      {/* Проверка исчезала ровно там, где она нужнее всего. Чек-лист рисовался
+          только у черновика, а продукт сам зовёт править живого бота —
+          «правки применяются сразу, без повторной публикации». То есть сломать
+          кассу или оставить кнопку без продолжения можно было молча, на боте,
+          который в эту секунду открыт у покупателей. */}
+      {bot.status !== "draft" && publishProblems.length > 0 && (
+        <div className="live-problems" role="status">
+          <p className="live-problems__title">
+            {bot.status === "active"
+              ? "Бот в эфире, и покупатели уже это видят:"
+              : "Стоит поправить до следующего запуска:"}
+          </p>
+          <ul>
+            {publishProblems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <FlowCanvas
         bot={bot}
         onChangeContent={handleChangeContent}
@@ -793,6 +817,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           botId={bot.id}
           onClose={() => setPaymentPanelOpen(false)}
           onSaved={(settings) => setPaymentSettings(settings)}
+          onOrdersChanged={setSales}
         />
       )}
 

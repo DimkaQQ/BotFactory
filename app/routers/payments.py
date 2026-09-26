@@ -854,6 +854,16 @@ async def orders_csv(
     import csv
     import io
 
+    # Столбец «Статус» до этого писал `paid` и `refunded` в таблице, где все
+    # остальные заголовки и значения по-русски. Бухгалтеру, которому эту
+    # выгрузку пересылают, слово `pending` не говорит ничего.
+    status_ru = {
+        "pending": "не оплачен",
+        "paid": "оплачен",
+        "failed": "не прошёл",
+        "refunded": "возврат",
+    }
+
     orders = (
         await db.execute(
             select(Payment)
@@ -880,7 +890,7 @@ async def orders_csv(
             order.description,
             f"{order.amount_minor / 100:.2f}".replace(".", ","),
             order.currency,
-            order.status.value,
+            status_ru.get(order.status.value, order.status.value),
             "да" if (order.meta or {}).get("delivered_at") else "нет",
             person.title if person else "",
             order.telegram_user_id or "",
@@ -1019,6 +1029,48 @@ async def refund_order(
 
     removed = await payment_service.refund_by_owner(db, payment)
     return {"status": payment.status, "access_revoked": removed}
+
+
+@router.post("/api/bots/{bot_id}/orders/{payment_id}/redeliver")
+async def redeliver_order(
+    bot_id: uuid.UUID,
+    payment_id: uuid.UUID,
+    _bot: BotModel = Depends(get_owned_bot),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Отправить покупателю то, что он купил, ещё раз.
+
+    Журнал заказов честно писал «не доставлен» — и на этом всё. Автоматика
+    пробует шесть раз и сдаётся, а дальше владельцу оставалось только
+    вернуть деньги: кнопки «отправить ещё раз» не было нигде. Между тем
+    почти всегда чинится это за минуту — поправить слишком длинный текст,
+    заменить картинку, которую Telegram не смог забрать, — и после правки
+    заказ нужно просто провести заново.
+    """
+    payment = await _owned_order(bot_id, payment_id, db)
+    if payment.status != PaymentStatus.paid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Отправить ещё раз можно только оплаченный заказ.",
+        )
+    if payment.chat_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="У этого заказа нет чата покупателя — отправить некуда.",
+        )
+
+    # Счётчик попыток и отметку «сдались» сбрасываем: если эта отправка
+    # опять не дойдёт, автоматический дозвон должен взяться за заказ
+    # заново, а не считать его давно закрытым.
+    meta = {**(payment.meta or {})}
+    meta.pop("delivery_gave_up_at", None)
+    meta.pop("delivered_at", None)
+    meta["delivery_attempts"] = 0
+    payment.meta = meta
+    await db.commit()
+
+    payment_service.deliver_later(payment.id)
+    return {"status": payment.status.value, "queued": True}
 
 
 @router.post("/api/bots/{bot_id}/orders/{payment_id}/reject")
