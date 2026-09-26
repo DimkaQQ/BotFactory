@@ -202,3 +202,56 @@ async def test_a_broadcast_says_how_to_stop_it(db: AsyncSession, owner: Client, 
     assert sent and "/stop" in sent[0], f"в рассылке не сказано, как отписаться: {sent}"
     # И обычная беседа подписью не обрастает.
     assert "Новый рецепт на канале" in sent[0]
+
+
+# ------------------------------- база стережёт значения, а не только код
+
+
+@pytest.mark.asyncio
+async def test_the_database_refuses_a_status_that_does_not_exist(db: AsyncSession, owner: Client, make_bot):
+    """Колонки объявлены перечислениями в коде, а в базе были обычным
+    VARCHAR без единой проверки. Значение `published`, которого в
+    перечислении нет, записалось — и строка стала нечитаемой: SQLAlchemy
+    бросает LookupError при чтении, то есть бот исчезает из списка вместе с
+    ошибкой 500, и чинится это только руками в базе.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    bot, _ = await make_bot(owner, [])
+
+    with pytest.raises(IntegrityError):
+        await db.execute(
+            text("UPDATE bots SET status = 'published' WHERE id = :id"), {"id": bot.id}
+        )
+        await db.commit()
+    await db.rollback()
+
+
+@pytest.mark.asyncio
+async def test_the_same_holds_for_money_and_the_queue(db: AsyncSession, owner: Client, make_bot):
+    """Те же грабли лежат под платежами и очередью — там цена ошибки выше."""
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    bot, _ = await make_bot(owner, [])
+    payment = Payment(
+        id=uuid.uuid4(), kind=PaymentKind.order, status=PaymentStatus.paid,
+        provider="test", amount_minor=1000, currency="RUB", description="тест",
+        bot_id=bot.id, telegram_user_id=USER_ID, chat_id=CHAT_ID, meta={},
+        paid_at=datetime.now(timezone.utc),
+    )
+    db.add(payment)
+    await db.commit()
+    # В обычную переменную: откат обесценивает атрибуты ORM, и следующее
+    # обращение к `payment.id` — это ленивый запрос вне greenlet.
+    payment_id = payment.id
+
+    for column, bogus in (("status", "оплачено"), ("kind", "подарок")):
+        with pytest.raises(IntegrityError):
+            await db.execute(
+                text(f"UPDATE payments SET {column} = :value WHERE id = :id"),
+                {"value": bogus, "id": payment_id},
+            )
+            await db.commit()
+        await db.rollback()
