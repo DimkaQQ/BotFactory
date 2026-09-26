@@ -385,3 +385,37 @@ async def test_cancelling_keeps_the_lessons_already_paid_for(db: AsyncSession, o
 
     assert await status_of(charge_id) == StepStatus.cancelled, "списание не снято"
     assert await status_of(lesson_id) == StepStatus.pending, "у человека отобрали оплаченный урок"
+
+
+# ------------------------- рассылка: число в вопросе = числу в отправке
+
+
+@pytest.mark.asyncio
+async def test_the_subscriber_list_says_who_can_be_reached(api, auth, owner: Client, make_bot, db: AsyncSession):
+    """Диалог спрашивал «Отправить всем (5 чел.)?», а уходило трём: интерфейс
+    считал длину всего списка, а сервер отсеивает заблокировавших и
+    отписавшихся. Согласие давалось на одно число, происходило другое."""
+    from app.models.bot import BotStatus
+
+    bot, blocks = await make_bot(
+        owner, [(BlockType.description, {"text": "новый разбор"})], status=BotStatus.active
+    )
+    db.add_all([
+        BotSubscriber(id=uuid.uuid4(), bot_id=bot.id, telegram_user_id=USER_ID, chat_id=CHAT_ID),
+        BotSubscriber(id=uuid.uuid4(), bot_id=bot.id, telegram_user_id=USER_ID + 1, chat_id=CHAT_ID + 1,
+                      blocked_at=datetime.now(timezone.utc)),
+        BotSubscriber(id=uuid.uuid4(), bot_id=bot.id, telegram_user_id=USER_ID + 2, chat_id=CHAT_ID + 2,
+                      unsubscribed_at=datetime.now(timezone.utc)),
+    ])
+    await db.commit()
+
+    report = (await api.get(f"/api/bots/{bot.id}/subscribers", headers=auth(owner))).json()
+    reachable = [p for p in report["people"] if not p["blocked"] and not p["unsubscribed"]]
+
+    queued = (await api.post(
+        f"/api/bots/{bot.id}/broadcast", headers=auth(owner),
+        json={"block_id": str(blocks[0].id), "audience": "all"},
+    )).json()["queued"]
+
+    assert len(report["people"]) == 3
+    assert len(reachable) == queued == 1, "число в вопросе не сойдётся с числом в отправке"

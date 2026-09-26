@@ -123,7 +123,7 @@ export function BlockEditPanel({
               <MediaEditor kind="file" botId={botId} content={block.content} onChange={onChange} />
             </>
           ) : isPollBlock ? (
-            <PollEditor content={block.content} onChange={onChange} />
+            <PollEditor content={block.content} onChange={onChange} botId={botId} blockId={block.id} />
           ) : (
             <textarea
               className="chat-bubble__textarea edit-panel__textarea"

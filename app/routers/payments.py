@@ -705,6 +705,10 @@ async def list_subscribers(
                 "first_seen_at": person.first_seen_at,
                 "last_seen_at": person.last_seen_at,
                 "blocked": person.blocked_at is not None,
+                # Отписавшийся — не то же самое, что заблокировавший, но
+                # рассылку не получает так же. Без этого признака диалог
+                # обещал одно число, а уходило другое.
+                "unsubscribed": person.unsubscribed_at is not None,
             }
             for person in everyone
         ],

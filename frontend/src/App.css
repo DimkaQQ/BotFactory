@@ -5719,3 +5719,72 @@
   color: var(--tg-destructive);
   font-weight: 600;
 }
+
+/* Итог рассылки под кнопками: очередь — это ещё не доставка. */
+.broadcast__report {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.broadcast__report--bad {
+  color: var(--tg-destructive);
+  font-weight: 600;
+}
+
+/* Результаты опроса прямо в блоке: собирать ответы и не показывать их —
+   это собирать в никуда. */
+.poll-editor__answers {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--tg-separator);
+}
+
+.poll-editor__answers-title {
+  margin: 0 0 var(--sp-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.poll-editor__answer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 28px;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: 5px;
+  font-size: 12.5px;
+}
+
+.poll-editor__answer-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poll-editor__answer-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--tg-secondary-bg);
+  overflow: hidden;
+}
+
+.poll-editor__answer-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-poll);
+}
+
+.poll-editor__answer-count {
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.poll-editor__answers-note {
+  margin: var(--sp-3) 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}

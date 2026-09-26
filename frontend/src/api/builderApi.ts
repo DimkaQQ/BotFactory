@@ -277,6 +277,10 @@ export const builderApi = {
       method: "POST",
       body: JSON.stringify({ provider: provider ?? null }),
     }),
+  listBroadcasts: (botId: string) =>
+    request<{ broadcasts: BroadcastRow[] }>(`/bots/${botId}/broadcasts`),
+  getPollResults: (botId: string) =>
+    request<{ polls: PollResult[] }>(`/bots/${botId}/polls`),
   getBilling: (botId: string) => request<BillingState>(`/bots/${botId}/billing`),
   startRenewalCheckout: (botId: string, provider?: string) =>
     request<PaymentInfo>(`/bots/${botId}/renewal-checkout`, {
@@ -511,6 +515,15 @@ export interface SubscriptionRow {
   telegram_user_id: number;
 }
 
+/** Итоги одного опроса: вопрос, сколько ответили и как распределились. */
+export interface PollResult {
+  block_id: string;
+  question: string;
+  answered: number;
+  anonymous: boolean;
+  options: { label: string; votes: number }[];
+}
+
 export interface PersonRow {
   telegram_user_id: number;
   title: string;
@@ -518,4 +531,19 @@ export interface PersonRow {
   first_seen_at: string;
   last_seen_at: string;
   blocked: boolean;
+  /** Попросил не присылать рассылку (/stop). Рассылку не получит, но
+   * покупателем быть не перестал. */
+  unsubscribed: boolean;
+}
+
+/** Чем закончилась рассылка: поставлено в очередь, ушло, ждёт, упало. */
+export interface BroadcastRow {
+  block_id: string;
+  title: string;
+  started_at: string;
+  total: number;
+  sent: number;
+  waiting: number;
+  failed: number;
+  cancelled: number;
 }

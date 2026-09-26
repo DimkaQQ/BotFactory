@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, builderApi } from "../api/builderApi";
+import { type BroadcastRow, ApiError, builderApi } from "../api/builderApi";
 import { confirmDialog } from "../confirm";
 
 interface Props {
@@ -20,6 +20,31 @@ interface Props {
 export function BroadcastButton({ botId, blockId, published }: Props) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  // Чем рассылка закончилась. Эндпоинт был написан и не вызывался ни одной
+  // строчкой фронтенда: владелец видел «Отправляем 340 чел.» и тишину, а
+  // шаги могли упасть все до одного.
+  const [report, setReport] = useState<BroadcastRow | null>(null);
+
+  const refreshReport = useCallback(async () => {
+    try {
+      const { broadcasts } = await builderApi.listBroadcasts(botId);
+      setReport(broadcasts.find((row) => row.block_id === blockId) ?? null);
+    } catch {
+      // Отчёт — дополнение, а не условие работы кнопки.
+    }
+  }, [botId, blockId]);
+
+  useEffect(() => {
+    void refreshReport();
+  }, [refreshReport]);
+
+  // Пока есть ожидающие, обновляем сами: рассылка идёт минутами, и владелец
+  // не должен гадать, закончилась ли она.
+  useEffect(() => {
+    if (!report || report.waiting === 0) return;
+    const timer = setInterval(() => void refreshReport(), 5000);
+    return () => clearInterval(timer);
+  }, [report, refreshReport]);
 
   async function send(audience: "all" | "subscribers") {
     const who = audience === "all" ? "всем, кто писал боту" : "только активным подписчикам";
@@ -29,7 +54,11 @@ export function BroadcastButton({ botId, blockId, published }: Props) {
     let howMany = "";
     try {
       const report = await builderApi.listSubscribers(botId);
-      const count = audience === "all" ? report.people.length : report.active_count;
+      // Считаем ровно так же, как отбирает сервер: он пропускает
+      // заблокировавших бота и попросивших не писать. Раньше здесь была
+      // длина всего списка — диалог спрашивал «(5 чел.)», а уходило трём.
+      const reachable = report.people.filter((person) => !person.blocked && !person.unsubscribed);
+      const count = audience === "all" ? reachable.length : report.active_count;
       howMany = ` (${count} чел.)`;
     } catch {
       // Не смогли посчитать — спрашиваем без числа, но спрашиваем.
@@ -48,6 +77,7 @@ export function BroadcastButton({ botId, blockId, published }: Props) {
     try {
       const { queued } = await builderApi.broadcast(botId, blockId, audience);
       setResult(queued === 0 ? "Пока некому — у бота ещё нет подписчиков." : `Отправляем ${queued} чел.`);
+      if (queued > 0) void refreshReport();
     } catch (err) {
       setResult(err instanceof ApiError ? err.message : "Не удалось отправить");
     } finally {
@@ -75,6 +105,19 @@ export function BroadcastButton({ botId, blockId, published }: Props) {
         </button>
       </div>
       {result && <p className="app-hint broadcast__result">{result}</p>}
+
+      {/* Чем всё закончилось. «Отправляем 340 чел.» — это про очередь, а не
+          про доставку: шаги могли упасть все до одного, и на трёхстах
+          учениках этого не заметить никак. */}
+      {report && (
+        <p className={`broadcast__report${report.failed > 0 ? " broadcast__report--bad" : ""}`}>
+          {report.waiting > 0
+            ? `Отправлено ${report.sent} из ${report.total}, в очереди ещё ${report.waiting}…`
+            : `Дошло ${report.sent} из ${report.total}`}
+          {report.failed > 0 && ` · не доставлено ${report.failed}`}
+          {report.cancelled > 0 && ` · отменено ${report.cancelled}`}
+        </p>
+      )}
     </div>
   );
 }

@@ -6,10 +6,14 @@ interface Props {
    * scenario is a normal thing to have open — but shipping one silently is
    * how a bot that was meant to send four videos sends one. */
   orphanCount?: number;
+  /** Что не так со сценарием. Тот же список, что показывает пейволл до
+   * оплаты: он исчезал вместе с пейволлом, и последний клик перед выходом к
+   * живым покупателям оставался без единой проверки. */
+  problems?: string[];
   onPublish: (token: string) => Promise<void>;
 }
 
-export function PublishButton({ disabled, orphanCount = 0, onPublish }: Props) {
+export function PublishButton({ disabled, orphanCount = 0, problems = [], onPublish }: Props) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
 
@@ -53,7 +57,17 @@ export function PublishButton({ disabled, orphanCount = 0, onPublish }: Props) {
       <p className="publish-form__hint">
         Вставь токен бота от <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather</a>
       </p>
-      {orphanCount > 0 && (
+      {problems.length > 0 && (
+        <div className="paywall__problems">
+          <p className="paywall__problems-title">Перед публикацией стоит поправить:</p>
+          <ul>
+            {problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {problems.length === 0 && orphanCount > 0 && (
         <p className="publish-form__warning">
           ⚠️ {orphanCount === 1 ? "Один блок ни с чем не соединён" : `Блоков ни с чем не соединено: ${orphanCount}`}
           {" — "}бот их не покажет. Опубликовать можно, но сначала проверь стрелки на холсте.

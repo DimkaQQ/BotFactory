@@ -16,7 +16,7 @@ import {
 import { confirmDialog } from "../confirm";
 import { openExternal } from "../hooks/useTelegramWebApp";
 import { BLOCK_TYPE_BY_ID } from "../blockTypes";
-import { orphanBlocks } from "../reachability";
+import { loopedBlocks, orphanBlocks } from "../reachability";
 import { BillingBanner, paidUntilLabel } from "./BillingBanner";
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { LivePreview } from "./LivePreview";
@@ -234,6 +234,13 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         priceless.length === 1
           ? "В блоке оплаты не указана цена — покупатель получит ошибку."
           : `Блоков оплаты без цены: ${priceless.length} — покупатели получат ошибку.`,
+      );
+    }
+
+    const looped = loopedBlocks(bot.blocks, bot.start_block_id);
+    if (looped.length > 0) {
+      found.push(
+        `Стрелки «дальше» замкнуты в кольцо (${looped.length} бл.) — бот дойдёт до него и остановится молча.`,
       );
     }
 
@@ -745,6 +752,10 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               onPublish={handlePublish}
               disabled={bot.blocks.length === 0}
               orphanCount={orphanBlocks(bot.blocks, bot.start_block_id).length}
+              // Тот же чек-лист, что и до оплаты. Раньше он исчезал вместе с
+              // пейволлом — то есть ровно перед последним кликом, после
+              // которого бота видят живые покупатели, проверка пропадала.
+              problems={publishProblems}
             />
           )}
         </div>

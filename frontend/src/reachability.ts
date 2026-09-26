@@ -43,3 +43,44 @@ export function orphanBlocks(blocks: BotBlock[], startBlockId: string | null): B
   const reachable = reachableBlockIds(blocks, startBlockId);
   return blocks.filter((block) => !reachable.has(block.id));
 }
+
+/**
+ * Петля из стрелок «дальше», по которой бот пойдёт по кругу.
+ *
+ * Движок такую петлю переживает — он помнит пройденное и останавливается, —
+ * но останавливается МОЛЧА: покупатель видит оборванный разговор, владелец
+ * не узнаёт ничего. Для соседней беды (больше пятидесяти блоков подряд)
+ * владельцу уходит предупреждение, а для петли не уходило ничего. Если
+ * петля окажется перед блоком оплаты, ученики просто не дойдут до кнопки
+ * «купить», и это будет выглядеть как отсутствие спроса.
+ *
+ * Считаются только стрелки «дальше»: ветвление кнопками, которое сходится
+ * обратно, — нормальный приём, там человек нажимает и выбирает сам.
+ */
+export function loopedBlocks(blocks: BotBlock[], startBlockId: string | null): BotBlock[] {
+  const byId = new Map(blocks.map((block) => [block.id, block]));
+  const looped = new Set<string>();
+
+  for (const start of blocks) {
+    const path: string[] = [];
+    const onPath = new Set<string>();
+    let current: string | null = start.id;
+
+    while (current && byId.has(current)) {
+      if (onPath.has(current)) {
+        // Нашли витой участок: всё от первого появления и до конца пути.
+        for (const id of path.slice(path.indexOf(current))) looped.add(id);
+        break;
+      }
+      onPath.add(current);
+      path.push(current);
+      current = byId.get(current)!.next_block_id ?? null;
+    }
+  }
+
+  // Порядок холста, и только то, до чего бот вообще дойдёт: петля в
+  // неподключённой ветке — это не то, о чём стоит кричать, про неё уже
+  // сказано «не подключён».
+  const reachable = reachableBlockIds(blocks, startBlockId);
+  return blocks.filter((block) => looped.has(block.id) && reachable.has(block.id));
+}
