@@ -106,6 +106,16 @@ export function PaymentEditor({
   // это не число из поля цены: «Купить курс» без суммы — нормальная подпись,
   // которая ничего не обещает.
   const price = String(content.price ?? "").replace(",", ".").trim();
+  // Та же арифметика, что на сервере (payment_service.price_to_minor):
+  // копейки — две цифры, больше двух разделителей не бывает.
+  const chargeable = (() => {
+    if (price === "") return null;
+    const amount = Number(price);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    if (amount > 10_000_000) return "слишком много — проверь цену";
+    const shown = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+    return isStars ? `${shown} ⭐` : `${shown} ${currency}`;
+  })();
   const labelNumbers = (content.button_label ?? "").match(/\d+(?:[.,]\d+)?/g) ?? [];
   const staleLabel =
     price !== "" &&
@@ -206,6 +216,17 @@ export function PaymentEditor({
           {field.hint && <span className="payment-editor__field-hint">{field.hint}</span>}
         </label>
       ))}
+
+      {/* Сколько на самом деле спишется. Поле прощает опечатки — режет
+          буквы, выбрасывает разделители тысяч, — и каждое такое прощение
+          меняет сумму молча: «1e5» превращалось в 15, «2500.505» в два с
+          половиной миллиона. Показанная цифра ловит весь этот класс разом,
+          потому что её видно сразу. */}
+      {chargeable !== null && (
+        <p className="payment-editor__charge">
+          Спишется: <strong>{chargeable}</strong>
+        </p>
+      )}
 
       {/* Цена «0» проходила все проверки редактора и рисовалась на холсте
           как «— 0 RUB»; узнавал об этом только покупатель, получив общую

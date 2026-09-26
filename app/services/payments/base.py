@@ -362,6 +362,11 @@ def minor_to_major(amount_minor: int) -> str:
     return f"{amount_minor // 100}.{amount_minor % 100:02d}"
 
 
+#: Валюты, у которых знак читается лучше кода. Список намеренно короткий:
+#: это те, что стоят на ценниках в странах, откуда наши магазины.
+_SYMBOLS = {"RUB": "₽", "USD": "$", "EUR": "€", "KZT": "₸", "UAH": "₴", "XTR": "⭐"}
+
+
 def money(amount_minor: int, currency: str) -> str:
     """"990 RUB", "990.50 RUB", "250 ⭐" — an amount as a person reads it.
 
@@ -371,4 +376,8 @@ def money(amount_minor: int, currency: str) -> str:
     """
     whole, kopecks = divmod(int(amount_minor), 100)
     amount = str(whole) if kopecks == 0 else f"{whole}.{kopecks:02d}"
-    return f"{amount} ⭐" if (currency or "").upper() == "XTR" else f"{amount} {currency}"
+    code = (currency or "").upper()
+    # Символ там, где он привычнее кода: «Оплатить 2500 ₽» — это цена, а
+    # «Оплатить 2500 RUB» — выписка из банка. Для валют без общеизвестного
+    # символа остаётся код: выдумывать знак хуже, чем показать буквы.
+    return f"{amount} {_SYMBOLS[code]}" if code in _SYMBOLS else f"{amount} {code}"

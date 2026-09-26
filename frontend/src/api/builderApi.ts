@@ -281,6 +281,21 @@ export const builderApi = {
     request<{ broadcasts: BroadcastRow[] }>(`/bots/${botId}/broadcasts`),
   getPollResults: (botId: string) =>
     request<{ polls: PollResult[] }>(`/bots/${botId}/polls`),
+  /** Скачать заказы таблицей.
+   *
+   * Не ссылкой: API ждёт заголовок с токеном, которого у обычного `<a href>`
+   * нет, и такая ссылка просто отдала бы 401. Поэтому запрос с авторизацией,
+   * а файл отдаётся из памяти. */
+  downloadOrdersCsv: async (botId: string, filename: string) => {
+    const response = await fetch(`${API_BASE}/bots/${botId}/orders.csv`, { headers: authHeaders() });
+    if (!response.ok) throw new ApiError("Не удалось выгрузить заказы", response.status);
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
   getBilling: (botId: string) => request<BillingState>(`/bots/${botId}/billing`),
   startRenewalCheckout: (botId: string, provider?: string) =>
     request<PaymentInfo>(`/bots/${botId}/renewal-checkout`, {

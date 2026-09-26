@@ -419,3 +419,72 @@ async def test_the_subscriber_list_says_who_can_be_reached(api, auth, owner: Cli
 
     assert len(report["people"]) == 3
     assert len(reachable) == queued == 1, "число в вопросе не сойдётся с числом в отправке"
+
+
+# --------------------------------------- цена: потолок и читаемая валюта
+
+
+def test_an_absurd_price_is_refused_with_its_own_number():
+    """Поле принимало «99999999999999» молча, и такой счёт уходил в кассу как
+    есть — шлюз его не примет, а покупатель увидит невнятную ошибку."""
+    from app.services.payment_service import price_to_minor
+    from app.services.payments import ProviderError
+
+    assert price_to_minor("2500,50") == 250050
+    assert price_to_minor("10000000") == 1_000_000_000
+
+    with pytest.raises(ProviderError) as exc:
+        price_to_minor("99999999999999")
+    assert "99999999999999" in str(exc.value)
+
+
+def test_a_price_reads_as_a_price_not_a_bank_statement():
+    """«Оплатить 2500 RUB» — выписка, «Оплатить 2500 ₽» — цена."""
+    from app.services.payments import money
+
+    assert money(250000, "RUB") == "2500 ₽"
+    assert money(9900, "USD") == "99 $"
+    assert money(450000, "KZT") == "4500 ₸"
+    # Для валют без общеизвестного знака остаётся код: выдумывать символ
+    # хуже, чем показать буквы.
+    assert money(9900, "USDT") == "99 USDT"
+
+
+# ------------------------------------------- выгрузка заказов таблицей
+
+
+@pytest.mark.asyncio
+async def test_orders_can_be_exported_as_a_table(api, auth, owner: Client, make_bot, db: AsyncSession):
+    """Сверять три сотни строк глазами по панели — это тот самый вечер в
+    неделю, ради которого бота и покупают."""
+    bot, blocks = await make_bot(
+        owner, [(BlockType.payment, {"title": "Пак пресетов", "price": "3900"})], provider="test"
+    )
+    db.add(Payment(
+        id=uuid.uuid4(), kind=PaymentKind.order, status=PaymentStatus.paid,
+        provider="test", amount_minor=390000, currency="RUB", description="Пак пресетов",
+        bot_id=bot.id, block_id=blocks[0].id, telegram_user_id=USER_ID, chat_id=CHAT_ID,
+        meta={"delivered_at": datetime.now(timezone.utc).isoformat()},
+        paid_at=datetime.now(timezone.utc),
+    ))
+    await db.commit()
+
+    response = await api.get(f"/api/bots/{bot.id}/orders.csv", headers=auth(owner))
+
+    assert response.status_code == 200
+    assert "text/csv" in response.headers["content-type"]
+    assert "attachment" in response.headers["content-disposition"]
+    body = response.text
+    # BOM: без него Excel открывает кириллицу кракозябрами, и выгрузка
+    # бесполезна ровно для тех, кому нужна.
+    assert body.startswith("﻿")
+    assert "Пак пресетов" in body
+    assert "3900,00" in body
+    assert "да" in body  # доставлен
+
+
+@pytest.mark.asyncio
+async def test_the_export_is_not_readable_by_a_stranger(api, auth, stranger: Client, owner: Client, make_bot):
+    bot, _ = await make_bot(owner, [])
+
+    assert (await api.get(f"/api/bots/{bot.id}/orders.csv", headers=auth(stranger))).status_code == 404

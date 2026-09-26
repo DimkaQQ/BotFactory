@@ -392,7 +392,24 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved }: Props) {
 
               {(totals.length > 0 || orders.length > 0) && (
                 <div className="orders orders--summary">
-                  <span className="buttons-editor__field-label">Продажи</span>
+                  <span className="buttons-editor__field-label">
+                    Продажи
+                    {/* Сверять три сотни строк глазами по панели — это тот
+                        самый вечер в неделю, ради которого бота и покупают. */}
+                    <button
+                      type="button"
+                      className="orders__export"
+                      onClick={() => {
+                        void builderApi
+                          .downloadOrdersCsv(botId, "prodazhi.csv")
+                          .catch((err) =>
+                            setError(err instanceof ApiError ? err.message : "Не удалось выгрузить"),
+                          );
+                      }}
+                    >
+                      ⬇ Выгрузить в таблицу
+                    </button>
+                  </span>
 
                   {totals.length === 0 ? (
                     <p className="orders__lead">

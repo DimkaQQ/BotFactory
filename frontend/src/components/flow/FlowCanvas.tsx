@@ -36,7 +36,14 @@ const NODE_HEIGHT = 110;
 // returned a byte-identical transform: the one button whose whole job is to
 // frame the graph did nothing at all, on every screen size. Framing the graph
 // is what the button is for; reading the text is what zooming in is for.
-const FIT_VIEW_OPTIONS = { padding: 0.15, maxZoom: 1, minZoom: 0.2 };
+// `minZoom: 0.2` позволял «вписать в экран» ужать граф до нечитаемого: на
+// двенадцати блоках выходили прямоугольники 23×11 px с пятипиксельным
+// текстом. Вписывать целиком любой ценой — неправильная цель: лучше показать
+// часть графа так, чтобы её было видно, и дать прокрутить, чем показать всё
+// и ничего не разобрать. 0.45 — примерно та граница, за которой подпись
+// блока перестаёт читаться.
+const READABLE_MIN_ZOOM = 0.45;
+const FIT_VIEW_OPTIONS = { padding: 0.15, maxZoom: 1, minZoom: READABLE_MIN_ZOOM };
 
 /** Which model field a dropped/deleted arrow maps back to — carried on the
  * edge itself so onConnect/onEdgesDelete don't need to re-derive it from

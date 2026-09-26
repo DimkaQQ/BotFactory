@@ -157,6 +157,12 @@ def platform_method(provider: str | None) -> PlatformMethod:
     return methods[0]
 
 
+#: Потолок цены в основных единицах. Выше этого — почти наверняка опечатка
+#: или слипшиеся разряды, а не намерение; ни один шлюз такой счёт всё равно
+#: не примет.
+_MAX_PRICE_MAJOR = 10_000_000
+
+
 def price_to_minor(value) -> int:
     """"990", "990.5", 990.5 -> minor units. Parsed via string, because a
     price is a decimal amount and floats round it wrong.
@@ -177,6 +183,15 @@ def price_to_minor(value) -> int:
         raise ProviderError(
             f"Цена в блоке оплаты записана неверно: «{value}». "
             f"Нужно число, например 990 или 990.50."
+        )
+    whole_part = text.partition(".")[0] or "0"
+    if int(whole_part) > _MAX_PRICE_MAJOR:
+        # Не гипотетика: поле принимало «99999999999999» молча, и такой счёт
+        # ушёл бы в кассу как есть. Ни один шлюз его не примет, а покупатель
+        # увидит невнятную ошибку вместо цены.
+        raise ProviderError(
+            f"Цена в блоке оплаты слишком большая: «{value}». "
+            f"Максимум {_MAX_PRICE_MAJOR:,}".replace(",", " ") + "."
         )
     if "." not in text:
         return int(text) * 100

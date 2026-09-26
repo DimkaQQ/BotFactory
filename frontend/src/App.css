@@ -2539,7 +2539,12 @@
        confirm button below the fold on every laptop and desktop. The extra
        --sp-4 is the canvas's own bottom margin. */
     height: calc(100dvh - var(--above-h, 360px) - var(--footer-h) - var(--sp-4));
-    min-height: 200px;
+    /* Пол в 200px превращал холст в щель: на ноутбуке 1440×900 под него
+       оставалось ровно эти 200px, блоки рисовались 23×11 px, и шаблон на
+       двенадцать блоков нельзя было прочитать. Страница на десктопе
+       прокручивается, так что честнее дать редактору рабочий размер и
+       прокрутить остальное, чем ужать редактор до нечитаемого. */
+    min-height: 440px;
     box-shadow: var(--shadow-elevated);
   }
 
@@ -4087,6 +4092,24 @@
   height: 10px !important;
   background: var(--tg-bg) !important;
   border: 2px solid var(--tg-button) !important;
+}
+
+/* Попасть в кружок было отдельным умением: на холсте, ужатом до 0.45, десять
+   пикселей превращаются в четыре, а у кнопок точки стоят в пятнадцати
+   пикселях друг от друга — промахнуться и привязать не тот товар легче, чем
+   попасть. Видимый кружок остаётся прежним, а ловит он область вчетверо
+   больше: псевдоэлемент растягивает зону нажатия, ничего не рисуя. */
+.flow-node__handle::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+}
+
+/* Цель для пальца на холсте всегда одного размера, как бы ни был ужат
+   масштаб: иначе на отдалённом графе она схлопывается вместе с блоками. */
+.react-flow__node .flow-node__handle:hover {
+  border-width: 3px !important;
 }
 
 .flow-node__handle--button {
@@ -5787,4 +5810,35 @@
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-tertiary);
+}
+
+/* «Спишется: 2500.50 RUB» — цифра, которую увидит покупатель, показанная
+   там же, где её набирают. Поле прощает опечатки, и каждое прощение меняет
+   сумму молча. */
+.payment-editor__charge {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.payment-editor__charge strong {
+  color: var(--accent-on-surface);
+}
+
+/* Выгрузка заказов рядом с заголовком «Продажи». */
+.orders__export {
+  margin-left: var(--sp-3);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-on-surface);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.orders__export:hover {
+  text-decoration: underline;
 }

@@ -158,7 +158,7 @@ def test_the_test_checkout_page_does_not_double_the_currency():
     """«— 99 USD USD»: `money()` уже включает валюту, её добавляли второй раз."""
     from app.services.payments import money
 
-    assert money(9900, "USD") == "99 USD"
+    assert money(9900, "USD") == "99 $"
 
     import pathlib
 

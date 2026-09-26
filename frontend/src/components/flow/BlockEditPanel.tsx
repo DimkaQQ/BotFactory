@@ -154,7 +154,10 @@ export function BlockEditPanel({
 
           {isDeliveryBlock && (
             <div className="edit-panel__buttons">
-              <p className="edit-panel__section-label">Или пусти в закрытую группу</p>
+              {/* «Или» было неправдой: файл и доступ в чат в одном блоке
+                  поддерживаются намеренно, и уходит и то и другое. Текст
+                  говорил «или», код делал «и». */}
+              <p className="edit-panel__section-label">И / или пусти в закрытую группу</p>
               <label className="buttons-editor__field">
                 <span className="buttons-editor__field-label">ID группы или канала</span>
                 <input

@@ -100,6 +100,20 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   }, [measure]);
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Правка, набранная в последние полсекунды, жила только в таймере
+  // автосохранения — закрыл вкладку и потерял. Окно узкое, но индикатор в
+  // этот момент показывает «Сохраняем…», то есть человек уверен в обратном.
+  useEffect(() => {
+    const warnIfUnsaved = (event: BeforeUnloadEvent) => {
+      if (Object.keys(saveTimers.current).length === 0 && pendingSaves.current.size === 0) return;
+      event.preventDefault();
+      // Браузеры показывают свой текст, но требуют, чтобы значение было.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnIfUnsaved);
+    return () => window.removeEventListener("beforeunload", warnIfUnsaved);
+  }, []);
   const nameTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // Tracks which fields (block ids, "name", "reorder") currently have an

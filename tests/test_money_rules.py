@@ -119,7 +119,9 @@ async def test_the_button_shows_the_amount_that_will_be_charged(db, owner, make_
     )
 
     labels = [b.text for kb in telegram.keyboards() for row in kb.inline_keyboard for b in row]
-    assert "Оплатить 990.50 RUB" in labels, labels
+    # Знак, а не код: «Оплатить 990.50 ₽» — это цена, а «990.50 RUB» —
+    # выписка из банка.
+    assert "Оплатить 990.50 ₽" in labels, labels
 
 
 async def test_the_currency_comes_from_the_provider_not_the_stale_block(db, owner, make_bot):

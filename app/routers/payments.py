@@ -40,7 +40,7 @@ from app.schemas.payment import (
     PublicationInfoOut,
     PublicationMethodOut,
 )
-from app.services import payment_service, platform_billing
+from app.services import dates, payment_service, platform_billing
 from app.services import payments as payment_providers
 from app.services.payments import ProviderError
 
@@ -208,6 +208,14 @@ async def test_payment_page(payment_id: uuid.UUID, db: AsyncSession = Depends(ge
     await _apply(db, payment, verified)
 
     amount = payment_providers.money(payment.amount_minor, payment.currency)
+    # Покупку у бота человек делает из Telegram, а за публикацию платит из
+    # браузера конструктора — и там «возвращайся в Telegram, бот уже всё
+    # прислал» просто неправда.
+    back_to = (
+        "Можно возвращаться в конструктор — публикация оплачена."
+        if payment.kind != PaymentKind.order
+        else "Возвращайся в Telegram, бот уже всё прислал."
+    )
     return HTMLResponse(
         f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -218,7 +226,7 @@ async def test_payment_page(payment_id: uuid.UUID, db: AsyncSession = Depends(ge
             <div style="font-size:44px">✅</div>
             <h1 style="font-size:20px;margin:12px 0 6px">Тестовая оплата прошла</h1>
             <p style="color:#83829a;font-size:14px;margin:0">
-              {escape(payment.description or '')} — {amount}.<br>Возвращайся в Telegram, бот уже всё прислал.
+              {escape(payment.description or '')} — {amount}.<br>{back_to}
             </p>
           </div>
         </body></html>"""
@@ -828,6 +836,62 @@ async def broadcast(
 
     logger.info("Broadcast of block %s queued for %d people of bot %s", block.id, len(people), bot_id)
     return {"queued": len(people)}
+
+
+@router.get("/api/bots/{bot_id}/orders.csv")
+async def orders_csv(
+    bot_id: uuid.UUID,
+    bot: BotModel = Depends(get_owned_bot),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Заказы файлом, который откроется в таблице.
+
+    Сверять три сотни строк глазами по панели — это тот самый вечер в
+    неделю, ради которого человек и покупает бота. Отдаём CSV с BOM: без
+    него Excel открывает кириллицу кракозябрами, и выгрузка бесполезна
+    ровно для тех, кому нужна.
+    """
+    import csv
+    import io
+
+    orders = (
+        await db.execute(
+            select(Payment)
+            .where(Payment.bot_id == bot_id, Payment.kind == PaymentKind.order)
+            .order_by(Payment.created_at.desc())
+        )
+    ).scalars().all()
+
+    buyers = {
+        person.telegram_user_id: person
+        for person in (
+            await db.execute(select(BotSubscriber).where(BotSubscriber.bot_id == bot_id))
+        ).scalars().all()
+    }
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=";")
+    writer.writerow(["Номер", "Дата", "Товар", "Сумма", "Валюта", "Статус", "Доставлен", "Покупатель", "Telegram id"])
+    for order in orders:
+        person = buyers.get(order.telegram_user_id)
+        writer.writerow([
+            order.invoice_no,
+            dates.day(order.paid_at or order.created_at),
+            order.description,
+            f"{order.amount_minor / 100:.2f}".replace(".", ","),
+            order.currency,
+            order.status.value,
+            "да" if (order.meta or {}).get("delivered_at") else "нет",
+            person.title if person else "",
+            order.telegram_user_id or "",
+        ])
+
+    name = f"orders-{bot.telegram_bot_username or bot_id}.csv"
+    return Response(
+        content="\ufeff" + buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 @router.get("/api/bots/{bot_id}/broadcasts")

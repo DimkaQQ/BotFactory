@@ -66,42 +66,53 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     accent: "buttons",
     icon: "🔔",
     label: "Платная подписка",
-    pitch: "Новый материал каждую неделю — тренер, коуч, закрытый канал",
+    pitch: "Доступ в закрытый канал или чат за деньги в месяц",
     suggestedName: "Подписка",
-    // The template builds the whole month, not just the sale: the payment
-    // block is marked as a subscription and the three weekly videos are real
-    // blocks behind real week-long pauses. It used to promise «новый видос
-    // каждую неделю» on top of a bot that sent one message and never came
-    // back — the copy was the feature.
+    // Закрытый чат, а не капельная выдача видео. Прошлая версия была именно
+    // капельницей: четыре выпуска с недельными паузами и ни слова про
+    // доступ куда-либо, — а человек, который берёт этот шаблон, почти всегда
+    // продаёт вход в свой канал. Ему приходилось выкинуть семь блоков из
+    // двенадцати и собрать своё, то есть шаблон мешал, а не помогал. Выдачу
+    // по расписанию собрать по-прежнему можно: «Пауза» и «Видео» лежат в
+    // списке блоков слева.
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Здесь ты будешь получать новый материал каждую неделю 🔔" } },
+      {
+        block_type: "welcome",
+        content: { text: "Привет! Здесь открывается доступ в закрытый канал 🔔" },
+      },
       {
         block_type: "description",
-        content: { text: "Опиши, что именно получают подписчики и как часто выходит новый выпуск." },
+        content: {
+          text: "Расскажи, что внутри канала и как часто там появляется новое. Это главный текст, который решает, купят или нет.",
+        },
       },
       {
         block_type: "buttons",
-        content: { buttons: [{ label: "Оформить подписку", action_type: "text", action_value: "" }] },
+        content: {
+          text: "Готов присоединиться?",
+          buttons: [{ label: "Оформить подписку", action_type: "text", action_value: "" }],
+        },
       },
       {
         block_type: "payment",
         content: {
-          text: "Подписка стоит [цена] в месяц. После оплаты доступ откроется сразу.",
-          title: "Подписка на месяц",
+          text: "Подписка стоит [цена] в месяц. После оплаты бот сразу пришлёт ссылку на вход.",
+          title: "Доступ в закрытый канал",
           price: "590",
           currency: "RUB",
           subscription: true,
           period_days: 30,
         },
       },
-      { block_type: "delivery", content: { text: "Готово! Первое видео — сразу, дальше по одному каждую неделю 👀" } },
-      { block_type: "video", content: { text: "Выпуск 1 — вставь ссылку на видео", media_type: "video" } },
-      { block_type: "delay", content: { seconds: 7 * 24 * 3600 } },
-      { block_type: "video", content: { text: "Выпуск 2 — придёт через неделю после оплаты", media_type: "video" } },
-      { block_type: "delay", content: { seconds: 7 * 24 * 3600 } },
-      { block_type: "video", content: { text: "Выпуск 3 — ещё через неделю", media_type: "video" } },
-      { block_type: "delay", content: { seconds: 7 * 24 * 3600 } },
-      { block_type: "video", content: { text: "Выпуск 4 — последний в этом месяце", media_type: "video" } },
+      {
+        // Пустой group_chat_id, но с подсказкой: доступ выдаётся именно
+        // отсюда, и без этого поля шаблон снова стал бы «просто сообщением».
+        block_type: "delivery",
+        content: {
+          text: "Готово! Вот твоя персональная ссылка на вход — она одноразовая и только для тебя 👇",
+          group_chat_id: "",
+        },
+      },
     ],
   },
   {
