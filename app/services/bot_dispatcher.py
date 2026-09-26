@@ -411,6 +411,44 @@ def _human_reason(exc: Exception) -> str:
     return "касса не ответила или вернула ошибку"
 
 
+async def _cancel_subscriptions(
+    bot: Bot, chat_id: int, bot_id: uuid.UUID, db: AsyncSession, telegram_user_id: int | None
+) -> None:
+    """Прекратить списания по просьбе самого подписчика.
+
+    Оплаченный период остаётся за ним до конца — это отказ от следующего
+    платежа, а не отказ от уже купленного.
+    """
+    from app.services import subscription_service
+
+    if telegram_user_id is None:
+        return
+    live = await subscription_service.active_for(db, bot_id, telegram_user_id)
+    if not live:
+        await bot.send_message(chat_id, "У тебя нет активных подписок на этого бота 🙂")
+        return
+
+    until = max(s.current_period_end for s in live)
+    for subscription in live:
+        await subscription_service.cancel(
+            db, subscription, why="отменено подписчиком", keep_paid_period=True
+        )
+        # Владельцу — чтобы отток был виден, а не обнаруживался по выручке
+        # в конце месяца.
+        await _tell_owner(
+            db, bot_id,
+            f"🔕 Подписку «{subscription.title or 'без названия'}» отменили. "
+            f"Доступ у человека остаётся до {dates.day(subscription.current_period_end)}.",
+        )
+
+    await bot.send_message(
+        chat_id,
+        f"Готово — больше списывать не буду 👍\n"
+        f"Доступ остаётся до {dates.day(until)}, всё оплаченное придёт как обычно.\n"
+        f"Захочешь вернуться — нажми /start.",
+    )
+
+
 async def _tell_owner(db: AsyncSession, bot_id: uuid.UUID, message: str) -> None:
     from app.services import payment_service
 
@@ -1018,6 +1056,14 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
             "Готово — рассылку больше не пришлю 👍\nПокупки и доступы это не отменяет. "
             "Если передумаешь, напиши /start.",
         )
+        return
+
+    # Отмена подписки. Её не было вовсе: `cancel()` существовал в коде, а
+    # вызвать его подписчику было нечем — при списании с сохранённой карты
+    # (ЮKassa, CloudPayments и другие) остановить это он не мог никак, кроме
+    # как звонить в банк. Брать деньги без кнопки «перестать» нельзя.
+    if text.startswith("/cancel"):
+        await _cancel_subscriptions(bot, chat_id, bot_id, db, sender_id)
         return
 
     result = await db.execute(select(BotModel.start_block_id).where(BotModel.id == bot_id))

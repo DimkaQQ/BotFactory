@@ -105,6 +105,7 @@ async def register_webhook(bot_id: uuid.UUID, token: str) -> None:
             [
                 BotCommand(command="start", description="Начать сначала"),
                 BotCommand(command="stop", description="Не присылать рассылку"),
+                BotCommand(command="cancel", description="Отменить подписку"),
             ]
         )
 

@@ -126,16 +126,34 @@ async def schedule(
     return step
 
 
-async def cancel_for_subscription(db: AsyncSession, subscription_id: uuid.UUID, *, why: str = "") -> int:
+async def cancel_for_subscription(
+    db: AsyncSession,
+    subscription_id: uuid.UUID,
+    *,
+    why: str = "",
+    only_reasons: tuple[str, ...] | None = None,
+) -> int:
     """Withdraw everything still queued for a subscription that has ended.
 
     Belt and braces alongside the liveness re-read in `_run_step`: that stops
     a cancelled subscription from *sending*, this stops it from occupying the
     queue at all.
+
+    `only_reasons` сужает снятие до определённых видов шагов. Нужно для
+    отмены самим подписчиком: «больше не списывайте» — это про деньги, а не
+    про уже оплаченное. Снимать вместе со списаниями и уроки, за которые
+    человек заплатил и которые придут до конца периода, значит отобрать
+    оплаченное в наказание за отказ платить дальше.
     """
+    conditions = [
+        ScheduledStep.subscription_id == subscription_id,
+        ScheduledStep.status == StepStatus.pending,
+    ]
+    if only_reasons is not None:
+        conditions.append(ScheduledStep.reason.in_(only_reasons))
     result = await db.execute(
         update(ScheduledStep)
-        .where(ScheduledStep.subscription_id == subscription_id, ScheduledStep.status == StepStatus.pending)
+        .where(*conditions)
         .values(status=StepStatus.cancelled, last_error=why[:500], ran_at=datetime.now(timezone.utc))
     )
     await db.commit()

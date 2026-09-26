@@ -455,13 +455,30 @@ async def _tell_them_it_renewed(db: AsyncSession, subscription: Subscription) ->
             )
 
 
-async def cancel(db: AsyncSession, subscription: Subscription, *, why: str = "") -> None:
+async def cancel(
+    db: AsyncSession, subscription: Subscription, *, why: str = "", keep_paid_period: bool = False
+) -> None:
+    """Прекратить подписку.
+
+    `keep_paid_period` — отмена самим подписчиком: списаний больше не будет,
+    но оплаченный период он дослушивает до конца, и всё, что в нём
+    запланировано, придёт. Доступ закроется в конце периода: `expire_due`
+    забирает и отменённые тоже — пока он смотрел только на активные,
+    отменённая подписка не истекала никогда и человек оставался в закрытом
+    чате навсегда, перестав платить.
+    """
     subscription.status = SubscriptionStatus.cancelled
     subscription.cancelled_at = datetime.now(timezone.utc)
     if why:
         subscription.meta = {**(subscription.meta or {}), "cancel_reason": why}
     await db.commit()
-    await scheduler.cancel_for_subscription(db, subscription.id, why=why or "подписка отменена")
+    await scheduler.cancel_for_subscription(
+        db,
+        subscription.id,
+        why=why or "подписка отменена",
+        # Снимаем только деньги, не содержимое.
+        only_reasons=("charge", "renewal") if keep_paid_period else None,
+    )
 
 
 async def expire_due(limit: int = 500) -> int:
@@ -480,7 +497,13 @@ async def expire_due(limit: int = 500) -> int:
         result = await db.execute(
             select(Subscription)
             .where(
-                Subscription.status == SubscriptionStatus.active,
+                # И отменённые тоже. Отмена означает «больше не списывайте»,
+                # а не «отключите сейчас» — оплаченный период человек
+                # дослушивает до конца. Но закрывать доступ в конце всё равно
+                # надо: пока здесь стоял только `active`, отменённая подписка
+                # не истекала никогда, и человек оставался в закрытом чате
+                # навсегда, перестав платить.
+                Subscription.status.in_((SubscriptionStatus.active, SubscriptionStatus.cancelled)),
                 Subscription.current_period_end <= datetime.now(timezone.utc),
             )
             .limit(limit)

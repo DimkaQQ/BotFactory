@@ -333,6 +333,17 @@ async def test_the_master_key_can_be_rotated_without_losing_anything(
         await db.refresh(bot)
         assert security.decrypt_token(bot.bot_token_encrypted) == "111:SECRET"
         assert decrypt_credentials(bot.payment_credentials_encrypted) == {"secret_key": "sk_live_xyz"}
+
+        # И обратно. `rotate()` перешифровывает ВСЮ базу, а база здесь общая:
+        # без возврата этот тест оставлял чужие строки зашифрованными ключом,
+        # который живёт только внутри него, — и следующий прогон падал на
+        # нечитаемых данных, созданных предыдущим. Заодно это второй проход
+        # ротации, то есть проверка, что она обратима.
+        monkeypatch.setattr(settings, "fernet_key", old_key, raising=False)
+        monkeypatch.setattr(settings, "fernet_keys_retired", new_key, raising=False)
+        security._fernet.cache_clear()
+        back = await rotate()
+        assert back["failed"] == 0
     finally:
         monkeypatch.setattr(settings, "fernet_key", old_key, raising=False)
         monkeypatch.setattr(settings, "fernet_keys_retired", "", raising=False)

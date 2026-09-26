@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
@@ -255,3 +255,133 @@ async def test_the_same_holds_for_money_and_the_queue(db: AsyncSession, owner: C
             )
             await db.commit()
         await db.rollback()
+
+
+# -------------------------------- подписчик может прекратить списания
+
+
+@pytest.mark.asyncio
+async def test_a_subscriber_can_stop_being_charged(db: AsyncSession, owner: Client, make_bot, telegram):
+    """`cancel()` существовал в коде, а вызвать его подписчику было нечем.
+    При списании с сохранённой карты остановить это он не мог никак, кроме
+    как звонить в банк. Брать деньги без кнопки «перестать» нельзя."""
+    from app.models.bot import BotStatus
+    from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
+    from app.services import bot_dispatcher
+
+    bot, blocks = await make_bot(
+        owner,
+        [(BlockType.payment, {"title": "Закрытый чат", "price": "2500", "subscription": True})],
+        status=BotStatus.active, provider="test",
+    )
+    ends = datetime.now(timezone.utc) + timedelta(days=12)
+    db.add(Subscription(
+        id=uuid.uuid4(), bot_id=bot.id, block_id=blocks[0].id, telegram_user_id=USER_ID,
+        chat_id=CHAT_ID, provider="test", status=SubscriptionStatus.active,
+        billing_mode=BillingMode.auto, amount_minor=250000, currency="RUB",
+        title="Закрытый чат", current_period_end=ends, meta={},
+    ))
+    await db.commit()
+
+    await bot_dispatcher.process_update(
+        telegram,
+        {"message": {"chat": {"id": CHAT_ID}, "from": {"id": USER_ID}, "text": "/cancel"}},
+        bot.id, db,
+    )
+
+    fresh = (
+        await db.execute(
+            select(Subscription).where(Subscription.bot_id == bot.id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert fresh.status == SubscriptionStatus.cancelled
+    said = " ".join(telegram.sent())
+    assert "больше списывать не буду" in said
+    # Оплаченное остаётся: это отказ от следующего платежа, а не от купленного.
+    assert fresh.current_period_end == ends
+    assert ends.strftime("%d.%m.%Y") in said
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_subscription_still_loses_access_at_the_end(db: AsyncSession, owner: Client, make_bot):
+    """Обратная сторона: `expire_due` смотрел только на активные, поэтому
+    отменённая подписка не истекала никогда — человек переставал платить и
+    оставался в закрытом чате навсегда."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
+    from app.services import subscription_service
+
+    bot, blocks = await make_bot(owner, [(BlockType.payment, {"title": "Чат", "price": "2500"})])
+    sub = Subscription(
+        id=uuid.uuid4(), bot_id=bot.id, block_id=blocks[0].id, telegram_user_id=USER_ID,
+        chat_id=CHAT_ID, provider="test", status=SubscriptionStatus.cancelled,
+        billing_mode=BillingMode.auto, amount_minor=250000, currency="RUB", title="Чат",
+        current_period_end=datetime.now(timezone.utc) - timedelta(hours=1),
+        granted_chat_id=-1001, meta={},
+    )
+    db.add(sub)
+    await db.commit()
+    sub_id = sub.id
+
+    with patch("app.services.bot_registry.get_or_create", AsyncMock(return_value=AsyncMock())):
+        await subscription_service.expire_due()
+
+    fresh = (
+        await db.execute(
+            select(Subscription).where(Subscription.id == sub_id).execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    assert fresh.status == SubscriptionStatus.expired, "отменённая подписка не истекла — доступ остался навсегда"
+
+
+@pytest.mark.asyncio
+async def test_cancelling_keeps_the_lessons_already_paid_for(db: AsyncSession, owner: Client, make_bot):
+    """Отмена — это отказ от следующего платежа, а не от купленного. Снимать
+    вместе со списаниями и уроки, которые придут до конца оплаченного
+    периода, значит отобрать оплаченное в наказание за отказ платить дальше.
+    """
+    from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
+    from app.services import subscription_service
+
+    bot, blocks = await make_bot(
+        owner,
+        [(BlockType.payment, {"title": "Чат", "price": "2500"}),
+         (BlockType.description, {"text": "разбор трека"})],
+    )
+    sub = Subscription(
+        id=uuid.uuid4(), bot_id=bot.id, block_id=blocks[0].id, telegram_user_id=USER_ID,
+        chat_id=CHAT_ID, provider="test", status=SubscriptionStatus.active,
+        billing_mode=BillingMode.auto, amount_minor=250000, currency="RUB", title="Чат",
+        current_period_end=datetime.now(timezone.utc) + timedelta(days=10), meta={},
+    )
+    db.add(sub)
+    await db.commit()
+
+    lesson = ScheduledStep(
+        id=uuid.uuid4(), bot_id=bot.id, block_id=blocks[1].id, chat_id=CHAT_ID,
+        telegram_user_id=USER_ID, reason="delay", subscription_id=sub.id,
+        status=StepStatus.pending, run_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    charge = ScheduledStep(
+        id=uuid.uuid4(), bot_id=bot.id, block_id=blocks[0].id, chat_id=CHAT_ID,
+        telegram_user_id=USER_ID, reason="charge", subscription_id=sub.id,
+        status=StepStatus.pending, run_at=datetime.now(timezone.utc) + timedelta(days=10),
+    )
+    db.add_all([lesson, charge])
+    await db.commit()
+    lesson_id, charge_id = lesson.id, charge.id
+
+    await subscription_service.cancel(db, sub, why="отменено подписчиком", keep_paid_period=True)
+
+    async def status_of(step_id):
+        return (
+            await db.execute(
+                select(ScheduledStep.status).where(ScheduledStep.id == step_id)
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one()
+
+    assert await status_of(charge_id) == StepStatus.cancelled, "списание не снято"
+    assert await status_of(lesson_id) == StepStatus.pending, "у человека отобрали оплаченный урок"
