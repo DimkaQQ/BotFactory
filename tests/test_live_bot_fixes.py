@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.bot import Bot as BotModel
 from app.models.bot_block import BlockType
 from app.config import get_settings
 from app.models.client import Client
@@ -437,3 +438,110 @@ async def test_confirming_an_order_does_not_claim_a_delivery_that_failed(
     said = " ".join(str(c) for c in as_bot.send_message.call_args_list)
     assert "товар отправлен покупателю" not in said, "владельцу пообещали доставку, которой не было"
     assert "не дошёл" in said
+
+
+# ------------------------------- бот, снятый с эфира, больше не отвечает
+
+
+@pytest.mark.asyncio
+async def test_a_suspended_bot_stops_answering_even_if_it_is_cached(
+    db: AsyncSession, owner: Client, make_bot
+):
+    """Кеш живёт в памяти процесса, а снять бота с эфира может другой.
+
+    Так делает `platform_billing.sweep` за неоплаченный период: владельцу
+    написали «бот ушёл с эфира», а бот продолжал отвечать из тех процессов,
+    где он был закеширован, — то есть работал бесплатно.
+    """
+    from unittest.mock import MagicMock
+
+    from app.models.bot import BotStatus
+    from app.services import bot_registry, security
+
+    bot, _ = await make_bot(owner, [], status=BotStatus.active)
+    bot.bot_token_encrypted = security.encrypt_token("111111:AA-token")
+    await db.commit()
+
+    first = await bot_registry.get_or_create(bot.id, db)
+    assert first is not None, "живой бот должен отвечать"
+    # Тот же экземпляр, пока ничего не изменилось: лишних сессий не плодим.
+    assert await bot_registry.get_or_create(bot.id, db) is first
+
+    # Другой процесс снял бота с эфира.
+    await db.execute(
+        BotModel.__table__.update().where(BotModel.id == bot.id).values(status=BotStatus.disabled)
+    )
+    await db.commit()
+
+    assert await bot_registry.get_or_create(bot.id, db) is None, "снятый бот всё ещё отвечает"
+    assert bot.id not in bot_registry._registry, "экземпляр остался в кеше"
+
+
+@pytest.mark.asyncio
+async def test_a_reissued_token_replaces_the_cached_bot(db: AsyncSession, owner: Client, make_bot):
+    """Токен перевыпущен у @BotFather — кешированный экземпляр говорит со
+    старым и получает от Telegram отказ на каждое сообщение."""
+    from app.models.bot import BotStatus
+    from app.services import bot_registry, security
+
+    bot, _ = await make_bot(owner, [], status=BotStatus.active)
+    bot.bot_token_encrypted = security.encrypt_token("111111:AA-old")
+    await db.commit()
+
+    first = await bot_registry.get_or_create(bot.id, db)
+
+    await db.execute(
+        BotModel.__table__.update()
+        .where(BotModel.id == bot.id)
+        .values(bot_token_encrypted=security.encrypt_token("222222:BB-new"))
+    )
+    await db.commit()
+
+    second = await bot_registry.get_or_create(bot.id, db)
+    assert second is not first, "бот отвечает со старым токеном"
+    assert second is not None and second.token == "222222:BB-new"
+
+
+# --------------------------------------------- выход, который закрывает
+
+
+@pytest.mark.asyncio
+async def test_logging_out_closes_the_token_everywhere(api, auth, owner: Client):
+    """Стереть токен в браузере — не то же самое, что выйти.
+
+    Токен живёт тридцать дней, и до этого отозвать его было нечем: на общем
+    компьютере «Выйти» не закрывало ни кассу, ни список покупателей, ни
+    кнопку снятия бота с эфира.
+    """
+    stolen = auth(owner)
+
+    assert (await api.get("/api/bots", headers=stolen)).status_code == 200
+
+    assert (await api.post("/api/auth/logout", headers=stolen)).status_code == 204
+
+    refused = await api.get("/api/bots", headers=stolen)
+    assert refused.status_code == 401, "старый токен всё ещё работает"
+    # И на других эндпоинтах тоже, а не только на том, где проверили.
+    assert (await api.get("/api/me", headers=stolen)).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_logging_in_again_works_right_after_logging_out(api, auth, owner: Client):
+    """Выход не должен запирать аккаунт: следующий вход выдаёт новый токен,
+    и он обязан приниматься."""
+    from app.services.session_token import create_session_token
+
+    await api.post("/api/auth/logout", headers=auth(owner))
+
+    fresh = {"Authorization": f"Bearer {create_session_token(owner.id)}"}
+    assert (await api.get("/api/bots", headers=fresh)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_a_logout_does_not_reach_someone_else(api, auth, owner: Client, stranger: Client):
+    """Выход закрывает свои токены, а не чужие."""
+    others = auth(stranger)
+
+    await api.post("/api/auth/logout", headers=auth(owner))
+
+    assert (await api.get("/api/bots", headers=others)).status_code == 200

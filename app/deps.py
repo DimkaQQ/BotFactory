@@ -53,14 +53,23 @@ async def _client_from_session_token(token: str, db: AsyncSession) -> Client:
     """Web path: resolve the Client behind an already-issued session token
     (see app/routers/auth.py — issued after a Telegram Login Widget login)."""
 
-    client_id = verify_session_token(token)
-    if client_id is None:
+    session = verify_session_token(token)
+    if session is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired, please log in again")
 
-    result = await db.execute(select(Client).where(Client.id == client_id))
+    result = await db.execute(select(Client).where(Client.id == session.client_id))
     client = result.scalar_one_or_none()
     if client is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session refers to a deleted account")
+
+    # Выход из аккаунта. Токен живёт тридцать дней, и «Выйти» стирало его
+    # только в браузере — на общем компьютере это не закрывало ничего, а за
+    # токеном касса, список покупателей и кнопка снятия бота с эфира.
+    cutoff = client.sessions_valid_from
+    if cutoff is not None and (session.issued_at is None or session.issued_at < cutoff):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired, please log in again"
+        )
     return client
 
 

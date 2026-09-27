@@ -259,3 +259,60 @@ async def test_telegram_refusing_the_invoice_stops_the_chain(db, owner, make_bot
     # И покупатель, и владелец узнают — молча терять продажу нельзя.
     assert any("Не получилось показать оплату" in m for m in sent)
     assert told and "счёт не дошёл" in told[0], f"владельцу не сказали: {told}"
+
+
+async def test_a_chain_that_hands_over_nothing_tells_the_owner(db, owner, make_bot, as_bot, monkeypatch):
+    """Блок «Выдача» удалили после продажи — и заказ считался успешным.
+
+    Цепочка отрабатывала без единой ошибки: покупатель получал «Спасибо за
+    покупку!», заказ помечался доставленным, автодозвон его не трогал, и не
+    узнавал никто.
+    """
+    bot, blocks = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд", "title": "Гайд", "price": "990"}),
+            (BlockType.description, {"text": "Спасибо за покупку!"}),
+        ],
+        provider="test",
+    )
+    payment = await order(db, bot, as_bot)
+    await payment_service.mark_paid(db, payment, "x")
+
+    told: list[str] = []
+
+    async def remember(db_, payment_, *, reason="missing"):
+        told.append(reason)
+
+    monkeypatch.setattr(payment_service, "_notify_owner_of_stuck_delivery", remember)
+
+    await payment_service.resume_after_payment(db, payment)
+
+    assert "Спасибо за покупку!" in as_bot.sent()
+    assert told == ["nothing"], f"продавцу не сказали, что выдавать было нечего: {told}"
+
+
+async def test_a_link_in_the_text_counts_as_delivery(db, owner, make_bot, as_bot, monkeypatch):
+    """Половина продавцов выдаёт ссылкой в обычном тексте — предупреждение с
+    каждой такой продажи было бы хуже, чем его отсутствие."""
+    bot, _ = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд", "title": "Гайд", "price": "990"}),
+            (BlockType.description, {"text": "Спасибо! Вот гайд: https://files.example.com/guide.pdf"}),
+        ],
+        provider="test",
+    )
+    payment = await order(db, bot, as_bot)
+    await payment_service.mark_paid(db, payment, "x")
+
+    told: list[str] = []
+
+    async def remember(db_, payment_, *, reason="missing"):
+        told.append(reason)
+
+    monkeypatch.setattr(payment_service, "_notify_owner_of_stuck_delivery", remember)
+
+    await payment_service.resume_after_payment(db, payment)
+
+    assert told == [], f"предупреждение на нормальной выдаче: {told}"

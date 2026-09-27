@@ -8,13 +8,16 @@ frontend replays the resulting bearer token.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_db
+from app.deps import get_current_client
 from app.models.client import Client
 from app.services.session_token import create_session_token
 from app.services.telegram_validator import InvalidInitData, validate_login_widget_data
@@ -124,3 +127,20 @@ async def telegram_login(
         await db.commit()
 
     return TelegramLoginResponse(token=create_session_token(client.id))
+
+
+@router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Закрыть доступ по всем выданным токенам этого аккаунта.
+
+    Стереть токен в браузере — не то же самое, что выйти: он действителен
+    тридцать дней, и за ним касса, список покупателей и кнопка снятия бота
+    с эфира. Отметка одна на аккаунт, поэтому выход происходит сразу
+    везде — о чём кнопка и предупреждает.
+    """
+    client.sessions_valid_from = datetime.now(timezone.utc)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

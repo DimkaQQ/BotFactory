@@ -13,7 +13,10 @@ library needed.
 from __future__ import annotations
 
 import json
+import time
 import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from cryptography.fernet import InvalidToken
 
@@ -22,15 +25,38 @@ from app.services.security import get_fernet
 SESSION_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
 
+@dataclass(frozen=True)
+class Session:
+    """Кому принадлежит токен и когда он выдан.
+
+    Время выпуска нужно, чтобы выход из аккаунта что-то значил: токен живёт
+    тридцать дней, и до этого отозвать его было нечем — «Выйти» стирало его
+    только в браузере.
+    """
+
+    client_id: uuid.UUID
+    issued_at: datetime | None
+
+
 def create_session_token(client_id: uuid.UUID) -> str:
-    payload = json.dumps({"client_id": str(client_id)}).encode()
+    # Дробные секунды не для точности, а чтобы вход сразу после выхода
+    # сработал: выход ставит отметку с микросекундами, и токен, выпущенный
+    # в ту же секунду, но округлённый вниз, оказывался «старше» её.
+    payload = json.dumps({"client_id": str(client_id), "iat": time.time()}).encode()
     return get_fernet().encrypt(payload).decode()
 
 
-def verify_session_token(token: str) -> uuid.UUID | None:
+def verify_session_token(token: str) -> Session | None:
     try:
         payload = get_fernet().decrypt(token.encode(), ttl=SESSION_TTL_SECONDS)
         data = json.loads(payload)
-        return uuid.UUID(data["client_id"])
+        issued = data.get("iat")
+        return Session(
+            client_id=uuid.UUID(data["client_id"]),
+            # Токены, выпущенные до появления этого поля, времени не несут.
+            # Такой токен считается выпущенным бесконечно давно: любой выход
+            # из аккаунта его закрывает, и это правильная сторона ошибки.
+            issued_at=datetime.fromtimestamp(float(issued), tz=timezone.utc) if issued else None,
+        )
     except (InvalidToken, ValueError, KeyError, TypeError):
         return None

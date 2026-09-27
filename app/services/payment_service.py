@@ -671,6 +671,14 @@ async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
                 if int((payment.meta or {}).get("delivery_attempts") or 0) <= 1:
                     await _notify_owner_of_stuck_delivery(db, payment, reason="telegram")
                 return
+            # Цепочка отработала без единой ошибки — и именно поэтому заказ
+            # помечается доставленным, даже если выдавать в ней было нечего.
+            # Так выглядит блок «Выдача», удалённый после продажи: покупатель
+            # получает «Спасибо за покупку!» и всё, заказ в журнале числится
+            # успешным, автодозвон его не трогает, и не узнаёт никто.
+            if not await _chain_delivers_something(db, payment.bot_id, uuid.UUID(str(target))):
+                logger.error("Payment %s: the chain after payment hands over nothing", payment.id)
+                await _notify_owner_of_stuck_delivery(db, payment, reason="nothing")
         else:
             # Paid, but the scenario no longer says what to hand over. Tell
             # the buyer someone is coming rather than leaving them with a
@@ -685,6 +693,46 @@ async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
         await _stamp_delivered(db, payment)
     except Exception:
         logger.exception("Payment %s: paid but delivery failed", payment.id)
+
+
+#: Дальше этого по цепочке не смотрим: выдача, до которой нужно пройти
+#: двадцать блоков, — это уже не выдача.
+_MAX_DELIVERY_LOOKAHEAD = 20
+
+
+async def _chain_delivers_something(db: AsyncSession, bot_id, start_block_id) -> bool:
+    """Есть ли в цепочке после оплаты хоть что-то, что можно назвать товаром.
+
+    Товар — это файл, доступ в закрытый чат или ссылка. Ссылка в обычном
+    тексте считается тоже: половина продавцов выдаёт именно так, и считать
+    это «ничем» значило бы слать им предупреждение с каждой продажи.
+    """
+    import re
+
+    next_id = start_block_id
+    seen: set = set()
+    for _ in range(_MAX_DELIVERY_LOOKAHEAD):
+        if next_id is None or next_id in seen:
+            break
+        seen.add(next_id)
+        result = await db.execute(
+            select(BotBlock).where(BotBlock.id == next_id, BotBlock.bot_id == bot_id)
+        )
+        block = result.scalar_one_or_none()
+        if block is None:
+            break
+        content = block.content or {}
+        if str(content.get("media_file_id") or "").strip():
+            return True
+        if str(content.get("group_chat_id") or "").strip():
+            return True
+        if re.search(r"https?://\S|t\.me/\S", str(content.get("text") or "")):
+            return True
+        for button in content.get("buttons") or []:
+            if str(button.get("action_value") or "").strip().startswith(("http", "tg:")):
+                return True
+        next_id = block.next_block_id
+    return False
 
 
 async def _how_to_stop(db: AsyncSession, payment: Payment) -> str:
@@ -739,7 +787,13 @@ async def _notify_owner_of_stuck_delivery(
         instance = await bot_registry.get_or_create(payment.bot_id, db)
         if owner is None or not owner.telegram_user_id or instance is None:
             return
-        if reason == "telegram":
+        if reason == "nothing":
+            text = (
+                f"⚠️ Заказ №{payment.invoice_no} оплачен, и бот отправил всё, что стоит после оплаты, — "
+                f"но выдавать там нечего: ни файла, ни ссылки, ни доступа в чат. "
+                f"Проверь блок «Выдача»: покупатель получил только текст."
+            )
+        elif reason == "telegram":
             text = (
                 f"⚠️ Заказ №{payment.invoice_no} оплачен, но выдача не ушла — Telegram её отклонил. "
                 f"Чаще всего это слишком длинный текст (больше 4096 символов), картинка по ссылке, "

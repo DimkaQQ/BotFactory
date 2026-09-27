@@ -189,12 +189,26 @@ export default function App() {
             onLogout={
               isMiniApp
                 ? undefined
-                : () => {
+                : async () => {
+                    // Сначала на сервере, потом в браузере: если запрос не
+                    // прошёл, локально всё равно выходим — но доступ на
+                    // сервере в этом случае не закрыт, и молчать об этом
+                    // нельзя.
+                    let revoked = true;
+                    try {
+                      await builderApi.logout();
+                    } catch {
+                      revoked = false;
+                    }
                     clearSessionAuth();
                     setClientName(undefined);
                     window.history.replaceState(null, "", "/");
                     setScreen({ name: "list" });
                     setBootState("need-login");
+                    if (!revoked) {
+                      // Не alert: он блокирует, а человек уже на лендинге.
+                      console.warn("Выход выполнен только в этом браузере — сервер недоступен");
+                    }
                   }
             }
           />

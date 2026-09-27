@@ -18,4 +18,14 @@ class Client(Base):
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    #: Выход из аккаунта. Токены, выпущенные раньше этого момента, больше не
+    #: принимаются: стереть токен в браузере — не то же самое, что закрыть
+    #: доступ, а за ним касса, покупатели и кнопка снятия бота с эфира.
+    #: Одна отметка на клиента, поэтому выход происходит сразу на всех
+    #: устройствах — для аккаунта с одним владельцем это то, чего от кнопки
+    #: и ждут.
+    sessions_valid_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     bots: Mapped[list["Bot"]] = relationship(back_populates="client", cascade="all, delete-orphan")

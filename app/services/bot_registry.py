@@ -29,28 +29,63 @@ logger = logging.getLogger(__name__)
 
 _registry: dict[uuid.UUID, Bot] = {}
 
+#: Зашифрованный токен, из которого собран кешированный экземпляр. По нему
+#: видно, что бот перевыпустил токен в другом процессе: строка в базе
+#: изменилась, а в памяти остался экземпляр со старым.
+_built_from: dict[uuid.UUID, str] = {}
+
 
 async def get_or_create(bot_id: uuid.UUID, db: AsyncSession) -> Bot | None:
-    """Return a cached (or freshly created) aiogram Bot instance for an active bot."""
+    """Return a cached (or freshly created) aiogram Bot instance for an active bot.
 
-    cached = _registry.get(bot_id)
-    if cached is not None:
-        return cached
+    Состояние бота перечитывается даже для кешированного экземпляра. Кеш
+    живёт в памяти процесса, а снять бота с эфира может другой: так делает
+    `platform_billing.sweep` за неоплаченный период, и в конфигурации с
+    несколькими воркерами снятый бот продолжал отвечать из тех процессов,
+    где он был закеширован, — то есть работал бесплатно и после того, как
+    владельцу написали «бот ушёл с эфира». Запрос по первичному ключу тут
+    дешевле, чем эта неопределённость.
+    """
 
-    result = await db.execute(select(BotModel).where(BotModel.id == bot_id))
-    bot_row = result.scalar_one_or_none()
-    if bot_row is None or bot_row.status != BotStatus.active or not bot_row.bot_token_encrypted:
+    result = await db.execute(
+        select(BotModel.status, BotModel.bot_token_encrypted).where(BotModel.id == bot_id)
+    )
+    row = result.one_or_none()
+    if row is None or row.status != BotStatus.active or not row.bot_token_encrypted:
+        _forget(bot_id)
         return None
 
-    token = decrypt_token(bot_row.bot_token_encrypted)
+    cached = _registry.get(bot_id)
+    if cached is not None and _built_from.get(bot_id) == row.bot_token_encrypted:
+        return cached
+
+    token = decrypt_token(row.bot_token_encrypted)
     instance = Bot(token=token, session=build_bot_session())
-    _registry[bot_id] = instance
+    put(bot_id, instance, source=row.bot_token_encrypted)
     return instance
 
 
-def put(bot_id: uuid.UUID, instance: Bot) -> None:
+def _forget(bot_id: uuid.UUID) -> None:
+    """Выбросить экземпляр, который больше не имеет права отвечать."""
+    instance = _registry.pop(bot_id, None)
+    _built_from.pop(bot_id, None)
+    if instance is not None:
+        from app.services import background
+
+        background.spawn(_close_quietly(instance), name=f"close-session:{bot_id}")
+
+
+def put(bot_id: uuid.UUID, instance: Bot, *, source: str | None = None) -> None:
     previous = _registry.get(bot_id)
     _registry[bot_id] = instance
+    if source is None:
+        # Экземпляр пришёл со стороны (сразу после публикации) — токен, из
+        # которого он собран, нам не назвали. Забываем прежний отпечаток,
+        # чтобы следующий запрос собрал экземпляр заново, а не сверял его с
+        # чужим.
+        _built_from.pop(bot_id, None)
+    else:
+        _built_from[bot_id] = source
     if previous is not None and previous is not instance:
         # Replacing a cached bot without closing it leaked an aiohttp session
         # on every webhook refresh — and refresh now runs for every live bot
@@ -161,6 +196,7 @@ async def remove(bot_id: uuid.UUID, token: str | None = None) -> None:
     Telegram itself is unreachable."""
 
     instance = _registry.pop(bot_id, None)
+    _built_from.pop(bot_id, None)
 
     if instance is None and token:
         instance = Bot(token=token, session=build_bot_session())
@@ -180,3 +216,4 @@ async def close_all() -> None:
     for instance in _registry.values():
         await instance.session.close()
     _registry.clear()
+    _built_from.clear()

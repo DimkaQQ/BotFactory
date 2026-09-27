@@ -235,8 +235,8 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 title="Выйти из аккаунта на этом устройстве"
                 onClick={() => {
                   void confirmDialog(
-                    "Выйти из аккаунта? Боты, заказы и настройки останутся на месте — " +
-                      "войти снова можно через Telegram.",
+                    "Выйти из аккаунта на всех устройствах?\n\nБоты, заказы и настройки " +
+                      "останутся на месте — войти снова можно через Telegram.",
                     "Выйти",
                   ).then((ok) => {
                     if (ok) onLogout();

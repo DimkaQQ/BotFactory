@@ -202,6 +202,10 @@ export interface TelegramLoginPayload {
 export const builderApi = {
   getMe: () => request<ClientInfo>("/me"),
   getPublicConfig: () => request<PublicConfig>("/config"),
+  /** Закрыть доступ по всем выданным токенам этого аккаунта. Локальной
+   * очистки мало: токен живёт тридцать дней, и за ним касса, покупатели и
+   * кнопка снятия бота с эфира. */
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
   loginWithTelegram: (payload: TelegramLoginPayload) =>
     request<{ token: string }>("/auth/telegram-login", { method: "POST", body: JSON.stringify(payload) }),
 
