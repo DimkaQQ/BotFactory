@@ -376,3 +376,29 @@ def _about(told: list[tuple[uuid.UUID, str]], bot: BotModel) -> list[str]:
 
 async def _noop(*args, **kwargs):
     return None
+
+
+async def test_the_grace_notice_does_not_shave_off_a_day(
+    db: AsyncSession, priced, live_bot: BotModel, monkeypatch
+):
+    """При шести с небольшим сутках впереди бот писал «ещё 5 дн.».
+
+    Цифра из этого сообщения — единственное, по чему владелец решает,
+    успеет он продлить или нет.
+    """
+    # Ровно сутки назад: впереди шесть суток без малого — те самые, что
+    # `.days` округлял вниз до пяти.
+    live_bot.paid_until = datetime.now(timezone.utc) - timedelta(days=1)
+    await db.commit()
+
+    told: list[str] = []
+
+    async def remember(db_, bot_, message):
+        told.append(message)
+
+    monkeypatch.setattr(platform_billing, "_tell_owner", remember)
+
+    await platform_billing.sweep(db)
+
+    assert told, "владельцу не сказали про грейс"
+    assert "ещё 6 дн." in told[0], told[0]

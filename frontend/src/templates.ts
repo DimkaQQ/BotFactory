@@ -40,7 +40,12 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       { block_type: "image", content: { media_type: "photo", media_file_id: "", text: "Как это выглядит" } },
       {
         block_type: "buttons",
-        content: { buttons: [{ label: "Купить", action_type: "text", action_value: "" }] },
+        // Текст обязателен: блок кнопок без него уходит покупателю как
+        // сообщение «…» — Telegram не отправляет кнопки без сообщения.
+        content: {
+          text: "Готов забрать?",
+          buttons: [{ label: "Купить", action_type: "text", action_value: "" }],
+        },
       },
       {
         block_type: "payment",
@@ -181,7 +186,13 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       },
       {
         block_type: "buttons",
-        content: { buttons: [{ label: "Наш сайт / меню", action_type: "url", action_value: "https://" }] },
+        // Адрес пустой, а не «https://»: такой Telegram отвергает целиком,
+        // и вместе с кнопкой пропадало всё сообщение. Пустой ловит
+        // чек-лист перед публикацией.
+        content: {
+          text: "Загляни к нам:",
+          buttons: [{ label: "Наш сайт / меню", action_type: "url", action_value: "" }],
+        },
       },
     ],
   },

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { BotBlock, BotWithBlocks } from "../api/builderApi";
+import { type BotBlock, type BotWithBlocks, currencyUnit } from "../api/builderApi";
 import { useEscape } from "../hooks/useEscape";
 
 interface Props {
@@ -218,7 +218,12 @@ function PreviewBlock({
   const { content } = block;
 
   if (block.block_type === "payment") {
-    const label = content.button_label?.trim() || `Оплатить ${content.price || "…"} ${content.currency || ""}`.trim();
+    // Знак валюты, а не код: живой бот присылает «Оплатить 990 ₽», и
+    // предпросмотр, который обещал «990 RUB», показывал не ту кнопку,
+    // которую увидит покупатель.
+    const label =
+      content.button_label?.trim() ||
+      `Оплатить ${content.price || "…"} ${currencyUnit(content.currency || "")}`.trim();
     return (
       <div className="chat-row">
         <div className="chat-row__avatar">{isLast && <span className="chat-avatar">🤖</span>}</div>

@@ -255,7 +255,37 @@ async def _send_payment_block(
     if payment.provider not in _SELF_SETTLING:
         rows.append([InlineKeyboardButton(text="Я оплатил", callback_data=f"{_PAY_CHECK}:{payment.id.hex}")])
 
-    await bot.send_message(chat_id, text or "Оплата", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+    keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
+    try:
+        # Счёт режется так же, как обычное сообщение. Раньше он уходил одним
+        # куском, и продающий текст длиннее 4096 символов Telegram отвергал
+        # целиком — а исключение отсюда ловил общий `except` в `walk_chain`,
+        # который шёл дальше по стрелке. То есть в блок «Выдача»: счёт не
+        # выставлен, оплаты нет, товар у покупателя. Тем же путём уходил
+        # товар при обычном «429 Too Many Requests».
+        chunks = _split_for_telegram(text or "Оплата")
+        for piece in chunks[:-1]:
+            await bot.send_message(chat_id, piece)
+        await bot.send_message(chat_id, chunks[-1], reply_markup=keyboard)
+    except Exception as exc:
+        logger.exception("Could not send the invoice for block %s (bot %s)", block.id, bot_id)
+        with contextlib.suppress(Exception):
+            await bot.send_message(
+                chat_id,
+                "Не получилось показать оплату — попробуй ещё раз чуть позже. "
+                "Если не заработает, напиши продавцу.",
+            )
+        await _tell_owner(
+            db, bot_id,
+            f"🔴 Покупатель нажал «{(content.get('title') or 'Оплата').strip()}», "
+            f"но счёт не дошёл до него — продажа не состоялась.\n\n"
+            f"Причина: {_human_reason(exc)}\n\n"
+            f"Счёт №{payment.invoice_no} остался неоплаченным, товар покупатель не получил.",
+        )
+    # True при любом исходе: дальше по цепочке лежит то, что покупатель
+    # ещё не оплатил. Обещание этой функции — «цепочка здесь
+    # останавливается, что бы ни случилось» — до этого выполнялось только
+    # когда всё шло хорошо.
     return True
 
 
@@ -290,7 +320,23 @@ async def _handle_payment_callback(
             return
         if action == _PAY_OK:
             await payment_service.confirm_by_owner(db, payment)
-            await bot.send_message(chat_id, f"Заказ №{payment.invoice_no} подтверждён — товар отправлен покупателю.")
+            # «Товар отправлен» — утверждение о выдаче, а возвращает
+            # `confirm_by_owner` только то, удалось ли пометить заказ
+            # оплаченным. Покупатель, заблокировавший бота, давал ровно эту
+            # пару: «товар отправлен покупателю» владельцу и ничего —
+            # покупателю. Отметка о выдаче ставится в этой же сессии, так
+            # что ответ на «дошло ли» есть прямо здесь.
+            await db.refresh(payment)
+            if (payment.meta or {}).get("delivered_at"):
+                await bot.send_message(
+                    chat_id, f"Заказ №{payment.invoice_no} подтверждён — товар отправлен покупателю."
+                )
+            else:
+                await bot.send_message(
+                    chat_id,
+                    f"Заказ №{payment.invoice_no} подтверждён, но товар до покупателя не дошёл — "
+                    f"возможно, он заблокировал бота. Заказ помечен в кабинете: там есть «отправить ещё раз».",
+                )
         else:
             await payment_service.reject_by_owner(db, payment)
             await bot.send_message(chat_id, f"Заказ №{payment.invoice_no} отклонён.")

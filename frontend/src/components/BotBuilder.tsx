@@ -216,18 +216,24 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
 
   // Выручка этого бота одной строкой — чтобы не искать её под кнопкой с
   // надписью «касса».
-  const salesLine = (() => {
-    if (!sales || sales.orders.length === 0) return null;
+  // Узкий вариант — не слово «Продажи», а число: на телефоне длинная
+  // подпись прячется, и владелец видел кнопку без единой цифры. С телефона
+  // её и открывают, чтобы посмотреть, не ждёт ли кто подтверждения.
+  const [salesLine, salesShort] = (() => {
+    if (!sales || sales.orders.length === 0) return [null, null];
     // Заказы, где покупатель нажал «Я оплатил», а подтвердить может только
     // человек. Они важнее выручки: пока их не разобрали, товар не выдан.
     const awaiting = sales.orders.filter((o) => o.needs_confirmation).length;
-    if (awaiting > 0) return `Ждут подтверждения: ${awaiting}`;
+    if (awaiting > 0) return [`Ждут подтверждения: ${awaiting}`, `⏳ ${awaiting}`];
     // Ни одной оплаты — но заказы есть: «десять открыли счёт и никто не
     // заплатил» тоже стоит того, чтобы открыть экран продаж.
-    if (sales.paid_count === 0) return `Заказы: ${sales.orders.length}`;
+    if (sales.paid_count === 0) return [`Заказы: ${sales.orders.length}`, `${sales.orders.length}`];
     const best = [...(sales.totals ?? [])].sort((a, b) => b.total_minor - a.total_minor)[0];
-    if (!best) return `Продаж: ${sales.paid_count}`;
-    return `${sales.paid_count} · ${formatAmount(best.total_minor)} ${best.currency}`;
+    if (!best) return [`Продаж: ${sales.paid_count}`, `${sales.paid_count}`];
+    return [
+      `${sales.paid_count} · ${formatAmount(best.total_minor)} ${best.currency}`,
+      `${sales.paid_count}`,
+    ];
   })();
 
   // Что человек узнавал только после того, как заплатил 99 $: касса без
@@ -248,6 +254,23 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       found.push("Касса в тестовом режиме — платежи будут ненастоящими. Выключи его в настройках кассы.");
     }
 
+    // Поля, которые заполняются в самом блоке, а не в кассе: ссылка на
+    // оплату у «Оплаты по ссылке», номер оферты у LavaTop. У этих
+    // провайдеров ключей в кассе нет вовсе, поэтому она объявлялась готовой
+    // всегда — зелёное «Касса подключена» в шапке, пустой чек-лист, и
+    // «не получилось открыть оплату» у первого же покупателя.
+    const blockFields = paymentProviders.find((p) => p.slug === paymentSettings?.provider)?.block_fields ?? [];
+    const unfilled = new Set<string>();
+    for (const block of payBlocks) {
+      for (const field of blockFields) {
+        const value = (block.content as Record<string, unknown>)[field.key];
+        if (!String(value ?? "").trim()) unfilled.add(field.label.toLowerCase());
+      }
+    }
+    if (unfilled.size > 0) {
+      found.push(`В блоке оплаты не заполнено: ${[...unfilled].join(", ")} — оплата не откроется.`);
+    }
+
     const priceless = payBlocks.filter((b) => {
       const raw = String(b.content.price ?? "").replace(",", ".").trim();
       return !raw || Number(raw) <= 0;
@@ -257,6 +280,26 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         priceless.length === 1
           ? "В блоке оплаты не указана цена — покупатель получит ошибку."
           : `Блоков оплаты без цены: ${priceless.length} — покупатели получат ошибку.`,
+      );
+    }
+
+    // Блок «Выдача», которому нечего выдать. Шаблон «Платная подписка»
+    // приходит с пустым полем чата и текстом «вот твоя персональная ссылка
+    // на вход» — покупатель платил и получал обещание ссылки без ссылки.
+    // Ссылка, вписанная прямо в текст, — тоже выдача, поэтому проверяется
+    // и она.
+    const emptyDelivery = bot.blocks.filter((b) => {
+      if (b.block_type !== "delivery") return false;
+      const hasLink = /https?:\/\/\S|t\.me\/\S/i.test(String(b.content.text ?? ""));
+      return (
+        !String(b.content.group_chat_id ?? "").trim() &&
+        !String(b.content.media_file_id ?? "").trim() &&
+        !hasLink
+      );
+    });
+    if (emptyDelivery.length > 0) {
+      found.push(
+        "Блок «Выдача» ничего не выдаёт: ни файла, ни ссылки, ни доступа в чат — покупатель получит только текст.",
       );
     }
 
@@ -293,6 +336,36 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           .slice(0, 3)
           .join(", ")} — нажатие ничего не сделает.`,
       );
+    }
+
+    // Кнопка-ссылка на адрес без домена. Telegram отвергает такую кнопку, и
+    // вместе с ней не уходит всё сообщение целиком — то есть пропадает не
+    // кнопка, а весь блок.
+    const brokenLinks = bot.blocks
+      .filter((b) => b.block_type === "buttons")
+      .flatMap((b) => b.content.buttons ?? [])
+      .filter((button) => button.action_type === "url" && !/^(https?|tg):\/\/\S+\.\S|^tg:\/\//i.test(
+        String(button.action_value ?? "").trim(),
+      ));
+    if (brokenLinks.length > 0) {
+      found.push(
+        `У кнопки ${brokenLinks
+          .map((b) => `«${b.label || "без названия"}»`)
+          .slice(0, 3)
+          .join(", ")} не указан адрес — Telegram не покажет всё сообщение целиком.`,
+      );
+    }
+
+    // Блок кнопок без текста. Telegram не отправляет кнопки без сообщения,
+    // поэтому бот подставляет «…» — покупатель получает пустой пузырь.
+    const speechless = bot.blocks.filter(
+      (b) =>
+        b.block_type === "buttons" &&
+        !String(b.content.text ?? "").trim() &&
+        (b.content.buttons ?? []).length > 0,
+    );
+    if (speechless.length > 0) {
+      found.push("В блоке кнопок нет сообщения — покупатель увидит пузырь с «…» над кнопками.");
     }
 
     return found;
@@ -613,7 +686,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 title="Продажи этого бота"
               >
                 💰 <span className="bot-payments-button__long">{salesLine}</span>
-                <span className="bot-payments-button__short">Продажи</span>
+                <span className="bot-payments-button__short">{salesShort}</span>
               </button>
             )}
             <button

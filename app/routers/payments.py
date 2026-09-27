@@ -879,6 +879,17 @@ async def orders_csv(
         ).scalars().all()
     }
 
+    def safe(value) -> str:
+        """Ячейка, которую Excel не примет за формулу.
+
+        Имя покупателя приходит из Telegram как есть, а файл мы сами
+        собираем для Excel — BOM стоит именно ради него. Имя, начинающееся
+        с «=», Excel открывает как формулу и предлагает её выполнить:
+        продавец получал бы таблицу, которую опасно открыть.
+        """
+        text = "" if value is None else str(value)
+        return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=";")
     writer.writerow(["Номер", "Дата", "Товар", "Сумма", "Валюта", "Статус", "Доставлен", "Покупатель", "Telegram id"])
@@ -887,12 +898,12 @@ async def orders_csv(
         writer.writerow([
             order.invoice_no,
             dates.day(order.paid_at or order.created_at),
-            order.description,
+            safe(order.description),
             f"{order.amount_minor / 100:.2f}".replace(".", ","),
             order.currency,
             status_ru.get(order.status.value, order.status.value),
             "да" if (order.meta or {}).get("delivered_at") else "нет",
-            person.title if person else "",
+            safe(person.title if person else ""),
             order.telegram_user_id or "",
         ])
 

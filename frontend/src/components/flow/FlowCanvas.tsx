@@ -12,7 +12,7 @@ import "@xyflow/react/dist/style.css";
 
 import type { BlockType, BotBlock, BotWithBlocks, PaymentProviderInfo } from "../../api/builderApi";
 import { useEscape } from "../../hooks/useEscape";
-import { reachableBlockIds } from "../../reachability";
+import { blocksAfterPayment, reachableBlockIds } from "../../reachability";
 import { confirmDialog } from "../../confirm";
 import { BLOCK_TYPES, BLOCK_TYPE_BY_ID } from "../../blockTypes";
 import { BlockEditPanel } from "./BlockEditPanel";
@@ -198,6 +198,30 @@ function Inner({
     return () => cancelAnimationFrame(frame);
   }, [bot.blocks.length, fitView]);
 
+  // Холст менял размер уже после того, как в него вписались: над ним
+  // появляются баннер оплаченного периода и чек-лист проблем, и каждый
+  // из них приезжает своим запросом. Сцена оставалась вписанной в прежнюю
+  // высоту — блоки уходили за левый край, и первое, что человек делал на
+  // своём боте, это искал кнопку «вписать в экран». Пока он сам не двигал
+  // холст, вписываемся заново.
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const userMoved = useRef(false);
+  useEffect(() => {
+    const node = wrapperRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      if (userMoved.current || bot.blocks.length === 0) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => fitView(FIT_VIEW_OPTIONS));
+    });
+    observer.observe(node);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [bot.blocks.length, fitView]);
+
   const edges = useMemo<Edge[]>(() => {
     const out: Edge[] = [];
     if (bot.start_block_id && blocksById.has(bot.start_block_id)) {
@@ -253,7 +277,17 @@ function Inner({
       // WebViews it does not appear at all, which would make this delete
       // silently unconfirmable). Every other destructive action in the app
       // already goes through it.
-      const confirmed = await confirmDialog(`Удалить блок «${name}»? Связи с другими блоками тоже пропадут.`);
+      // Блок из цепочки выдачи удаляется так же молча, как любой другой, —
+      // а следующий, кто заплатит, получит вместо товара то, что от этой
+      // цепочки осталось. Заказ при этом считается доставленным: цепочка
+      // отработала без ошибок, просто выдавать стало нечего.
+      const afterPayment = blocksAfterPayment(bot.blocks).has(blockId);
+      const confirmed = await confirmDialog(
+        `Удалить блок «${name}»? Связи с другими блоками тоже пропадут.` +
+          (afterPayment
+            ? "\n\nЭтот блок покупатели получают после оплаты — следующий, кто заплатит, его уже не получит."
+            : ""),
+      );
       if (!confirmed) return;
       setEditingId((cur) => (cur === blockId ? null : cur));
       onDelete(blockId);
@@ -408,7 +442,7 @@ function Inner({
         )}
       </div>
 
-      <div className="flow-canvas">
+      <div className="flow-canvas" ref={wrapperRef}>
         <FlowActionsContext.Provider value={actions}>
           <ReactFlow
             nodes={nodes}
@@ -424,6 +458,11 @@ function Inner({
             deleteKeyCode={disabled ? null : ["Backspace", "Delete"]}
             fitView
             fitViewOptions={FIT_VIEW_OPTIONS}
+            // Первое же движение холста руками означает «я сам разберусь»:
+            // дальше автоматическое вписывание только мешало бы.
+            onMoveStart={() => {
+              userMoved.current = true;
+            }}
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={24} size={1.5} />

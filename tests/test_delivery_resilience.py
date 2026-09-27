@@ -190,3 +190,72 @@ async def test_queued_work_cancelled_before_it_runs_is_closed_cleanly(db):
         await background.cancel_all()
 
     assert ran == []
+
+
+async def test_a_long_invoice_does_not_hand_the_goods_over_free(db, owner, make_bot, as_bot):
+    """Продающий текст на 5600 символов — и товар уходил бесплатно.
+
+    Счёт отправлялся одним куском, Telegram отвергал всё, что длиннее 4096,
+    исключение ловил общий `except` в `walk_chain` — и цепочка шла дальше по
+    стрелке, то есть в блок «Выдача».
+    """
+    bot, _ = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд «Как открыть кофейню». " * 200, "title": "Гайд", "price": "990"}),
+            (BlockType.delivery, {"text": "ВОТ ТОВАР"}),
+        ],
+        provider="test",
+    )
+
+    async def refuse_long(chat_id, text, **kwargs):
+        if len(text) > 4096:
+            raise RuntimeError("Telegram: message is too long")
+
+    as_bot.send_message.side_effect = refuse_long
+
+    await bot_dispatcher.process_update(
+        as_bot, {"message": {"chat": {"id": CHAT_ID}, "from": {"id": 900_061_610}, "text": "/start"}}, bot.id, db
+    )
+
+    assert "ВОТ ТОВАР" not in as_bot.sent(), "товар ушёл, а счёт — нет"
+    payment = (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalar_one()
+    assert payment.status == PaymentStatus.pending
+    # Длинный текст не потерян — он просто приходит несколькими сообщениями.
+    assert any("кофейню" in m for m in as_bot.sent())
+
+
+async def test_telegram_refusing_the_invoice_stops_the_chain(db, owner, make_bot, as_bot, monkeypatch):
+    """«429 Too Many Requests» на счёте — самый частый случай того же самого."""
+    bot, _ = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд", "title": "Гайд", "price": "990"}),
+            (BlockType.delivery, {"text": "ВОТ ТОВАР"}),
+        ],
+        provider="test",
+    )
+
+    sent: list[str] = []
+    told: list[str] = []
+
+    async def refuse(chat_id, text, **kwargs):
+        # Отказывает только сам счёт: извинение покупателю должно уйти.
+        if text == "Гайд":
+            raise RuntimeError("Telegram: Too Many Requests: retry after 12")
+        sent.append(text)
+
+    async def remember(db_, bot_id_, message):
+        told.append(message)
+
+    as_bot.send_message.side_effect = refuse
+    monkeypatch.setattr(bot_dispatcher, "_tell_owner", remember)
+
+    await bot_dispatcher.process_update(
+        as_bot, {"message": {"chat": {"id": CHAT_ID}, "from": {"id": 900_061_611}, "text": "/start"}}, bot.id, db
+    )
+
+    assert "ВОТ ТОВАР" not in sent, "товар ушёл, хотя счёт не дошёл"
+    # И покупатель, и владелец узнают — молча терять продажу нельзя.
+    assert any("Не получилось показать оплату" in m for m in sent)
+    assert told and "счёт не дошёл" in told[0], f"владельцу не сказали: {told}"

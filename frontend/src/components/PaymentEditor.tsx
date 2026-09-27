@@ -36,6 +36,13 @@ const FALLBACK_CURRENCIES = ["RUB", "KZT", "USD", "EUR"];
  * разделителей — тем более. Всё остальное остаётся как набрано, иначе
  * фильтр воевал бы с человеком, который посреди набора «1500.5» успел
  * поставить точку. */
+/** Значение поля, которое задаёт не касса, а сам блок: ключи приходят с
+ * сервера (см. `block_fields` провайдера), поэтому типизированного поля под
+ * них нет. */
+function blockFieldValue(content: BlockContent, key: string): string {
+  return String((content as Record<string, unknown>)[key] ?? "").trim();
+}
+
 function cleanPrice(raw: string, isStars: boolean): string {
   // Звёзды бывают только целыми — дробная часть всё равно не дойдёт до кассы.
   if (isStars) return raw.replace(/[\s ]/g, "").match(/^\d*/)?.[0] ?? "";
@@ -152,6 +159,20 @@ export function PaymentEditor({
           </span>
           <span className="payment-editor__warning-cta">Дозаполнить →</span>
         </button>
+      ) : blockFields.filter((f) => !blockFieldValue(content, f.key)).length > 0 ? (
+        // Поля, которые заполняются здесь, а не в кассе: ссылка на оплату у
+        // «Оплаты по ссылке», номер оферты у LavaTop. У таких провайдеров
+        // ключей в кассе нет вовсе, поэтому она считалась готовой всегда:
+        // в шапке горело зелёное «Касса подключена», чек-лист молчал — а
+        // первый покупатель получал «не получилось открыть оплату».
+        <p className="payment-editor__warning payment-editor__warning--static">
+          ⚠️ Не заполнено:{" "}
+          {blockFields
+            .filter((f) => !blockFieldValue(content, f.key))
+            .map((f) => f.label.toLowerCase())
+            .join(", ")}{" "}
+          — ниже в этом блоке. Без этого оплата не откроется.
+        </p>
       ) : null}
 
       <label className="buttons-editor__field">

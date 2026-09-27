@@ -16,6 +16,9 @@ interface Props {
   greetingName?: string;
   isMiniApp?: boolean;
   onOpen: (botId: string) => void;
+  /** Выйти из аккаунта на этом устройстве. Не задан в Mini App — там
+   * сессия телеграмовская, выходить некуда. */
+  onLogout?: () => void;
 }
 
 const STATUS_LABEL: Record<Bot["status"], string> = {
@@ -47,7 +50,7 @@ function blockCountLabel(count: number): string {
   return blocksLabel(count);
 }
 
-export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
+export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
@@ -222,6 +225,27 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
           </div>
           <div className="app-header__actions">
             {!isMiniApp && <ThemeToggle />}
+            {/* Выхода не было нигде. На общем компьютере токен живёт 30
+                дней, а за ним — касса, список покупателей и кнопка снятия
+                бота с эфира. */}
+            {onLogout && (
+              <button
+                type="button"
+                className="header-logout-button"
+                title="Выйти из аккаунта на этом устройстве"
+                onClick={() => {
+                  void confirmDialog(
+                    "Выйти из аккаунта? Боты, заказы и настройки останутся на месте — " +
+                      "войти снова можно через Telegram.",
+                    "Выйти",
+                  ).then((ok) => {
+                    if (ok) onLogout();
+                  });
+                }}
+              >
+                Выйти
+              </button>
+            )}
             {!isMiniApp && (
               <button type="button" className="header-create-button" onClick={handleCreateClick}>
                 + Новый бот

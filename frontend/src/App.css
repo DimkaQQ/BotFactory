@@ -2266,6 +2266,26 @@
   display: none;
 }
 
+/* «Выйти» — скромная кнопка рядом с темой: нужна редко, но на общем
+   компьютере она единственное, чем владелец закрывает доступ к своей кассе
+   и списку покупателей. Видна на любой ширине, в отличие от «+ Новый бот». */
+.header-logout-button {
+  padding: 8px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.header-logout-button:hover {
+  border-color: var(--tg-destructive);
+  color: var(--tg-destructive);
+}
+
 /* =========================================================================
    Desktop web shell (≥960px) — the Mini App never renders at this width,
    so everything below is exclusive to the standalone web constructor.
@@ -5828,6 +5848,23 @@
 .orders__redeliver:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.orders__more {
+  align-self: flex-start;
+  margin-top: var(--sp-2);
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.orders__more:hover {
+  border-color: var(--tg-link);
+  color: var(--tg-link);
 }
 
 .orders__notice {

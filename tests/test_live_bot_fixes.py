@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bot_block import BlockType
+from app.config import get_settings
 from app.models.client import Client
 from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.routers.media import _slug
@@ -355,3 +357,83 @@ async def test_support_always_has_an_address(api, monkeypatch):
         assert config["support_telegram"] == "bot_factory_bot"
     finally:
         get_settings.cache_clear()
+
+
+# --------------------------------------- выгрузка, которую опасно открыть
+
+
+@pytest.mark.asyncio
+async def test_a_buyer_name_cannot_become_a_formula_in_the_export(
+    api, auth, owner: Client, make_bot, db: AsyncSession
+):
+    """Имя покупателя приходит из Telegram как есть, а файл мы собираем для
+    Excel — BOM стоит именно ради него. Имя с «=» в начале Excel открывает
+    как формулу и предлагает выполнить."""
+    from app.models.bot_subscriber import BotSubscriber
+
+    bot, blocks = await make_bot(
+        owner, [(BlockType.payment, {"title": "Гайд", "price": "990"})], provider="test"
+    )
+    db.add(BotSubscriber(
+        bot_id=bot.id, telegram_user_id=USER_ID, chat_id=CHAT_ID,
+        first_name="=cmd|' /C calc'!A0", username="ok",
+    ))
+    order = await _paid_order(db, bot, blocks[0])
+    order.description = "@SUM(1+1)"
+    await db.commit()
+
+    body = (await api.get(f"/api/bots/{bot.id}/orders.csv", headers=auth(owner))).text
+
+    assert "'=cmd|" in body, "имя ушло в таблицу как формула"
+    assert "'@SUM(1+1)" in body, "название товара ушло как формула"
+    # Обычное имя апострофом не уродуем.
+    assert ";Гайд;" not in body or "'Гайд" not in body
+
+
+# ------------------------------------------- подтверждение без доставки
+
+
+@pytest.mark.asyncio
+async def test_confirming_an_order_does_not_claim_a_delivery_that_failed(
+    db: AsyncSession, owner: Client, make_bot, as_bot, monkeypatch
+):
+    """Покупатель заблокировал бота — владельцу всё равно приходило
+    «товар отправлен покупателю»."""
+    from app.services import bot_dispatcher
+
+    bot, blocks = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"title": "Гайд", "price": "990"}),
+            (BlockType.delivery, {"text": "ВОТ ГАЙД"}),
+        ],
+        provider="link",
+    )
+    order = await _paid_order(db, bot, blocks[0])
+    order.status = PaymentStatus.pending
+    order.paid_at = None
+    await db.commit()
+
+    async def blocked(chat_id, text, **kwargs):
+        # Покупателю — нельзя, владельцу — можно.
+        if chat_id == CHAT_ID:
+            raise RuntimeError("Forbidden: bot was blocked by the user")
+
+    as_bot.send_message.side_effect = blocked
+    monkeypatch.setattr(bot_dispatcher, "_is_owner", AsyncMock(return_value=True))
+
+    await bot_dispatcher.process_update(
+        as_bot,
+        {"callback_query": {
+            "id": "1",
+            "from": {"id": owner.telegram_user_id},
+            "message": {"chat": {"id": owner.telegram_user_id}},
+            "data": f"payok:{order.id.hex}",
+        }},
+        bot.id,
+        db,
+    )
+
+    said = " ".join(str(c) for c in as_bot.send_message.call_args_list)
+    assert "товар отправлен покупателю" not in said, "владельцу пообещали доставку, которой не было"
+    assert "не дошёл" in said

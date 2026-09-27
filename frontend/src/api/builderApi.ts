@@ -514,6 +514,28 @@ export function formatAmount(amountMinor: number): string {
   return frac === 0 ? String(whole) : `${whole}.${String(frac).padStart(2, "0")}`;
 }
 
+/** Знак валюты там, где он привычнее кода. Тот же короткий список, что и на
+ * сервере (`payments/base.py`): предпросмотр обещал «Оплатить 990 RUB», а
+ * живой бот присылал «Оплатить 990 ₽» — проверка сценария показывала не ту
+ * кнопку, которую увидит покупатель. */
+const CURRENCY_SYMBOL: Record<string, string> = {
+  RUB: "₽",
+  USD: "$",
+  EUR: "€",
+  KZT: "₸",
+  UAH: "₴",
+  XTR: "⭐",
+};
+
+export function currencyUnit(currency: string): string {
+  return CURRENCY_SYMBOL[(currency || "").toUpperCase()] ?? (currency || "").toUpperCase();
+}
+
+/** «990 ₽» — сумма в минорных единицах так, как её читает человек. */
+export function money(amountMinor: number, currency: string): string {
+  return `${formatAmount(amountMinor)} ${currencyUnit(currency)}`.trim();
+}
+
 export { ApiError };
 
 

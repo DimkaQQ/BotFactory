@@ -182,6 +182,21 @@ export default function App() {
             greetingName={clientName}
             isMiniApp={isMiniApp}
             onOpen={openBot}
+            // Выхода не было нигде: на чужом или общем компьютере владелец
+            // магазина не мог закрыть доступ к своей кассе, покупателям и
+            // кнопке снятия бота с эфира. В Mini App выходить некуда —
+            // сессия там телеграмовская.
+            onLogout={
+              isMiniApp
+                ? undefined
+                : () => {
+                    clearSessionAuth();
+                    setClientName(undefined);
+                    window.history.replaceState(null, "", "/");
+                    setScreen({ name: "list" });
+                    setBootState("need-login");
+                  }
+            }
           />
         )}
       </motion.div>

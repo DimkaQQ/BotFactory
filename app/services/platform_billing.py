@@ -281,7 +281,11 @@ async def _act_on(db: AsyncSession, bot: BotModel) -> None:
         return
 
     if status.state == "grace":
-        left = max(0, (status.grace_until - datetime.now(timezone.utc)).days)
+        # Вверх, как и `days_left` выше: шесть с небольшим суток — это «ещё
+        # 7 дн.», а `.days` округлял вниз и обещал на сутки меньше, чем бот
+        # на самом деле проработает.
+        remaining = status.grace_until - datetime.now(timezone.utc)
+        left = max(0, -(-remaining // timedelta(days=1)))
         await _notify_once(
             db, bot, NOTICE_GRACE,
             f"⚠️ Период бота {_name(bot)} закончился. Бот пока работает — "

@@ -84,3 +84,46 @@ export function loopedBlocks(blocks: BotBlock[], startBlockId: string | null): B
   const reachable = reachableBlockIds(blocks, startBlockId);
   return blocks.filter((block) => looped.has(block.id) && reachable.has(block.id));
 }
+
+/**
+ * Блоки, которые покупатель получает уже после оплаты.
+ *
+ * Продукт зовёт править живого бота, и удаление блока из цепочки выдачи
+ * выглядит ровно как любое другое удаление: блок исчезает молча. А
+ * покупатель после этого платит и получает «Спасибо за покупку!» вместо
+ * товара — заказ при этом считается доставленным, потому что цепочка
+ * отработала без единой ошибки.
+ *
+ * Считается так же, как ходит движок: стрелка «дальше» плюс цели кнопок,
+ * начиная со всего, что стоит после блоков оплаты.
+ */
+export function blocksAfterPayment(blocks: BotBlock[]): Set<string> {
+  const byId = new Map(blocks.map((block) => [block.id, block]));
+  const after = new Set<string>();
+
+  const queue: string[] = [];
+  for (const block of blocks) {
+    if (block.block_type !== "payment") continue;
+    if (block.next_block_id) queue.push(block.next_block_id);
+    for (const button of block.content.buttons ?? []) {
+      const target = (button.target_block_id ?? "").trim();
+      if (target) queue.push(target);
+    }
+  }
+
+  while (queue.length > 0) {
+    const id = queue.pop()!;
+    if (after.has(id)) continue;
+    after.add(id);
+    const block = byId.get(id);
+    if (!block) continue;
+    // Следующий блок оплаты — это уже следующая продажа, а не выдача этой.
+    if (block.block_type === "payment") continue;
+    if (block.next_block_id) queue.push(block.next_block_id);
+    for (const button of block.content.buttons ?? []) {
+      const target = (button.target_block_id ?? "").trim();
+      if (target) queue.push(target);
+    }
+  }
+  return after;
+}

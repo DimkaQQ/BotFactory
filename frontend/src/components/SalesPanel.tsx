@@ -6,6 +6,7 @@ import {
   type SubscribersReport,
   ApiError,
   builderApi,
+  currencyUnit as unit,
   formatAmount,
 } from "../api/builderApi";
 import { confirmDialog } from "../confirm";
@@ -41,10 +42,6 @@ function ordersLabel(count: number): string {
   return `${count} заказов`;
 }
 
-function unit(currency: string): string {
-  return currency === "XTR" ? "⭐" : currency;
-}
-
 function when(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
@@ -67,6 +64,9 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyOrder, setBusyOrder] = useState<string | null>(null);
+  // Журнал показывал двенадцать последних и молчал об остальных: продавец с
+  // двадцатью заказами видел двенадцать и никакого намёка, что есть ещё.
+  const [shown, setShown] = useState(12);
 
   useEffect(() => {
     (async () => {
@@ -270,7 +270,7 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
               )}
 
               <ul className="orders__log">
-                {orders.slice(0, 12).map((order) => (
+                {orders.slice(0, shown).map((order) => (
                   <li className={`orders__log-row orders__log-row--${order.status}`} key={order.id}>
                     <span className="orders__log-main">
                       <span className="orders__log-title">
@@ -334,6 +334,11 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
                   </li>
                 ))}
               </ul>
+              {orders.length > shown && (
+                <button type="button" className="orders__more" onClick={() => setShown((n: number) => n + 20)}>
+                  Показать ещё · всего {orders.length}
+                </button>
+              )}
             </div>
           )}
 
