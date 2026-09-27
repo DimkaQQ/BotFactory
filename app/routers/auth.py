@@ -32,6 +32,15 @@ class GatewayRegion(BaseModel):
 
 class PublicConfig(BaseModel):
     meta_bot_username: str
+    #: Куда писать живому человеку. Без @; пусто не бывает — если своей
+    #: поддержки не завели, это наш собственный бот.
+    support_telegram: str = ""
+    support_email: str = ""
+    #: Кто получает деньги, как в документах. Пусто, пока реквизиты не
+    #: заполнены, — и тогда подвал не показывает ни названия, ни ссылок на
+    #: документы, потому что документов в этом случае тоже нет.
+    legal_name: str = ""
+    legal_documents: bool = False
     # What the landing says about taking money. Served rather than written
     # into the page so the claim cannot drift from the code: adding or
     # removing an adapter moves the number on the landing with it.
@@ -61,8 +70,13 @@ async def get_public_config() -> PublicConfig:
         )
         for slug, title in payment_providers.REGIONS
     ]
+    settings = get_settings()
     return PublicConfig(
-        meta_bot_username=get_settings().meta_bot_username,
+        meta_bot_username=settings.meta_bot_username,
+        support_telegram=settings.support_contact,
+        support_email=settings.support_email,
+        legal_name=settings.legal_name if settings.legal_ready else "",
+        legal_documents=settings.legal_ready,
         # An empty heading would render as a section title with nothing
         # under it, which is exactly how "Украина" looked.
         payment_regions=[r for r in regions if r.gateways],

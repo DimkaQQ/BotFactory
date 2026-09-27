@@ -176,6 +176,32 @@ class Settings(BaseSettings):
     # a card expires.
     renewal_grace_days: int = 7
 
+    # ---- Кто мы и как с нами связаться ----
+    # Ничего из этого выдумать нельзя, поэтому пусто по умолчанию — и пока
+    # пусто, ссылки на оферту и политику на сайте не показываются, а сами
+    # документы отдают 404. Оферта, подписанная никем, хуже отсутствующей:
+    # первый же спор по платежу упирается в то, с кем человек договаривался.
+    #
+    # `support_telegram` — куда писать живому человеку (без @). Если пусто,
+    # сайт показывает наш собственный бот: он есть всегда.
+    support_telegram: str = ""
+    support_email: str = ""
+    #: «ИП Иванов Иван Иванович» или «ТОО «Ромашка»» — как в документах.
+    legal_name: str = ""
+    #: ИИН/БИН, ИНН/ОГРНИП — что есть в юрисдикции.
+    legal_id: str = ""
+    legal_address: str = ""
+
+    @property
+    def legal_ready(self) -> bool:
+        """Есть ли кому подписывать оферту."""
+        return bool(self.legal_name.strip() and self.legal_id.strip())
+
+    @property
+    def support_contact(self) -> str:
+        """Телеграм поддержки без @ — свой или, если не задан, наш бот."""
+        return (self.support_telegram or self.meta_bot_username).lstrip("@").strip()
+
     @property
     def retired_key_list(self) -> list[str]:
         return [k.strip() for k in self.fernet_keys_retired.split(",") if k.strip()]

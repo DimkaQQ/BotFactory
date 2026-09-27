@@ -282,3 +282,76 @@ async def test_a_one_off_purchase_is_not_told_about_cancelling(
 
     receipt = next(m for m in as_bot.sent() if "Оплата получена" in m)
     assert "/cancel" not in receipt
+
+
+# ---------------------------------------- с кем человек вообще имеет дело
+
+
+@pytest.fixture
+def with_requisites(monkeypatch):
+    """Реквизиты заполнены — как у развёрнутого сервиса, который продаёт."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("LEGAL_NAME", 'ИП «Ромашка» & Co')
+    monkeypatch.setenv("LEGAL_ID", "ИИН 123456789012")
+    monkeypatch.setenv("SUPPORT_TELEGRAM", "@bf_support")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_the_offer_and_the_privacy_policy_are_published(api, with_requisites):
+    """Сервис берёт деньги — значит должно быть написано, с кем человек
+    договаривается и как вернуть оплату."""
+    offer = await api.get("/legal/offer")
+    privacy = await api.get("/legal/privacy")
+
+    assert offer.status_code == 200 and privacy.status_code == 200
+    assert "text/html" in offer.headers["content-type"]
+    for body in (offer.text, privacy.text):
+        # Название с кавычками и амперсандом не должно разъехаться в HTML.
+        assert "ИП «Ромашка» &amp; Co" in body
+        # И ни одного места, где то же название попало в HTML сырым.
+        assert "«Ромашка» & Co" not in body
+        assert "ИИН 123456789012" in body
+        assert "bf_support" in body
+    assert "Возврат" in offer.text
+    assert "/cancel" in privacy.text
+
+
+@pytest.mark.asyncio
+async def test_an_unsigned_offer_is_not_published_at_all(api, monkeypatch):
+    """Оферта, подписанная никем, хуже отсутствующей: первый же спор по
+    платежу упирается в то, с кем человек договаривался."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("LEGAL_NAME", "")
+    monkeypatch.setenv("LEGAL_ID", "")
+    get_settings.cache_clear()
+    try:
+        assert (await api.get("/legal/offer")).status_code == 404
+        assert (await api.get("/legal/privacy")).status_code == 404
+
+        config = (await api.get("/api/config")).json()
+        # И ссылок на них на сайте тогда тоже нет.
+        assert config["legal_documents"] is False
+        assert config["legal_name"] == ""
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_support_always_has_an_address(api, monkeypatch):
+    """Не завели своей поддержки — остаётся наш собственный бот. Экрана без
+    единого способа написать живому человеку быть не должно."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("SUPPORT_TELEGRAM", "")
+    monkeypatch.setenv("META_BOT_USERNAME", "bot_factory_bot")
+    get_settings.cache_clear()
+    try:
+        config = (await api.get("/api/config")).json()
+        assert config["support_telegram"] == "bot_factory_bot"
+    finally:
+        get_settings.cache_clear()

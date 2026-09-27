@@ -21,6 +21,7 @@ import { BillingBanner, paidUntilLabel } from "./BillingBanner";
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { LivePreview } from "./LivePreview";
 import { PaymentSettingsPanel } from "./PaymentSettingsPanel";
+import { SalesPanel } from "./SalesPanel";
 import { PublishPaywall } from "./PublishPaywall";
 import { PublishButton } from "./PublishButton";
 import { ThemeToggle } from "./ThemeToggle";
@@ -48,6 +49,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [paymentPanelOpen, setPaymentPanelOpen] = useState(false);
+  const [salesPanelOpen, setSalesPanelOpen] = useState(false);
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [paymentProviders, setPaymentProviders] = useState<PaymentProviderInfo[]>([]);
   // Server-side switch: subscriptions are built but off while the one-off
@@ -215,7 +217,14 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   // Выручка этого бота одной строкой — чтобы не искать её под кнопкой с
   // надписью «касса».
   const salesLine = (() => {
-    if (!sales || sales.paid_count === 0) return null;
+    if (!sales || sales.orders.length === 0) return null;
+    // Заказы, где покупатель нажал «Я оплатил», а подтвердить может только
+    // человек. Они важнее выручки: пока их не разобрали, товар не выдан.
+    const awaiting = sales.orders.filter((o) => o.needs_confirmation).length;
+    if (awaiting > 0) return `Ждут подтверждения: ${awaiting}`;
+    // Ни одной оплаты — но заказы есть: «десять открыли счёт и никто не
+    // заплатил» тоже стоит того, чтобы открыть экран продаж.
+    if (sales.paid_count === 0) return `Заказы: ${sales.orders.length}`;
     const best = [...(sales.totals ?? [])].sort((a, b) => b.total_minor - a.total_minor)[0];
     if (!best) return `Продаж: ${sales.paid_count}`;
     return `${sales.paid_count} · ${formatAmount(best.total_minor)} ${best.currency}`;
@@ -594,12 +603,13 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               </button>
             )}
             {/* Выручка жила под кнопкой «Касса подключена» — искать её там
-                владелец не догадывался. Теперь она на виду и ведёт туда же. */}
+                владелец не догадывался. Теперь она на виду и открывает
+                отдельный экран продаж, а не настройки кассы. */}
             {!isMiniApp && salesLine && (
               <button
                 type="button"
                 className="bot-sales-button"
-                onClick={() => setPaymentPanelOpen(true)}
+                onClick={() => setSalesPanelOpen(true)}
                 title="Продажи этого бота"
               >
                 💰 <span className="bot-payments-button__long">{salesLine}</span>
@@ -817,8 +827,15 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           botId={bot.id}
           onClose={() => setPaymentPanelOpen(false)}
           onSaved={(settings) => setPaymentSettings(settings)}
-          onOrdersChanged={setSales}
+          onOpenSales={() => {
+            setPaymentPanelOpen(false);
+            setSalesPanelOpen(true);
+          }}
         />
+      )}
+
+      {salesPanelOpen && (
+        <SalesPanel botId={bot.id} onClose={() => setSalesPanelOpen(false)} onOrdersChanged={setSales} />
       )}
 
       {previewOpen && <LivePreview bot={bot} botName={bot.name || bot.telegram_bot_username || ""} onClose={() => setPreviewOpen(false)} />}

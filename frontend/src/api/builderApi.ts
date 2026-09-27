@@ -419,6 +419,13 @@ export interface PublicConfig {
   meta_bot_username: string;
   payment_regions: { slug: string; title: string; gateways: string[] }[];
   gateway_count: number;
+  /** Куда писать живому человеку — без @. Пусто не бывает. */
+  support_telegram: string;
+  support_email: string;
+  /** Кто получает деньги. Пусто, пока реквизиты не заполнены. */
+  legal_name: string;
+  /** Есть ли что открыть по ссылкам «Оферта» и «Политика». */
+  legal_documents: boolean;
 }
 
 export interface PublicationInfo {

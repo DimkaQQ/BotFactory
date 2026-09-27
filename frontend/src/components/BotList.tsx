@@ -7,6 +7,7 @@ import { openExternal } from "../hooks/useTelegramWebApp";
 import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
 import { useEscape } from "../hooks/useEscape";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
+import { SiteFooter } from "./SiteFooter";
 import { ThemeToggle } from "./ThemeToggle";
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
@@ -446,6 +447,10 @@ export function BotList({ greetingName, isMiniApp, onOpen }: Props) {
           </div>
         </>
       )}
+
+      {/* Человек, у которого бот перестал продавать в субботу, не мог
+          написать никому: контактов не было ни на сайте, ни здесь. */}
+      {!isMiniApp && <SiteFooter compact />}
     </div>
   );
 }

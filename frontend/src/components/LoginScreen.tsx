@@ -12,6 +12,7 @@ import { BLOCK_TYPES } from "../blockTypes";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
 import { HeroMockup } from "./HeroMockup";
 import { LandingDemo } from "./LandingDemo";
+import { SiteFooter } from "./SiteFooter";
 import { ThemeToggle } from "./ThemeToggle";
 
 interface Props {
@@ -472,6 +473,9 @@ export function LoginScreen({ onLoggedIn }: Props) {
           Начать бесплатно ↑
         </button>
       </section>
+
+      {/* ===== Подвал ===== */}
+      <SiteFooter config={config} />
     </div>
   );
 }
