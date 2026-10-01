@@ -15,7 +15,7 @@ from html import escape
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,9 +28,9 @@ from app.models.bot import BotStatus
 from app.models.bot_block import BlockType, BotBlock
 from app.models.bot_subscriber import BotSubscriber
 from app.models.client import Client
+from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.models.scheduled_step import ScheduledStep, StepStatus
 from app.models.subscription import Subscription, SubscriptionStatus
-from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.schemas.payment import (
     BillingStateOut,
     PaymentOut,
@@ -96,7 +96,7 @@ async def payment_callback(provider_slug: str, request: Request, db: AsyncSessio
     raw_body = await request.body()
     try:
         form = {key: str(value) for key, value in (await request.form()).items()}
-    except Exception:
+    except Exception:  # noqa: BLE001 — не форма: тело читает адаптер
         form = {}
     headers = {key.lower(): value for key, value in request.headers.items()}
 

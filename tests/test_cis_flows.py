@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 
 from sqlalchemy import select
 
@@ -456,7 +455,7 @@ async def test_the_ioka_callback_route_settles_only_what_the_api_confirms(
     )
 
     def gateway(status: str):
-        def handler(request: "httpx.Request") -> "httpx.Response":
+        def handler(request: httpx.Request) -> httpx.Response:
             body = {
                 "id": "ord_1",
                 "status": status,

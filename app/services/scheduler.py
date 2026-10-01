@@ -327,7 +327,7 @@ async def _run_step(step_id: uuid.UUID) -> None:
                 return
             try:
                 await subscription_service.charge_now(db, subscription)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — любой сбой списания = повтор или отказ
                 await _give_up_or_retry(db, step, repr(exc))
             return
 
@@ -358,7 +358,7 @@ async def _run_step(step_id: uuid.UUID) -> None:
                 # сказано, как её прекратить.
                 footer="Чтобы не получать рассылку — отправь /stop" if step.reason == "broadcast" else "",
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — сбой отправки: повтор
             if subscribers.looks_blocked(exc):
                 await subscribers.mark_blocked(db, step.bot_id, step.telegram_user_id)
                 step.status = StepStatus.cancelled

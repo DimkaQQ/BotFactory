@@ -29,10 +29,11 @@ comes from. Not from memory.
 from __future__ import annotations
 
 import uuid
-import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from xml.etree.ElementTree import Element
 from xml.sax.saxutils import escape
 
+import defusedxml.ElementTree as ET
 import httpx
 
 from app.models.payment import PaymentStatus
@@ -99,7 +100,7 @@ class ProcessingKzProvider(ProviderDefaults):
     def _endpoint(is_test: bool) -> str:
         return _TEST if is_test else _PROD
 
-    async def _call(self, endpoint: str, operation: str, body: str) -> ET.Element:
+    async def _call(self, endpoint: str, operation: str, body: str) -> Element:
         envelope = (
             '<?xml version="1.0" encoding="utf-8"?>'
             f'<soap:Envelope xmlns:soap="{_SOAP_ENV}" xmlns:ws="{_NS_WS}" xmlns:b="{_NS_BEANS}">'
@@ -281,7 +282,7 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M:%S")
 
 
-def _find(root: ET.Element, local_name: str) -> ET.Element | None:
+def _find(root: Element, local_name: str) -> Element | None:
     """Look an element up by its local name, ignoring namespaces.
 
     The service is Axis2 and spreads its answer over four namespaces with
@@ -294,7 +295,7 @@ def _find(root: ET.Element, local_name: str) -> ET.Element | None:
     return None
 
 
-def _text(element: ET.Element | None) -> str:
+def _text(element: Element | None) -> str:
     return (element.text or "").strip() if element is not None else ""
 
 

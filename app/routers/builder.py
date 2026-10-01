@@ -31,7 +31,7 @@ def _check_content_size(content: dict | None) -> None:
     size = len(json.dumps(content, ensure_ascii=False).encode())
     if size > limit:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=(
                 f"Содержимое блока слишком большое ({size // 1024} КБ, можно до "
                 f"{limit // 1024} КБ). Вынеси длинный текст в файл и дай на него ссылку."

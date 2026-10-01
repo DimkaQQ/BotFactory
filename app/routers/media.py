@@ -164,7 +164,7 @@ async def upload_media(
     data = await file.read(max_bytes + 1)
     if len(data) > max_bytes:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"Файл больше {settings.media_max_upload_mb} МБ — для больших файлов вставь ссылку вместо загрузки",
         )
     if not data:
@@ -201,14 +201,16 @@ async def upload_media(
     used = sum(f.stat().st_size for f in upload_dir.glob("*") if f.is_file())
     if used + len(data) > quota:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=(
                 f"Занято {used // 1024 // 1024} МБ из {settings.media_quota_mb_per_client} МБ. "
                 f"Удали ненужные файлы из блоков или вставляй ссылки вместо загрузки."
             ),
         )
 
-    filename = f"{uuid.uuid4().hex[:10]}-{_slug(file.filename, ext)}"
+    # Полный uuid4 (122 бита), не его кусок: файл отдаётся без авторизации, и
+    # оплаченный гайд защищён только тем, что адрес нельзя угадать.
+    filename = f"{uuid.uuid4().hex}-{_slug(file.filename, ext)}"
     (upload_dir / filename).write_bytes(data)
 
     url = f"{settings.public_base_url.rstrip('/')}/api/media/{bot.client_id}/{filename}"

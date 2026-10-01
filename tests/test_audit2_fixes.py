@@ -18,7 +18,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models.bot import Bot as BotModel
 from app.models.bot import BotStatus
 from app.models.bot_block import BlockType
 from app.models.client import Client

@@ -37,8 +37,7 @@ from app.models.bot import Bot as BotModel
 from app.models.bot_block import BotBlock
 from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
-from app.services import dates
-from app.services import scheduler
+from app.services import dates, scheduler
 from app.services.payments import get_provider
 from app.services.payments.base import ProviderError, RecurringMode, RecurringSetup
 
@@ -331,7 +330,7 @@ async def charge_now(db: AsyncSession, subscription: Subscription) -> bool:
     this. That is also what extends the period, notifies the owner and
     re-queues the next charge, so none of it is duplicated here.
     """
-    from app.services import bot_registry, payment_service
+    from app.services import payment_service
 
     setup = _saved_method(subscription)
     if setup is None:

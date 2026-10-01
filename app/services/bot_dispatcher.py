@@ -46,8 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bot import Bot as BotModel
 from app.models.bot_block import BlockType, BotBlock
-from app.services import dates
-from app.services import scheduler, subscribers
+from app.services import dates, scheduler, subscribers
 
 logger = logging.getLogger(__name__)
 

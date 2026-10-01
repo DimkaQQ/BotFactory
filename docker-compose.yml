@@ -4,6 +4,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-botfactory}
+      # Пароль по умолчанию годится только для разработки: порт базы наружу не
+      # открыт, но слабый пароль — это ещё один шаг, который не должен
+      # зависеть от того, что «снаружи всё закрыто».
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-botfactory}
       POSTGRES_DB: ${POSTGRES_DB:-botfactory}
     volumes:
@@ -20,6 +23,8 @@ services:
       dockerfile: Dockerfile
     command: alembic upgrade head
     env_file: .env
+    healthcheck:
+      disable: true
     depends_on:
       db:
         condition: service_healthy
@@ -51,6 +56,8 @@ services:
     restart: unless-stopped
     command: python -m meta_bot.main
     env_file: .env
+    healthcheck:
+      disable: true
     depends_on:
       db:
         condition: service_healthy

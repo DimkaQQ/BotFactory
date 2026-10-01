@@ -8,7 +8,6 @@ only an already-constructed `Bot` instance.
 
 from __future__ import annotations
 
-import asyncio
 import contextlib
 import logging
 import uuid
@@ -19,9 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.database import AsyncSessionLocal
 from app.models.bot import Bot as BotModel
 from app.models.bot import BotStatus
-from app.database import AsyncSessionLocal
 from app.services.security import decrypt_token, webhook_secret
 from app.services.telegram_session import build_bot_session
 

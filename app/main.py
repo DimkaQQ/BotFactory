@@ -70,9 +70,16 @@ async def lifespan(app: FastAPI):
     await platform_billing.close_meta_bot()
 
 
-app = FastAPI(title="Bot Factory API", version="0.1.0", lifespan=lifespan)
-
 settings = get_settings()
+_docs = settings.enable_api_docs
+app = FastAPI(
+    title="Bot Factory API",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _docs else None,
+    redoc_url="/redoc" if _docs else None,
+    openapi_url="/openapi.json" if _docs else None,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -120,7 +127,7 @@ async def health(response: Response) -> dict:
         async with asyncio.timeout(5):
             async with AsyncSessionLocal() as db:
                 await db.execute(text("SELECT 1"))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — любой сбой БД = 503
         logger.error("Health check failed: %s", exc)
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "error", "database": "unreachable"}

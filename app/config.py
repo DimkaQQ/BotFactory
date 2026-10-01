@@ -94,6 +94,10 @@ class Settings(BaseSettings):
 
     # CORS - Mini App origin(s), comma separated. "*" for local dev.
     cors_origins: str = "*"
+    # Интерактивная документация API (/docs, /redoc, /openapi.json). В проде
+    # она раскрывает всю поверхность API всем подряд, поэтому по умолчанию
+    # выключена; для разработки — ENABLE_API_DOCS=true.
+    enable_api_docs: bool = False
 
     # Where uploaded media (photos/videos attached directly, not via a
     # pasted link) land on disk. Relative paths resolve against the

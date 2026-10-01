@@ -27,6 +27,7 @@ pkg (pay-link shape, signature order, error codes) rather than from memory.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import uuid
 from urllib.parse import urlencode
@@ -65,7 +66,7 @@ def _sign(form: dict[str, str], secret: str) -> str:
         form.get("action", ""),
         form.get("sign_time", ""),
     ]
-    return hashlib.md5("".join(str(part) for part in parts).encode()).hexdigest()
+    return hashlib.md5("".join(str(part) for part in parts).encode(), usedforsecurity=False).hexdigest()
 
 
 def _reply(form: dict[str, str], *, error: int, note: str, prepare_id: str | int | None = None) -> str:
@@ -143,7 +144,7 @@ class ClickProvider(ProviderDefaults):
         service_id, _merchant_id, secret = self._keys(credentials)
 
         received = (form.get("sign_string") or "").strip().lower()
-        if not received or received != _sign(form, secret):
+        if not received or not hmac.compare_digest(received, _sign(form, secret)):
             raise ProviderError("Click: подпись уведомления не совпала")
         if (form.get("service_id") or "").strip() != service_id:
             raise ProviderError("Click: уведомление адресовано другому сервису")

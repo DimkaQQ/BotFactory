@@ -9,6 +9,7 @@ retrying until it gets one.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import uuid
 from urllib.parse import urlencode
 
@@ -63,7 +64,7 @@ class RobokassaProvider(ProviderDefaults):
             raise ProviderError("Robokassa: не заполнены идентификатор магазина или пароль #1")
 
         out_sum = minor_to_major(request.amount_minor)
-        signature = hashlib.md5(f"{login}:{out_sum}:{request.invoice_no}:{password1}".encode()).hexdigest()
+        signature = hashlib.md5(f"{login}:{out_sum}:{request.invoice_no}:{password1}".encode(), usedforsecurity=False).hexdigest()
 
         params = {
             "MerchantLogin": login,
@@ -122,8 +123,8 @@ class RobokassaProvider(ProviderDefaults):
 
         out_sum = (form.get("OutSum") or "").strip()
         received = (form.get("SignatureValue") or "").strip().lower()
-        expected = hashlib.md5(f"{out_sum}:{invoice_no}:{password2}".encode()).hexdigest()
-        if not received or received != expected:
+        expected = hashlib.md5(f"{out_sum}:{invoice_no}:{password2}".encode(), usedforsecurity=False).hexdigest()
+        if not received or not hmac.compare_digest(received, expected):
             raise ProviderError("Robokassa: подпись уведомления не совпала")
 
         # The signature proves the callback is Robokassa's; this proves it is
@@ -182,7 +183,7 @@ class RobokassaProvider(ProviderDefaults):
         out_sum = minor_to_major(amount_minor)
         # Same composition as a first payment — the recurring call is signed
         # with its *own* invoice number, not the previous one.
-        signature = hashlib.md5(f"{login}:{out_sum}:{invoice_no}:{password1}".encode()).hexdigest()
+        signature = hashlib.md5(f"{login}:{out_sum}:{invoice_no}:{password1}".encode(), usedforsecurity=False).hexdigest()
         body = {
             "MerchantLogin": login,
             "InvoiceID": str(invoice_no),

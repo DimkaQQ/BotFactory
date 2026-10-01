@@ -17,9 +17,9 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.models.bot import Bot as BotModel
 from app.models.bot_block import BlockType
-from app.config import get_settings
 from app.models.client import Client
 from app.models.payment import Payment, PaymentKind, PaymentStatus
 from app.routers.media import _slug
@@ -293,7 +293,6 @@ async def test_a_one_off_purchase_is_not_told_about_cancelling(
 @pytest.fixture
 def with_requisites(monkeypatch):
     """Реквизиты заполнены — как у развёрнутого сервиса, который продаёт."""
-    from app.config import get_settings
 
     monkeypatch.setenv("LEGAL_NAME", 'ИП «Ромашка» & Co')
     monkeypatch.setenv("LEGAL_ID", "ИИН 123456789012")
@@ -327,7 +326,6 @@ async def test_the_offer_and_the_privacy_policy_are_published(api, with_requisit
 async def test_an_unsigned_offer_is_not_published_at_all(api, monkeypatch):
     """Оферта, подписанная никем, хуже отсутствующей: первый же спор по
     платежу упирается в то, с кем человек договаривался."""
-    from app.config import get_settings
 
     monkeypatch.setenv("LEGAL_NAME", "")
     monkeypatch.setenv("LEGAL_ID", "")
@@ -348,7 +346,6 @@ async def test_an_unsigned_offer_is_not_published_at_all(api, monkeypatch):
 async def test_support_always_has_an_address(api, monkeypatch):
     """Не завели своей поддержки — остаётся наш собственный бот. Экрана без
     единого способа написать живому человеку быть не должно."""
-    from app.config import get_settings
 
     monkeypatch.setenv("SUPPORT_TELEGRAM", "")
     monkeypatch.setenv("META_BOT_USERNAME", "bot_factory_bot")
@@ -453,7 +450,6 @@ async def test_a_suspended_bot_stops_answering_even_if_it_is_cached(
     написали «бот ушёл с эфира», а бот продолжал отвечать из тех процессов,
     где он был закеширован, — то есть работал бесплатно.
     """
-    from unittest.mock import MagicMock
 
     from app.models.bot import BotStatus
     from app.services import bot_registry, security

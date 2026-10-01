@@ -128,3 +128,26 @@ curl -s -o /dev/null -w '%{http_code}\n' https://your-domain.com/legal/offer
 curl -s -o /dev/null -w '%{http_code}\n' https://your-domain.com/legal/privacy
 curl -s https://your-domain.com/api/config | python3 -m json.tool | grep legal
 ```
+
+## Обновление до образа без root
+
+Контейнер `api` теперь работает от пользователя `app` (uid 10001), а не от
+root. Новая установка ничего делать не должна. Но том `media_uploads`,
+созданный раньше, принадлежит root, и без правки прав загрузка файлов
+начнёт отвечать 500. Один раз после обновления:
+
+```bash
+docker compose run --rm --user root --entrypoint chown api -R 10001:10001 /srv/media_uploads
+docker compose up -d
+```
+
+Проверка: `docker compose ps` должен показывать `api` как `healthy`.
+
+## Ограничение частоты запросов
+
+`nginx/default.conf` ограничивает вход (`/api/auth/`, 5 запросов в секунду
+с адреса), остальной API (30/с) и уведомления платёжных систем (20/с).
+Лимит считается по настоящему адресу клиента: nginx доверяет
+`X-Forwarded-For` только из частных сетей (Caddy, внешний nginx, docker).
+Если перед сервером стоит CDN с публичными адресами, добавь их в
+`set_real_ip_from`, иначе лимит будет общим на всех посетителей.

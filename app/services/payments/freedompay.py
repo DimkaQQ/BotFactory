@@ -21,10 +21,11 @@ memory.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 import uuid
-import xml.etree.ElementTree as ET
 
+import defusedxml.ElementTree as ET
 import httpx
 
 from app.config import get_settings
@@ -66,7 +67,7 @@ def _sign(script: str, params: dict[str, str], secret: str) -> str:
     parts = [script]
     parts += [str(params[key]) for key in sorted(params) if key != "pg_sig"]
     parts.append(secret)
-    return hashlib.md5(";".join(parts).encode()).hexdigest()
+    return hashlib.md5(";".join(parts).encode(), usedforsecurity=False).hexdigest()
 
 
 class FreedomPayProvider(ProviderDefaults):
@@ -170,7 +171,7 @@ class FreedomPayProvider(ProviderDefaults):
         _merchant, secret = self._keys(credentials)
 
         received = (form.get("pg_sig") or "").strip().lower()
-        if not received or received != _sign(_CALLBACK_SCRIPT, form, secret):
+        if not received or not hmac.compare_digest(received, _sign(_CALLBACK_SCRIPT, form, secret)):
             raise ProviderError("Freedom Pay: подпись уведомления не совпала")
 
         remote_id = (form.get("pg_payment_id") or "").strip() or None

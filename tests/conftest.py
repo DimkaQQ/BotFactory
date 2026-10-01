@@ -25,11 +25,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal, engine
 from app.main import app
-from app.services import background
 from app.models.bot import Bot as BotModel
 from app.models.bot import BotStatus
 from app.models.bot_block import BlockType, BotBlock
 from app.models.client import Client
+from app.services import background
 from app.services.session_token import create_session_token
 
 # Telegram ids are unique per client, so tests that run in the same database
@@ -187,7 +187,7 @@ async def make_bot(db: AsyncSession) -> Callable:
         db.add_all(rows)
         await db.flush()
 
-        for current, following in zip(rows, rows[1:]):
+        for current, following in zip(rows, rows[1:], strict=False):
             current.next_block_id = following.id
         if rows:
             bot.start_block_id = rows[0].id

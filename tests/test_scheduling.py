@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
-from app.models.bot_block import BlockType, BotBlock
+from app.models.bot_block import BlockType
 from app.models.scheduled_step import ScheduledStep, StepStatus
 from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
 from app.services import bot_dispatcher, scheduler

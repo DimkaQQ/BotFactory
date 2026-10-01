@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select

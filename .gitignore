@@ -31,3 +31,9 @@ frontend/.vite/
 # находку, и выбрасывают следом. В историю попадать он не должен —
 # настоящий тест на подтверждённую находку пишется рядом, в tests/.
 tests/zz_*
+
+# Coverage
+.coverage
+htmlcov/
+.ruff_cache/
+.pytest_cache/

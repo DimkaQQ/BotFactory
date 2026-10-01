@@ -34,8 +34,8 @@ from app.services.payments.lavatop import LavaTopProvider
 from app.services.payments.lifepay import LifePayProvider
 from app.services.payments.link import LinkProvider
 from app.services.payments.liqpay import LiqPayProvider
-from app.services.payments.payme import PaymeProvider
 from app.services.payments.paymaster import PayMasterProvider
+from app.services.payments.payme import PaymeProvider
 from app.services.payments.processingkz import ProcessingKzProvider
 from app.services.payments.prodamus import ProdamusProvider
 from app.services.payments.robokassa import RobokassaProvider

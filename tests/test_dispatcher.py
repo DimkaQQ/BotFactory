@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from app.models.bot_block import BlockType, BotBlock
 from app.services import bot_dispatcher
 

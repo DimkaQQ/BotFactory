@@ -10,7 +10,14 @@ from __future__ import annotations
 
 from app.config import get_settings
 from app.models.payment import PaymentStatus
-from app.services.payments.base import Checkout, CheckoutRequest, PaymentRef, ProviderDefaults, ProviderError, WebhookResult
+from app.services.payments.base import (
+    Checkout,
+    CheckoutRequest,
+    PaymentRef,
+    ProviderDefaults,
+    ProviderError,
+    WebhookResult,
+)
 
 
 class TestProvider(ProviderDefaults):

@@ -15,11 +15,11 @@ of inventing a GET form of the same URL.
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timezone
 import hashlib
 import hmac
 import json
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 
@@ -31,8 +31,8 @@ from app.services.payments.base import (
     CredentialField,
     PaymentRef,
     ProviderDefaults,
-    RecurringMode,
     ProviderError,
+    RecurringMode,
     WebhookResult,
     minor_to_major,
     same_currency,
@@ -51,7 +51,7 @@ _FAILED = {"failure", "error"}
 def _sign(private_key: str, data: str) -> str:
     """The whole of LiqPay's authentication, both directions."""
     joined = f"{private_key}{data}{private_key}".encode()
-    return base64.b64encode(hashlib.sha1(joined).digest()).decode()
+    return base64.b64encode(hashlib.sha1(joined, usedforsecurity=False).digest()).decode()
 
 
 #: LiqPay bills on named periods, not on a number of days. Anything that is
