@@ -37,3 +37,11 @@ tests/zz_*
 htmlcov/
 .ruff_cache/
 .pytest_cache/
+
+# Служебные метки скриптов deploy/
+.deployfirst.done
+.deploy-mode
+.deploy-prev
+.deploy-branch
+.media_chown_done
+backups/
