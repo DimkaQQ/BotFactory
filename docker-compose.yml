@@ -36,6 +36,10 @@ services:
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     env_file: .env
+    # При остановке приложение дожидается до 25 с, чтобы не оборвать выдачу
+    # товара на полпути (см. lifespan в app/main.py). Стандартные 10 с docker
+    # убивали процесс раньше и на каждом обновлении резали такие выдачи.
+    stop_grace_period: 40s
     ports:
       - "127.0.0.1:8000:8000"  # loopback only: nginx/Caddy is the way in
     volumes:

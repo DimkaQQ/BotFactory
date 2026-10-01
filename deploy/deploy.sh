@@ -6,12 +6,16 @@
 #   ./deploy/deploy.sh                  # подтянуть свежий код и перезапустить
 #   ./deploy/deploy.sh --branch main    # обновиться с другой ветки
 #   ./deploy/deploy.sh --restart        # только перезапуск, без обновления кода
+#   ./deploy/deploy.sh --dry-run        # репетиция: получит код и соберёт образы, работающие
+#                                       # контейнеры не трогает (папка проекта обновится)
 #   ./deploy/deploy.sh --rollback       # вернуться на предыдущую версию кода
-#   ./deploy/deploy.sh --mode caddy     # один раз, если сервер ставили вручную
+#   ./deploy/deploy.sh --mode caddy     # задать режим вручную (обычно определяется сам)
 #
-# Порядок: проверки → копия базы → git pull → сборка → миграции (их делает
-# сервис migrate до старта api) → перезапуск → ожидание /health. Если API не
-# поднялся, скрипт печатает логи и подсказывает откат.
+# Рассчитан на УЖЕ РАБОТАЮЩИЙ сервер: пока идёт сборка нового образа, старая
+# версия продолжает отвечать. Порядок: проверки → копия базы → git pull →
+# сборка (старое ещё живо) → миграции и перезапуск (пауза в секунды) →
+# ожидание /health. Если новая версия не поднялась и миграций не было,
+# скрипт сам возвращает прежний код; если миграции были — печатает, что делать.
 #
 # Первая установка — отдельный скрипт deploy/deployfirst.sh.
 
@@ -30,14 +34,15 @@ say()  { printf '%s\n' "${c_grn}==>${c_off} $*"; }
 warn() { printf '%s\n' "${c_ylw}!!${c_off}  $*" >&2; }
 die()  { printf '%s\n' "${c_red}ОШИБКА:${c_off} $*" >&2; exit 1; }
 
-BRANCH=""; RESTART_ONLY=0; ROLLBACK=0; MODE_ARG=""
+BRANCH=""; RESTART_ONLY=0; ROLLBACK=0; MODE_ARG=""; DRY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --branch)   BRANCH="${2:-}"; shift 2 ;;
     --restart)  RESTART_ONLY=1; shift ;;
     --rollback) ROLLBACK=1; shift ;;
+    --dry-run)  DRY=1; shift ;;
     --mode)     MODE_ARG="${2:-}"; shift 2 ;;
-    -h|--help)  sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,20p' "$0"; exit 0 ;;
     *) die "неизвестный параметр: $1" ;;
   esac
 done
@@ -52,8 +57,20 @@ if [ -n "$MODE_ARG" ]; then
   case "$MODE_ARG" in caddy|shared) echo "$MODE_ARG" > "$MODE_FILE" ;; *) die "--mode: caddy или shared" ;; esac
 fi
 if [ ! -f "$MODE_FILE" ]; then
-  die "не знаю, как установлен проект (нет файла $MODE_FILE — его создаёт deployfirst.sh).
-    Если ставил вручную, укажи один раз:  ./deploy/deploy.sh --mode caddy   (или shared)"
+  # Сервер ставили вручную: смотрим, что реально запущено. Ошибка здесь
+  # опасна (не те файлы compose = другие контейнеры), поэтому угадываем
+  # только по однозначным признакам и просим подтвердить.
+  running="$(docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null || true)"
+  guess=""
+  if printf '%s' "$running" | grep -qi 'caddy'; then guess="caddy"
+  elif printf '%s' "$running" | grep -q '127.0.0.1:8010->80'; then guess="shared"; fi
+  [ -n "$guess" ] || die "не удалось определить режим установки (нет $MODE_FILE).
+    Укажи один раз:  ./deploy/deploy.sh --mode caddy   (есть контейнер caddy)
+                или:  ./deploy/deploy.sh --mode shared  (свой nginx на хосте, порт 8010)"
+  say "Похоже, установка в режиме «$guess» (по запущенным контейнерам)."
+  read -r -p "Верно? (y/N) " reply
+  [ "$reply" = "y" ] || die "тогда задай явно: ./deploy/deploy.sh --mode caddy|shared"
+  echo "$guess" > "$MODE_FILE"
 fi
 MODE="$(cat "$MODE_FILE")"
 if [ "$MODE" = "caddy" ]; then
@@ -74,6 +91,14 @@ wait_healthy() {
   return 1
 }
 
+if [ "$(env_get POSTGRES_PASSWORD)" = "botfactory" ] || [ -z "$(env_get POSTGRES_PASSWORD)" ]; then
+  warn "пароль базы — «botfactory» (по умолчанию). Порт базы наружу закрыт, так что это не срочно,"
+  warn "но сменить его стоит. Через .env это не делается: пароль уже записан в том базы."
+fi
+
+# Конфигурация compose должна читаться ДО того, как что-то будет остановлено.
+"${COMPOSE[@]}" config -q || die "docker compose не принимает конфигурацию — ничего не тронуто"
+
 # ---------------------------------------------------------------- откат
 
 if [ "$ROLLBACK" -eq 1 ]; then
@@ -84,7 +109,7 @@ if [ "$ROLLBACK" -eq 1 ]; then
   read -r -p "Продолжить? (y/N) " reply
   [ "$reply" = "y" ] || die "отменено"
   git checkout --quiet "$PREV"
-  "${COMPOSE[@]}" up -d --build --remove-orphans
+  "${COMPOSE[@]}" up -d --build
   wait_healthy && say "Откат выполнен, сервис отвечает." || die "после отката API не отвечает — смотри: ${COMPOSE[*]} logs api"
   exit 0
 fi
@@ -114,7 +139,9 @@ fi
 
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
-if "${COMPOSE[@]}" ps --status running db 2>/dev/null | grep -q db; then
+if [ "$DRY" -eq 1 ]; then
+  say "Репетиция: копию базы пропускаю"
+elif "${COMPOSE[@]}" ps --status running db 2>/dev/null | grep -q db; then
   DUMP="$BACKUP_DIR/pre-deploy-$(date -u +%Y%m%d-%H%M%S).sql.gz"
   say "Копия базы перед обновлением → $DUMP"
   DB_USER="$(env_get POSTGRES_USER)"; DB_NAME="$(env_get POSTGRES_DB)"
@@ -152,7 +179,7 @@ if [ "${#missing[@]}" -gt 0 ]; then
 fi
 
 # Образ api с версии «без root»: том загрузок, созданный раньше, принадлежит root.
-if [ ! -f .media_chown_done ]; then
+if [ ! -f .media_chown_done ] && [ "$DRY" -ne 1 ]; then
   say "Один раз правлю владельца тома загрузок"
   "${COMPOSE[@]}" run --rm --no-deps --user root --entrypoint chown api -R 10001:10001 /srv/media_uploads \
     && touch .media_chown_done || warn "не удалось поправить права тома — если загрузка файлов даст 500, выполни команду из deploy/ops.md"
@@ -160,15 +187,42 @@ fi
 
 # ---------------------------------------------------------------- сборка и запуск
 
-say "Собираю и перезапускаю (миграции применятся автоматически)"
-"${COMPOSE[@]}" up -d --build --remove-orphans
+# Сначала только сборка: пока она идёт, прежние контейнеры работают как
+# работали. Упадёт установка зависимостей или сборка фронтенда — сервис даже
+# не заметит.
+say "Собираю новые образы (старая версия пока работает)"
+"${COMPOSE[@]}" build || die "сборка не удалась — рабочая версия не тронута"
+
+if [ "$DRY" -eq 1 ]; then
+  say "Репетиция закончена: код получен, образы собраны, конфигурация верна."
+  say "Работающие контейнеры не остановлены и не перезапущены. Для настоящего обновления — без --dry-run."
+  exit 0
+fi
+
+MIGRATIONS_CHANGED=0
+if [ -n "${CURRENT:-}" ] && ! git diff --quiet "$CURRENT" HEAD -- migrations/versions 2>/dev/null; then
+  MIGRATIONS_CHANGED=1
+  warn "в этом обновлении есть миграции базы — автоматический откат кода будет невозможен"
+fi
+
+say "Перезапускаю (миграции применятся автоматически, пауза — секунды)"
+"${COMPOSE[@]}" up -d
 
 say "Жду, пока API ответит на /health"
 if ! wait_healthy; then
   "${COMPOSE[@]}" logs --tail=80 api migrate || true
+  if [ "$MIGRATIONS_CHANGED" -eq 0 ] && [ "$RESTART_ONLY" -ne 1 ] && [ -n "${CURRENT:-}" ]; then
+    warn "Новая версия не поднялась. Миграций не было — возвращаю прежний код автоматически."
+    git checkout --quiet "$CURRENT"
+    "${COMPOSE[@]}" up -d --build
+    if wait_healthy; then
+      die "Откат выполнен: сервис работает на прежней версии ($(git rev-parse --short HEAD)). Причина — в логах выше."
+    fi
+    die "После отката API тоже не отвечает. Смотри: ${COMPOSE[*]} logs api. Копии базы: $BACKUP_DIR"
+  fi
   die "API не поднялся за 3 минуты. Логи выше.
     Вернуть прошлую версию кода:  ./deploy/deploy.sh --rollback
-    Копии базы:                   $BACKUP_DIR"
+    Если были миграции — база уже изменена; копии в: $BACKUP_DIR"
 fi
 
 # Пока на этом сервере крутится только проект, чистим мусор старых сборок.

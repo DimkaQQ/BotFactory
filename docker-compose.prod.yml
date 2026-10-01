@@ -6,12 +6,6 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 services:
-  # В проде пароль базы обязан быть задан явно: без него compose не стартует,
-  # а не поднимается молча со словом «botfactory».
-  db:
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задай POSTGRES_PASSWORD в .env — пароль по умолчанию в проде недопустим}
-
   frontend:
     ports: !reset []
 
