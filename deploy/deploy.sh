@@ -21,7 +21,13 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Всё ниже лежит в функции не случайно: обновление кода (git merge) может
+# заменить этот самый файл прямо во время работы, а bash читает скрипт по
+# кускам и тогда выполнил бы обрывок новой версии. Функция разбирается целиком
+# до первого запуска.
+main() {
+
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 cd "$ROOT"
 
 MODE_FILE=".deploy-mode"
@@ -225,8 +231,13 @@ if ! wait_healthy; then
     Если были миграции — база уже изменена; копии в: $BACKUP_DIR"
 fi
 
-# Пока на этом сервере крутится только проект, чистим мусор старых сборок.
-docker image prune -f >/dev/null 2>&1 || true
+# Старые образы и кэш сборки не чистим: на сервере живут и другие проекты, а
+# `docker image prune` действует на весь хост. Если место кончается —
+# `docker image prune` и `docker builder prune` вручную, когда сам решишь.
 
 say "Готово: $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s)"
 "${COMPOSE[@]}" ps
+}
+
+main "$@"
+exit $?
