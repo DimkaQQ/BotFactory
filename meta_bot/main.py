@@ -12,6 +12,7 @@ from aiogram import Bot, Dispatcher
 from app.config import get_settings
 from app.services.telegram_session import build_bot_session
 from meta_bot.handlers.start import router as start_router
+from meta_bot.handlers.support import router as support_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -25,6 +26,8 @@ async def main() -> None:
     bot = Bot(token=settings.meta_bot_token, session=build_bot_session())
     dp = Dispatcher()
     dp.include_router(start_router)
+    # Последним: он ловит всё, что не команда, — команды должны достаться раньше.
+    dp.include_router(support_router)
 
     # Make sure we're not stuck on a leftover webhook from a previous deploy.
     await bot.delete_webhook(drop_pending_updates=True)

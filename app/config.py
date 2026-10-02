@@ -190,6 +190,10 @@ class Settings(BaseSettings):
     # сайт показывает наш собственный бот: он есть всегда.
     support_telegram: str = ""
     support_email: str = ""
+    #: Куда мета-бот пересылает всё, что люди пишут ему вне команд: ваш Telegram
+    #: id (число, узнать у @userinfobot). Пусто — поддержка через бота
+    #: выключена, и бот отвечает, что она пока не подключена.
+    support_chat_id: str = ""
     #: «ИП Иванов Иван Иванович» или «ТОО «Ромашка»» — как в документах.
     legal_name: str = ""
     #: ИИН/БИН, ИНН/ОГРНИП — что есть в юрисдикции.
@@ -219,6 +223,15 @@ class Settings(BaseSettings):
     def legal_ready(self) -> bool:
         """Есть ли кому подписывать оферту."""
         return bool(self.legal_name.strip() and self.legal_id.strip())
+
+    @property
+    def support_chat(self) -> int | None:
+        """Чат владельца, куда приходят обращения; None, если не задан или не число."""
+        raw = self.support_chat_id.strip()
+        try:
+            return int(raw) if raw else None
+        except ValueError:
+            return None
 
     @property
     def support_contact(self) -> str:

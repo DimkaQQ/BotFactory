@@ -172,6 +172,8 @@ def _privacy(s) -> tuple[str, str]:
       username. The service does not ask for or store a password.</li>
   <li>Bot scenarios, settings and uploaded files are kept until the User deletes them or the account.</li>
   <li>Keys to the User's payment provider are stored encrypted and are not shown again after saving.</li>
+  <li>Messages you write to support through the service's bot are received by the Provider: they are needed to
+      reply and are kept in the Telegram support chat until deleted.</li>
 </ul>
 
 <h2>2. Data of a bot's buyers</h2>

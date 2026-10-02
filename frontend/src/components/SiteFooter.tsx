@@ -40,26 +40,52 @@ export function SiteFooter({ config: given, compact = false }: Props) {
           )}
         </div>
       )}
-      <div className="landing-footer__row landing-footer__links">
-        {config.support_telegram && (
-          <a href={`https://t.me/${config.support_telegram}`} target="_blank" rel="noreferrer">
-            Поддержка: @{config.support_telegram}
-          </a>
-        )}
-        {config.support_email && <a href={`mailto:${config.support_email}`}>{config.support_email}</a>}
-        {/* Пока реквизиты не заполнены, документов нет — и ссылки на них не
-            показываются: пустая «Оферта» хуже её отсутствия. */}
-        {(config.legal_docs ?? []).map((doc) => (
-          <a key={doc.path} href={doc.path} target="_blank" rel="noreferrer">
-            {doc.title}
-          </a>
-        ))}
-        {(config.legal_docs ?? []).length > 0 && (
+      {/* Поддержка — единственное, что здесь должно бросаться в глаза: когда
+          у человека что-то не работает, он ищет именно её. Документы нужны (их
+          требуют платёжные системы и закон), но читают их единицы — поэтому они
+          ниже, мелко и приглушённо, а не в одном ряду с кнопкой. */}
+      {(config.support_telegram || config.support_email) && (
+        <div className="support-cta">
+          {config.support_telegram && (
+            <a
+              className="support-button"
+              href={`https://t.me/${config.support_telegram}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className="support-button__icon" aria-hidden="true">
+                💬
+              </span>
+              <span className="support-button__text">
+                <span className="support-button__title">Поддержка</span>
+                <span className="support-button__sub">Ответим в Telegram</span>
+              </span>
+              <span className="support-button__arrow" aria-hidden="true">
+                →
+              </span>
+            </a>
+          )}
+          {config.support_email && (
+            <a className="support-email" href={`mailto:${config.support_email}`}>
+              {config.support_email}
+            </a>
+          )}
+        </div>
+      )}
+      {/* Пока реквизиты не заполнены, документов нет — и ссылок на них не
+          показываются: пустая «Оферта» хуже её отсутствия. */}
+      {(config.legal_docs ?? []).length > 0 && (
+        <nav className="landing-footer__docs" aria-label="Юридические документы">
+          {(config.legal_docs ?? []).map((doc) => (
+            <a key={doc.path} href={doc.path} target="_blank" rel="noreferrer">
+              {doc.title}
+            </a>
+          ))}
           <a href="/legal/?lang=en" target="_blank" rel="noreferrer">
-            Legal documents (English)
+            English
           </a>
-        )}
-      </div>
+        </nav>
+      )}
       {!compact && (
         <p className="landing-footer__note">
           Деньги покупателей идут напрямую на счёт владельца бота — сервис их не принимает и не хранит.
