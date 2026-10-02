@@ -42,6 +42,23 @@ DOCUMENTS: list[tuple[str, str]] = [
 ]
 
 
+#: Те же документы по-английски: проверяющий Stripe и эстонский регулятор
+#: русского не читают. Тексты — в legal_en.py, адреса те же, язык — `?lang=en`.
+TITLES_EN = {
+    "offer": "Public Offer (Terms of Service)",
+    "privacy": "Privacy Policy",
+    "refunds": "Refund Policy",
+    "acceptable-use": "Acceptable Use Policy",
+    "data-processing": "Data Processing Terms for Bot Owners",
+    "cookies": "Cookies and Local Storage",
+}
+_RU_TITLES = {title: slug for slug, title in DOCUMENTS}
+
+
+def _lang(value: str) -> str:
+    return "en" if value == "en" else "ru"
+
+
 def document_links() -> list[dict[str, str]]:
     """Что показать в подвале: пусто, пока документам некому подписаться."""
     if not get_settings().legal_ready:
@@ -71,11 +88,19 @@ def _prices() -> tuple[str, str]:
     )
 
 
-def _page(title: str, body: str) -> Response:
+def _page(title: str, body: str, lang: str = "ru") -> Response:
     """Один документ. Без сборки фронтенда: эти страницы должны открываться
     у юриста, у эквайера и у поддержки Telegram — то есть всегда, даже если
     приложение не поднялось."""
     settings = get_settings()
+    en = lang == "en"
+    slug = _RU_TITLES.get(title) or next((s for s, t in TITLES_EN.items() if t == title), "")
+    path = f"/legal/{slug}" if slug else "/legal/"
+    switch = (
+        f'<a href="{path}">Русский</a> · <strong>English</strong>'
+        if en
+        else f'<strong>Русский</strong> · <a href="{path}?lang=en">English</a>'
+    )
     support = settings.support_contact
     contacts = [f'<a href="https://t.me/{html.escape(support)}">@{html.escape(support)}</a>'] if support else []
     if settings.support_email:
@@ -84,7 +109,7 @@ def _page(title: str, body: str) -> Response:
 
     return Response(
         content=f"""<!doctype html>
-<html lang="ru">
+<html lang="{"en" if en else "ru"}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -105,13 +130,13 @@ def _page(title: str, body: str) -> Response:
 </head>
 <body>
 <h1>{html.escape(title)}</h1>
-<p class="meta">Редакция от {REVISION} · <a href="/legal/">все документы</a></p>
+<p class="meta">{("Revision of " if en else "Редакция от ")}{REVISION} · <a href="/legal/{"?lang=en" if en else ""}">{"all documents" if en else "все документы"}</a> · {switch}</p>
 {body}
 <div class="req">
   <p><strong>{html.escape(settings.legal_name)}</strong><br>
-  {html.escape(settings.legal_id)}{"<br>" + html.escape(settings.legal_address) if settings.legal_address else ""}</p>
-  {_agent_block(settings)}
-  <p>Связаться: {" · ".join(contacts) if contacts else "—"}</p>
+  {html.escape(settings.legal_id)}{"<br>" + html.escape(settings.legal_address) if settings.legal_address else ""}{("<br>VAT: " if en else "<br>НДС (VAT): ") + html.escape(settings.legal_vat) if settings.legal_vat else ""}</p>
+  {_agent_block(settings, en)}
+  <p>{"Contact" if en else "Связаться"}: {" · ".join(contacts) if contacts else "—"}</p>
 </div>
 </body>
 </html>
@@ -120,13 +145,18 @@ def _page(title: str, body: str) -> Response:
     )
 
 
-def _agent_block(settings) -> str:
+def _agent_block(settings, en: bool = False) -> str:
     """Реквизиты платёжного агента внизу страницы — если он назначен."""
     if not settings.agent_ready:
         return ""
     address = "<br>" + html.escape(settings.agent_address) if settings.agent_address else ""
+    label = (
+        "Payment agent (collects payments on behalf of the Provider):"
+        if en
+        else "Платёжный агент (принимает оплату от имени Исполнителя):"
+    )
     return (
-        "<p>Платёжный агент (принимает оплату от имени Исполнителя):<br>"
+        f"<p>{label}<br>"
         f"<strong>{html.escape(settings.agent_name)}</strong><br>{html.escape(settings.agent_id)}{address}</p>"
     )
 
@@ -148,8 +178,12 @@ def _require_requisites() -> None:
 
 
 @router.get("/offer", response_class=Response)
-async def offer() -> Response:
+async def offer(lang: str = "ru") -> Response:
     _require_requisites()
+    if _lang(lang) == "en":
+        from app.routers import legal_en
+
+        return legal_en.render("offer")
     settings = get_settings()
     launch, periodic = _prices()
     site = html.escape(settings.public_base_url.rstrip("/"))
@@ -247,10 +281,20 @@ async def offer() -> Response:
 
 
 @router.get("/privacy", response_class=Response)
-async def privacy() -> Response:
+async def privacy(lang: str = "ru") -> Response:
     _require_requisites()
+    if _lang(lang) == "en":
+        from app.routers import legal_en
+
+        return legal_en.render("privacy")
     settings = get_settings()
     name = html.escape(settings.legal_name)
+    location = (
+        f"<li>Серверы сервиса расположены в: {html.escape(settings.data_location)}. Эта страна "
+        "может находиться за пределами Европейского экономического пространства.</li>"
+        if settings.data_location
+        else ""
+    )
 
     return _page(
         "Политика конфиденциальности",
@@ -311,13 +355,34 @@ async def privacy() -> Response:
   <li>Покупатель бота может отказаться от рассылок командой /stop, а от
       подписки — командой /cancel в самом боте.</li>
 </ul>
+
+<h2>7. Ваши права (GDPR и аналогичные законы)</h2>
+<ul>
+  <li>Оператор (контролёр) данных вашего аккаунта — {name}. Для данных покупателей бота оператором
+      является владелец бота, а {name} действует как обработчик (см.
+      <a href="/legal/data-processing">Обработка данных покупателей</a>).</li>
+  <li>Основания обработки: исполнение договора (ст. 6(1)(b) GDPR) — чтобы сервис работал; законные интересы
+      (ст. 6(1)(f)) — безопасность и предотвращение мошенничества; требование закона (ст. 6(1)(c)) —
+      бухгалтерский и налоговый учёт.</li>
+  <li>Сроки хранения: данные аккаунта — пока он существует и до 30 дней после удаления; бухгалтерские
+      документы — срок, который требует применимый закон.</li>
+  <li>Вы вправе запросить доступ к своим данным, их исправление, удаление, ограничение обработки,
+      переносимость и возразить против обработки. Напишите по контактам внизу страницы; ответим в течение месяца.</li>
+  <li>Вы можете пожаловаться в надзорный орган. В Эстонии это Инспекция по защите данных
+      (Andmekaitse Inspektsioon, aki.ee).</li>
+  {location}
+</ul>
 """,
     )
 
 
 @router.get("/refunds", response_class=Response)
-async def refunds() -> Response:
+async def refunds(lang: str = "ru") -> Response:
     _require_requisites()
+    if _lang(lang) == "en":
+        from app.routers import legal_en
+
+        return legal_en.render("refunds")
     settings = get_settings()
     name = html.escape(settings.legal_name)
     launch, periodic = _prices()
@@ -374,8 +439,12 @@ async def refunds() -> Response:
 
 
 @router.get("/acceptable-use", response_class=Response)
-async def acceptable_use() -> Response:
+async def acceptable_use(lang: str = "ru") -> Response:
     _require_requisites()
+    if _lang(lang) == "en":
+        from app.routers import legal_en
+
+        return legal_en.render("acceptable-use")
     name = html.escape(get_settings().legal_name)
 
     return _page(
@@ -427,8 +496,12 @@ async def acceptable_use() -> Response:
 
 
 @router.get("/data-processing", response_class=Response)
-async def data_processing() -> Response:
+async def data_processing(lang: str = "ru") -> Response:
     _require_requisites()
+    if _lang(lang) == "en":
+        from app.routers import legal_en
+
+        return legal_en.render("data-processing")
     name = html.escape(get_settings().legal_name)
 
     return _page(
@@ -505,8 +578,12 @@ async def data_processing() -> Response:
 
 
 @router.get("/cookies", response_class=Response)
-async def cookies() -> Response:
+async def cookies(lang: str = "ru") -> Response:
     _require_requisites()
+    if _lang(lang) == "en":
+        from app.routers import legal_en
+
+        return legal_en.render("cookies")
     return _page(
         "Cookies и локальное хранилище",
         """
@@ -549,8 +626,12 @@ async def cookies() -> Response:
 
 
 @router.get("/", response_class=Response)
-async def index() -> Response:
+async def index(lang: str = "ru") -> Response:
     _require_requisites()
+    if _lang(lang) == "en":
+        from app.routers import legal_en
+
+        return legal_en.render_index()
     items = "".join(
         f'<li><a href="/legal/{slug}">{html.escape(title)}</a></li>' for slug, title in DOCUMENTS
     )

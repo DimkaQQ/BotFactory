@@ -129,3 +129,97 @@ async def test_an_agent_without_a_registration_number_is_ignored(api, with_requi
         assert "MoraAgency" not in (await api.get("/legal/offer")).text
     finally:
         get_settings.cache_clear()
+
+
+# ------------------------------------------------------------- English
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("slug", SLUGS)
+async def test_every_document_has_an_english_version(api, with_requisites, slug):
+    response = await api.get(f"/legal/{slug}?lang=en")
+    assert response.status_code == 200
+    body = response.text
+    assert '<html lang="en">' in body
+    assert "ИП «Ромашка» &amp; Co" in body, "реквизиты пропали из английской версии"
+    # Английская версия не должна случайно остаться русской.
+    assert len(re.findall(r"[А-Яа-я]{4,}", re.sub(r"ИП «Ромашка» &amp; Co|ИИН \d+|Русский", "", body))) == 0, slug
+    assert f"Revision of {REVISION}" in body
+
+
+@pytest.mark.asyncio
+async def test_english_documents_link_to_english_pages_and_back(api, with_requisites):
+    index = await api.get("/legal/?lang=en")
+    assert index.status_code == 200 and 'href="/legal/offer?lang=en"' in index.text
+    for slug in SLUGS:
+        body = (await api.get(f"/legal/{slug}?lang=en")).text
+        assert f'href="/legal/{slug}"' in body, "нет ссылки на русскую версию"
+        for target in set(re.findall(r'href="(/legal/[a-z-]*)\?lang=en"', body)):
+            assert (await api.get(f"{target}?lang=en")).status_code == 200, f"{slug} ведёт на {target}"
+
+
+@pytest.mark.asyncio
+async def test_russian_pages_offer_the_switch_to_english(api, with_requisites):
+    assert 'href="/legal/offer?lang=en"' in (await api.get("/legal/offer")).text
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_language_falls_back_to_russian(api, with_requisites):
+    assert '<html lang="ru">' in (await api.get("/legal/offer?lang=fr")).text
+
+
+@pytest.mark.asyncio
+async def test_english_pages_are_not_published_without_requisites(api, monkeypatch):
+    monkeypatch.setenv("LEGAL_NAME", "")
+    monkeypatch.setenv("LEGAL_ID", "")
+    get_settings.cache_clear()
+    try:
+        for slug in SLUGS:
+            assert (await api.get(f"/legal/{slug}?lang=en")).status_code == 404
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_the_english_offer_names_the_agent_and_prices(api, with_agent):
+    body = (await api.get("/legal/offer?lang=en")).text
+    assert "MoraAgency OÜ" in body and "on behalf of and on the instructions of the Provider" in body
+    assert "not a party to the contract" in body
+
+
+# ------------------------------------------------- GDPR, VAT, server location
+
+
+@pytest.mark.asyncio
+async def test_the_privacy_policy_carries_the_gdpr_rights(api, with_requisites):
+    ru = (await api.get("/legal/privacy")).text
+    en = (await api.get("/legal/privacy?lang=en")).text
+    assert "Andmekaitse Inspektsioon" in ru and "Andmekaitse Inspektsioon" in en
+    assert "6(1)(b)" in ru and "6(1)(b)" in en
+    assert "Ваши права" in ru and "Your rights" in en
+
+
+@pytest.mark.asyncio
+async def test_server_location_is_named_only_when_it_is_configured(api, with_requisites, monkeypatch):
+    assert "Серверы сервиса расположены" not in (await api.get("/legal/privacy")).text
+    monkeypatch.setenv("DATA_LOCATION", "Нидерланды")
+    get_settings.cache_clear()
+    try:
+        assert "расположены в: Нидерланды" in (await api.get("/legal/privacy")).text
+        monkeypatch.setenv("DATA_LOCATION", "Netherlands")
+        get_settings.cache_clear()
+        assert "located in: Netherlands" in (await api.get("/legal/privacy?lang=en")).text
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_the_vat_number_appears_only_when_set(api, with_requisites, monkeypatch):
+    assert "VAT" not in (await api.get("/legal/offer")).text
+    monkeypatch.setenv("LEGAL_VAT", "EE123456789")
+    get_settings.cache_clear()
+    try:
+        assert "НДС (VAT): EE123456789" in (await api.get("/legal/offer")).text
+        assert "VAT: EE123456789" in (await api.get("/legal/offer?lang=en")).text
+    finally:
+        get_settings.cache_clear()

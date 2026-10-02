@@ -54,6 +54,11 @@ export function SiteFooter({ config: given, compact = false }: Props) {
             {doc.title}
           </a>
         ))}
+        {(config.legal_docs ?? []).length > 0 && (
+          <a href="/legal/?lang=en" target="_blank" rel="noreferrer">
+            Legal documents (English)
+          </a>
+        )}
       </div>
       {!compact && (
         <p className="landing-footer__note">

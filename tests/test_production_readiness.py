@@ -363,3 +363,23 @@ def test_webhook_secrets_survive_a_key_rotation(monkeypatch):
     security._fernet.cache_clear()
 
     assert security.webhook_secret(bot_id) == before
+
+
+@pytest.mark.asyncio
+async def test_paysupport_tells_the_buyer_where_to_write(db: AsyncSession, owner: Client, make_bot, telegram, monkeypatch):
+    """Telegram требует, чтобы бот с оплатой отвечал на /paysupport."""
+    from app.config import get_settings
+    from app.services import bot_dispatcher
+
+    monkeypatch.setenv("SUPPORT_TELEGRAM", "@bf_support")
+    get_settings.cache_clear()
+    try:
+        bot, _ = await make_bot(owner, [(BlockType.welcome, {"text": "привет"})], status=BotStatus.active)
+        message = {"chat": {"id": CHAT_ID}, "from": {"id": USER_ID}, "text": "/paysupport"}
+        await bot_dispatcher.process_update(telegram, {"message": message}, bot.id, db)
+    finally:
+        get_settings.cache_clear()
+
+    sent = telegram.sent()
+    assert sent, "бот промолчал на /paysupport"
+    assert "возврат" in sent[-1] and "@bf_support" in sent[-1]
