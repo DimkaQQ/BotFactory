@@ -7,6 +7,7 @@ import {
   ApiError,
   builderApi,
 } from "../api/builderApi";
+import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
 
 interface Props {
@@ -47,6 +48,7 @@ const SHORT: Record<string, string> = {
  * makes it appear here with no frontend change. */
 export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: Props) {
   useEscape(onClose);
+  const { panelRef, handleProps: dragProps } = useDraggablePanel();
 
   const [providers, setProviders] = useState<PaymentProviderInfo[] | null>(null);
   const [regions, setRegions] = useState<PaymentRegion[]>([]);
@@ -114,8 +116,12 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
   return (
     <>
       <div className="sheet-backdrop edit-panel-backdrop" onClick={onClose} />
-      <div className="edit-panel">
-        <div className="edit-panel__header">
+      <div className="edit-panel" ref={panelRef}>
+        <div
+          className="edit-panel__header"
+          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          {...dragProps}
+        >
           <span className="edit-panel__icon block-card__icon--delivery" aria-hidden="true">
             💳
           </span>

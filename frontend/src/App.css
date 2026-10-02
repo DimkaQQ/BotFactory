@@ -4353,6 +4353,24 @@
   margin-top: var(--sp-2);
 }
 
+/* Заголовок окна — ручка для перетаскивания (только на десктопе, где окно
+   плавает сбоку; на телефоне это нижняя шторка, и там ручки нет). */
+@media (min-width: 960px) {
+  .edit-panel__header {
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+  }
+
+  .edit-panel--dragging {
+    box-shadow: 0 16px 48px color-mix(in srgb, black 34%, transparent);
+  }
+
+  .edit-panel--dragging .edit-panel__header {
+    cursor: grabbing;
+  }
+}
+
 @media (min-width: 960px) {
   .edit-panel {
     left: auto;

@@ -1,5 +1,6 @@
 import type { BotBlock, PaymentProviderInfo } from "../../api/builderApi";
 import { BLOCK_TYPE_BY_ID } from "../../blockTypes";
+import { useDraggablePanel } from "../../hooks/useDraggablePanel";
 import { useEscape } from "../../hooks/useEscape";
 import { BroadcastButton } from "../BroadcastButton";
 import { ButtonsEditor } from "../ButtonsEditor";
@@ -62,6 +63,7 @@ export function BlockEditPanel({
   subscriptionsEnabled,
 }: Props) {
   useEscape(onClose);
+  const { panelRef, handleProps: dragProps } = useDraggablePanel();
   const def = BLOCK_TYPE_BY_ID[block.block_type];
   const isMediaBlock = block.block_type === "image" || block.block_type === "video";
   const isPollBlock = block.block_type === "poll";
@@ -76,8 +78,12 @@ export function BlockEditPanel({
   return (
     <>
       <div className="sheet-backdrop edit-panel-backdrop" onClick={onClose} />
-      <div className="edit-panel">
-        <div className="edit-panel__header">
+      <div className="edit-panel" ref={panelRef}>
+        <div
+          className="edit-panel__header"
+          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          {...dragProps}
+        >
           <span className={`edit-panel__icon block-card__icon--${def.accent}`} aria-hidden="true">
             {def.icon}
           </span>
