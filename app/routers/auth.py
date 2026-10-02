@@ -161,7 +161,24 @@ async def telegram_login(
         client.full_name = full_name
         await db.commit()
 
+    await _record_terms_acceptance(db, client)
     return TelegramLoginResponse(token=create_session_token(client.id))
+
+
+async def _record_terms_acceptance(db: AsyncSession, client: Client) -> None:
+    """Записать, какую редакцию условий человек принял при входе.
+
+    Только если документы опубликованы: иначе на экране входа нет строки о
+    согласии, и записывать «принял» было бы неправдой. Обновляется, когда
+    редакция сменилась, — вход после неё и есть новое принятие.
+    """
+    from app.routers.legal import REVISION
+
+    if not get_settings().legal_ready or client.terms_version == REVISION:
+        return
+    client.terms_version = REVISION
+    client.terms_accepted_at = datetime.now(timezone.utc)
+    await db.commit()
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)

@@ -2630,7 +2630,10 @@
    ========================================================================= */
 
 .screen--login {
+  /* clip, а не hidden: hidden делает предка контейнером прокрутки, и
+     position: sticky у шапки перестаёт прилипать к окну. */
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* ---------- Hero ---------- */
@@ -6075,27 +6078,28 @@ html {
 }
 
 .landing-nav {
+  /* Плавающая «таблетка» ровно во всю ширину контента, а не полоса вплотную к
+     блоку ниже: раньше шапка была уже героя на 40 px с каждой стороны, и по
+     краям торчали обрывки её рамки. Теперь у неё своя рамка со всех сторон,
+     тень и зазор до героя — она выглядит отдельным элементом, а не швом. */
   position: sticky;
-  top: 0;
+  top: var(--sp-3);
   z-index: 40;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: var(--sp-2) var(--sp-4);
-  background: color-mix(in srgb, var(--tg-bg) 88%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--tg-separator);
-}
-
-@media (min-width: 1160px) {
-  .landing-nav {
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-    border: 1px solid var(--tg-separator);
-    border-top: none;
-  }
+  width: 100%;
+  /* Той же ширины, что и блок героя под ней (1180), — иначе края не сходятся. */
+  max-width: 1180px;
+  box-sizing: border-box;
+  margin: 0 auto var(--sp-3);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
+  background: color-mix(in srgb, var(--tg-bg) 93%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .landing-nav__brand {

@@ -119,3 +119,58 @@ def test_stale_login_widget_payload_is_refused():
     payload = _widget({"id": 42, "first_name": "Аня", "auth_date": int(time.time()) - 3 * 86400})
     with pytest.raises(InvalidInitData):
         validate_login_widget_data(payload)
+
+
+# ----------------------------------------------------- принятие условий
+
+
+@pytest.mark.asyncio
+async def test_signing_in_records_the_accepted_terms_when_documents_are_published(api, monkeypatch):
+    """Вход при опубликованных документах — это принятие оферты: запись о
+    версии и времени нужна, чтобы «никто не соглашался» было нечем доказать."""
+    from sqlalchemy import select
+
+    from app.database import AsyncSessionLocal
+    from app.models.client import Client
+    from app.routers.legal import REVISION
+
+    monkeypatch.setenv("LEGAL_NAME", "ИП Тест")
+    monkeypatch.setenv("LEGAL_ID", "ИИН 1")
+    get_settings.cache_clear()
+    monkeypatch.setattr(get_settings(), "meta_bot_token", "123456:TEST-TOKEN", raising=False)
+    user_id = 990_555_001
+    payload = _widget({"id": user_id, "first_name": "Аня", "auth_date": int(time.time())})
+    try:
+        response = await api.post("/api/auth/telegram-login", json=payload)
+        assert response.status_code == 200, response.text
+        async with AsyncSessionLocal() as db:
+            client = (await db.execute(select(Client).where(Client.telegram_user_id == user_id))).scalar_one()
+            assert client.terms_version == REVISION and client.terms_accepted_at is not None
+            await db.delete(client)
+            await db.commit()
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_nothing_is_recorded_when_there_were_no_documents_to_accept(api, monkeypatch):
+    from sqlalchemy import select
+
+    from app.database import AsyncSessionLocal
+    from app.models.client import Client
+
+    monkeypatch.setenv("LEGAL_NAME", "")
+    monkeypatch.setenv("LEGAL_ID", "")
+    get_settings.cache_clear()
+    monkeypatch.setattr(get_settings(), "meta_bot_token", "123456:TEST-TOKEN", raising=False)
+    user_id = 990_555_002
+    payload = _widget({"id": user_id, "first_name": "Аня", "auth_date": int(time.time())})
+    try:
+        assert (await api.post("/api/auth/telegram-login", json=payload)).status_code == 200
+        async with AsyncSessionLocal() as db:
+            client = (await db.execute(select(Client).where(Client.telegram_user_id == user_id))).scalar_one()
+            assert client.terms_version is None and client.terms_accepted_at is None
+            await db.delete(client)
+            await db.commit()
+    finally:
+        get_settings.cache_clear()

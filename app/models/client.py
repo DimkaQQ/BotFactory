@@ -28,4 +28,12 @@ class Client(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    #: Какую редакцию оферты человек принял и когда. Принятием считается вход
+    #: через виджет Telegram при опубликованных документах: рядом с кнопкой
+    #: написано «Входя, вы принимаете оферту и политику». Запись нужна на случай
+    #: спора — «никто не соглашался» не должно быть правдой, которую нечем
+    #: опровергнуть. Пусто у тех, кто зарегистрировался до этого.
+    terms_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     bots: Mapped[list["Bot"]] = relationship(back_populates="client", cascade="all, delete-orphan")
