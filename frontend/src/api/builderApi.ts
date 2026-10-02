@@ -423,6 +423,12 @@ export interface PublicConfig {
   meta_bot_username: string;
   payment_regions: { slug: string; title: string; gateways: string[] }[];
   gateway_count: number;
+  /** Что стоит запуск. Пусто — запуск бесплатный (платёжных способов у
+   * платформы нет). Цифры приходят с сервера, чтобы лендинг не обещал не то,
+   * что спишется на кнопке публикации. */
+  pricing?: { method: string; launch: string; renewal: string }[];
+  renewal_period_days?: number;
+  renewal_grace_days?: number;
   /** Куда писать живому человеку — без @. Пусто не бывает. */
   support_telegram: string;
   support_email: string;

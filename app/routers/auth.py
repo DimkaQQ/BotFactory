@@ -33,6 +33,14 @@ class GatewayRegion(BaseModel):
     gateways: list[str]
 
 
+class PricePoint(BaseModel):
+    """Одна цена с лендинга: чем платишь, сколько за запуск, сколько за период."""
+
+    method: str
+    launch: str
+    renewal: str = ""
+
+
 class PublicConfig(BaseModel):
     meta_bot_username: str
     #: Куда писать живому человеку. Без @; пусто не бывает — если своей
@@ -49,6 +57,12 @@ class PublicConfig(BaseModel):
     # removing an adapter moves the number on the landing with it.
     payment_regions: list[GatewayRegion] = []
     gateway_count: int = 0
+    #: Что стоит запуск бота. Пусто — платёжных способов платформы нет, и
+    #: запуск бесплатный; цифры берутся из той же настройки, что и кнопка
+    #: публикации, поэтому лендинг не может обещать не то, что спишется.
+    pricing: list[PricePoint] = []
+    renewal_period_days: int = 0
+    renewal_grace_days: int = 0
 
 
 #: Not acquirers, and listing them as such would be a lie on a sales page.
@@ -62,6 +76,7 @@ async def get_public_config() -> PublicConfig:
     """Unauthenticated — what a browser needs before anyone has logged in:
     which bot to render the Telegram Login Widget for, and the acquirer list
     the landing page sells."""
+    from app.services import payment_service, platform_billing
     from app.services import payments as payment_providers
 
     real = [p for p in payment_providers.describe_providers() if p["slug"] not in _NOT_A_GATEWAY]
@@ -74,6 +89,15 @@ async def get_public_config() -> PublicConfig:
         for slug, title in payment_providers.REGIONS
     ]
     settings = get_settings()
+    methods = payment_service.platform_methods()
+    pricing = [
+        PricePoint(
+            method=m.title,
+            launch=payment_providers.money(m.price_minor, m.currency),
+            renewal=payment_providers.money(m.renewal_price_minor, m.currency) if m.renewal_price_minor > 0 else "",
+        )
+        for m in methods
+    ]
     return PublicConfig(
         meta_bot_username=settings.meta_bot_username,
         support_telegram=settings.support_contact,
@@ -84,6 +108,9 @@ async def get_public_config() -> PublicConfig:
         # under it, which is exactly how "Украина" looked.
         payment_regions=[r for r in regions if r.gateways],
         gateway_count=len(real),
+        pricing=pricing,
+        renewal_period_days=platform_billing.period_days() if any(p.renewal for p in pricing) else 0,
+        renewal_grace_days=platform_billing.grace_days() if any(p.renewal for p in pricing) else 0,
     )
 
 

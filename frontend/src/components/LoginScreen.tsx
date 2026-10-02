@@ -70,6 +70,40 @@ const FREE_STEPS = [
   { icon: "▶", title: "Предпросмотр", text: "Пройди весь диалог сам — с кнопками и той же скоростью печати, что у живого бота." },
 ];
 
+/** «Вручную» против «с ботом» — одна и та же работа, построчно. Каждая пара
+ * описывает то, что продавец в личке уже делает сегодня. */
+const COMPARE = [
+  { before: "Отвечаешь каждому в личке, когда увидишь", after: "Клиент сам нажимает кнопки и получает ответ сразу" },
+  { before: "Выставляешь счёт и сверяешь оплаты в банке", after: "Бот выставляет счёт, оплату подтверждает касса" },
+  { before: "Шлёшь файл или ссылку руками", after: "Файл, ссылка или доступ приходят за секунды" },
+  { before: "Ночью и в выходной продаж нет", after: "Бот работает круглосуточно, компьютер можно выключить" },
+];
+
+/** Только то, что действительно так устроено в коде, — не «мы заботимся о
+ * вашей безопасности». У каждого пункта есть проверяемая механика. */
+const TRUST = [
+  {
+    icon: "💸",
+    title: "Деньги идут не через нас",
+    text: "Покупатель платит в твою кассу, на твой счёт. Мы выставляем ссылку на оплату и ждём подтверждение от кассы.",
+  },
+  {
+    icon: "✅",
+    title: "Товар — только после оплаты",
+    text: "Файл или доступ уходят, когда оплату подтвердила касса или ты сам. Нажать «я оплатил» недостаточно.",
+  },
+  {
+    icon: "🔒",
+    title: "Ключи хранятся зашифрованными",
+    text: "Токен бота и ключи от кассы шифруются до записи в базу и нигде не показываются — ни нам в логах, ни в интерфейсе.",
+  },
+  {
+    icon: "🛟",
+    title: "Не продлил — ничего не пропало",
+    text: "Если период оплаты закончился, бот сначала предупредит, потом уйдёт с эфира. Сценарий, касса и заказы остаются, возвращается всё одной кнопкой.",
+  },
+];
+
 const STEPS = [
   {
     n: "1",
@@ -85,6 +119,17 @@ const STEPS = [
     n: "3",
     title: "Проверь и запусти",
     text: "Пройди диалог в предпросмотре, вставь токен от @BotFather — и бот в эфире. Правки применяются сразу, без повторной публикации.",
+  },
+];
+
+const FAQ_TOP = [
+  {
+    q: "Нужно ли уметь программировать?",
+    a: "Нет. Бот собирается из блоков, как схема: приветствие, текст, картинка, кнопки, оплата, выдача. Блоки соединяются стрелками — это и есть весь «код».",
+  },
+  {
+    q: "Что увидит мой покупатель?",
+    a: "Обычный чат в Telegram. Он пишет /start, получает сообщения с кнопками, нажимает «Купить», платит на странице твоей кассы — и бот присылает покупку. Никаких приложений и регистраций.",
   },
 ];
 
@@ -106,6 +151,10 @@ const FAQ = [
     a: "Нет. Бот живёт у нас и работает круглосуточно. Компьютер можно выключить — бот продолжит продавать.",
   },
   {
+    q: "Что будет, если я перестану платить за бота?",
+    a: "Бот работает ещё несколько дней после конца оплаченного периода, пока тебе напоминают. Потом он уходит с эфира, но ничего не удаляется: сценарий, касса и история заказов остаются. Оплатил — и бот возвращается сам.",
+  },
+  {
     q: "Можно менять сценарий после запуска?",
     a: "Да, и повторная публикация для этого не нужна: правки в тексте и в связях применяются сразу, на живом боте.",
   },
@@ -122,6 +171,10 @@ export function LoginScreen({ onLoggedIn }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [widgetFailed, setWidgetFailed] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Липкая кнопка внизу экрана на телефоне: появляется, когда форма входа из
+  // героя уже уехала вверх, — чтобы на длинной странице путь к входу всегда
+  // был под большим пальцем.
+  const [stickyCta, setStickyCta] = useState(false);
 
   const botUsername = config?.meta_bot_username || null;
 
@@ -174,6 +227,14 @@ export function LoginScreen({ onLoggedIn }: Props) {
     };
   }, [botUsername, onLoggedIn]);
 
+  useEffect(() => {
+    const hero = heroRef.current;
+    if (!hero || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setStickyCta(!entry.isIntersecting), { threshold: 0 });
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, []);
+
   function scrollToLogin() {
     heroRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
@@ -219,6 +280,8 @@ export function LoginScreen({ onLoggedIn }: Props) {
   // Counted from the list that is actually rendered, falling back on the
   // server's own total — a headline that says "17 касс" above a list of
   // twelve is worse than no number.
+  const pricing = config?.pricing ?? [];
+
   const gatewayCount =
     config?.payment_regions?.reduce((total, region) => total + region.gateways.length, 0) ||
     config?.gateway_count ||
@@ -226,21 +289,38 @@ export function LoginScreen({ onLoggedIn }: Props) {
 
   return (
     <div className="screen screen--login">
-      {/* The landing has no header bar to hang it off, so the theme control
-          floats in the corner — the one place it is reachable before login. */}
-      <ThemeToggle className="theme-toggle--floating" />
+      {/* Шапка прилипает к верху: на странице в двенадцать экранов человек не
+          должен искать, где «Войти» и куда делась цена. Тема — тоже тут, это
+          единственное место, где её можно сменить до входа. */}
+      <header className="landing-nav">
+        <a className="landing-nav__brand" href="#top" aria-label="Bot Factory — наверх">
+          <span aria-hidden="true">🏭</span> Bot Factory
+        </a>
+        <nav className="landing-nav__links" aria-label="Разделы страницы">
+          <a href="#how">Как работает</a>
+          <a href="#features">Возможности</a>
+          <a href="#pay">Оплата</a>
+          <a href="#price">Цена</a>
+          <a href="#faq">Вопросы</a>
+        </nav>
+        <ThemeToggle />
+        <button type="button" className="landing-nav__cta" onClick={scrollToLogin}>
+          Начать бесплатно
+        </button>
+      </header>
 
       {/* ===== Hero ===== */}
-      <section className="landing-hero" ref={heroRef}>
+      <section className="landing-hero" id="top" ref={heroRef}>
         <div className="login-hero">
           <div className="login-hero__pitch">
             <div className="landing-eyebrow">
-              <span aria-hidden="true">🏭</span> Bot Factory
+              <span aria-hidden="true">🏭</span> Конструктор Telegram-ботов для продаж
             </div>
             <h1 className="login-title">Бот, который сам продаёт и сам выдаёт</h1>
             <p className="login-hero__lead">
-              Собери сценарий на холсте — блоки и стрелки, как схему. Клиент нажимает кнопку, платит, и бот тут
-              же отдаёт файл, ссылку или доступ. Без кода, без разработчика, без ожидания.
+              Bot Factory — это конструктор: ты рисуешь диалог схемой, блоками и стрелками, без кода. Клиент
+              нажимает кнопку, платит в твою кассу — и бот сам присылает файл, ссылку или пускает в закрытый
+              чат.
             </p>
             <ul className="landing-promise" aria-label="Что бесплатно">
               <li>
@@ -253,6 +333,10 @@ export function LoginScreen({ onLoggedIn }: Props) {
                 <span aria-hidden="true">✓</span> Тестировать — бесплатно
               </li>
             </ul>
+            <p className="landing-hero__links">
+              <a href="#how">Как это работает ↓</a>
+              <a href="#price">Сколько стоит запуск ↓</a>
+            </p>
           </div>
 
           {loginWidget}
@@ -326,8 +410,38 @@ export function LoginScreen({ onLoggedIn }: Props) {
         </div>
       </section>
 
+      {/* ===== Было / стало ===== */}
+      <section className="landing-section landing-section--tight">
+        <div className="landing-section__head">
+          <p className="landing-section__eyebrow">Что меняется</p>
+          <h2 className="landing-section__title">Та же работа — только её делает бот</h2>
+        </div>
+        <div className="landing-compare">
+          <div className="landing-compare__col landing-compare__col--before">
+            <p className="landing-compare__head">Сейчас, вручную</p>
+            <ul>
+              {COMPARE.map((row) => (
+                <li key={row.before}>
+                  <span aria-hidden="true">✕</span> {row.before}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="landing-compare__col landing-compare__col--after">
+            <p className="landing-compare__head">С ботом</p>
+            <ul>
+              {COMPARE.map((row) => (
+                <li key={row.after}>
+                  <span aria-hidden="true">✓</span> {row.after}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
       {/* ===== How it works ===== */}
-      <section className="landing-section">
+      <section className="landing-section" id="how">
         <div className="landing-section__head">
           <p className="landing-section__eyebrow">Как это работает</p>
           <h2 className="landing-section__title">От пустого экрана до работающего бота за один присест</h2>
@@ -344,7 +458,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
       </section>
 
       {/* ===== Feature grid — sells every block type ===== */}
-      <section className="landing-section landing-section--tint">
+      <section className="landing-section landing-section--tint" id="features">
         <div className="landing-section__head">
           <p className="landing-section__eyebrow">Библиотека блоков</p>
           <h2 className="landing-section__title">Каждый блок — рабочий инструмент, а не украшение</h2>
@@ -372,7 +486,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
           an older deployment, a cached response — used to take the whole
           landing down with it, login widget included. */}
       {config?.payment_regions?.length ? (
-        <section className="landing-section">
+        <section className="landing-section" id="pay">
           <div className="landing-section__head">
             <p className="landing-section__eyebrow">Приём оплаты</p>
             <h2 className="landing-section__title">
@@ -445,16 +559,72 @@ export function LoginScreen({ onLoggedIn }: Props) {
         </div>
       </section>
 
+      {/* ===== Цена: цифры приходят с сервера ===== */}
+      <section className="landing-section" id="price">
+        <div className="landing-section__head">
+          <p className="landing-section__eyebrow">Сколько стоит</p>
+          <h2 className="landing-section__title">
+            {pricing.length ? "Платишь за запуск бота — не за попытки" : "Сейчас запуск бота бесплатный"}
+          </h2>
+          <p className="landing-section__lead">
+            {pricing.length
+              ? "Собирать, сохранять, переделывать и проверять бота — бесплатно, без срока. Платить нужно, когда бот выходит в Telegram."
+              : "Собирать, сохранять, проверять и запускать бота можно без оплаты. Если условия изменятся, цена будет видна на кнопке публикации до того, как что-то спишется."}
+          </p>
+        </div>
+        {pricing.length > 0 && (
+          <div className="landing-pricing">
+            {pricing.map((price) => (
+              <div key={price.method} className="landing-price">
+                <p className="landing-price__method">{price.method}</p>
+                <p className="landing-price__amount">{price.launch}</p>
+                <p className="landing-price__label">за запуск бота</p>
+                <p className="landing-price__renewal">
+                  {price.renewal
+                    ? `Дальше — ${price.renewal} за каждые ${config?.renewal_period_days ?? 30} дн. работы`
+                    : "Дальше — без доплат, бот работает без продлений"}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="landing-gateways__note">
+          Деньги ваших покупателей сюда не входят — они идут напрямую в вашу кассу, без нашей комиссии.
+          {pricing.some((p) => p.renewal) && config?.renewal_grace_days
+            ? ` Не продлили вовремя — бот ещё ${config.renewal_grace_days} дн. работает, пока вам напоминают; ничего не удаляется.`
+            : ""}
+        </p>
+      </section>
+
+      {/* ===== Почему можно доверять ===== */}
+      <section className="landing-section landing-section--tint">
+        <div className="landing-section__head">
+          <p className="landing-section__eyebrow">Надёжность</p>
+          <h2 className="landing-section__title">Что именно мы делаем, чтобы тебе можно было доверять</h2>
+        </div>
+        <div className="landing-trust">
+          {TRUST.map((item) => (
+            <div key={item.title} className="landing-trust__item">
+              <span className="landing-trust__icon" aria-hidden="true">
+                {item.icon}
+              </span>
+              <p className="landing-trust__title">{item.title}</p>
+              <p className="landing-trust__text">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* ===== FAQ — the questions that otherwise become support tickets or
               silent closes of the tab. <details> so it works without JS and
               is keyboard-navigable for free. ===== */}
-      <section className="landing-section landing-section--tint">
+      <section className="landing-section landing-section--tint" id="faq">
         <div className="landing-section__head">
           <p className="landing-section__eyebrow">Вопросы</p>
           <h2 className="landing-section__title">То, что спрашивают до регистрации</h2>
         </div>
         <div className="landing-faq">
-          {FAQ.map((item) => (
+          {[...FAQ_TOP, ...FAQ].map((item) => (
             <details key={item.q} className="landing-faq__item">
               <summary className="landing-faq__q">{item.q}</summary>
               <p className="landing-faq__a">{item.a}</p>
@@ -476,6 +646,14 @@ export function LoginScreen({ onLoggedIn }: Props) {
 
       {/* ===== Подвал ===== */}
       <SiteFooter config={config} />
+
+      {stickyCta && (
+        <div className="landing-sticky">
+          <button type="button" onClick={scrollToLogin}>
+            Начать бесплатно
+          </button>
+        </div>
+      )}
     </div>
   );
 }

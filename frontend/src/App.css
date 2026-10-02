@@ -6053,3 +6053,346 @@
   margin-top: var(--sp-3);
   font-size: 12.5px;
 }
+
+/* =====================================================================
+   Лендинг: шапка, «было / стало», цена, доверие, липкая кнопка
+   ===================================================================== */
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Якоря не должны уезжать под липкую шапку. */
+.landing-hero,
+.landing-section {
+  scroll-margin-top: 72px;
+}
+
+.landing-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--sp-2) var(--sp-4);
+  background: color-mix(in srgb, var(--tg-bg) 88%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--tg-separator);
+}
+
+@media (min-width: 1160px) {
+  .landing-nav {
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    border: 1px solid var(--tg-separator);
+    border-top: none;
+  }
+}
+
+.landing-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--text-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.landing-nav__links {
+  display: none;
+  flex: 1;
+  justify-content: center;
+  gap: var(--sp-4);
+}
+
+.landing-nav__links a {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.landing-nav__links a:hover {
+  color: var(--accent-on-surface);
+}
+
+@media (min-width: 860px) {
+  .landing-nav__links {
+    display: flex;
+  }
+}
+
+.landing-nav > .theme-toggle {
+  margin-left: auto;
+}
+
+@media (min-width: 860px) {
+  .landing-nav > .theme-toggle {
+    margin-left: 0;
+  }
+}
+
+.landing-nav__cta {
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+@media (max-width: 420px) {
+  .landing-nav__cta {
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+}
+
+.landing-hero__links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin: var(--sp-3) 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.landing-hero__links a {
+  color: var(--accent-on-surface);
+  text-decoration: none;
+}
+
+.landing-hero__links a:hover {
+  text-decoration: underline;
+}
+
+.landing-section--tight {
+  padding-top: var(--sp-5);
+  padding-bottom: var(--sp-5);
+}
+
+/* ---- Было / стало ---- */
+
+.landing-compare {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 760px) {
+  .landing-compare {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.landing-compare__col {
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5) var(--sp-4);
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+  box-shadow: var(--shadow-card);
+}
+
+.landing-compare__col--after {
+  background: color-mix(in srgb, var(--accent-success) 9%, var(--tg-bg));
+  border-color: color-mix(in srgb, var(--accent-success) 30%, transparent);
+}
+
+.landing-compare__head {
+  margin: 0 0 var(--sp-3);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.landing-compare__col--after .landing-compare__head {
+  color: var(--accent-success-ink);
+}
+
+.landing-compare ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.landing-compare li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.landing-compare li span {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 1px;
+}
+
+.landing-compare__col--before li span {
+  background: color-mix(in srgb, var(--tg-destructive) 12%, transparent);
+  color: var(--tg-destructive);
+}
+
+.landing-compare__col--after li span {
+  background: color-mix(in srgb, var(--accent-success) 18%, transparent);
+  color: var(--accent-success-ink);
+}
+
+/* ---- Цена ---- */
+
+.landing-pricing {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.landing-price {
+  text-align: center;
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5) var(--sp-4);
+  box-shadow: var(--shadow-card);
+}
+
+.landing-price__method {
+  margin: 0 0 var(--sp-2);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+
+.landing-price__amount {
+  margin: 0;
+  font-size: 38px;
+  line-height: 1.1;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.landing-price__label {
+  margin: 4px 0 var(--sp-3);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.landing-price__renewal {
+  margin: 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--tg-separator);
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* ---- Доверие ---- */
+
+.landing-trust {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .landing-trust {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 1000px) {
+  .landing-trust {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.landing-trust__item {
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5) var(--sp-4);
+  box-shadow: var(--shadow-card);
+}
+
+.landing-trust__icon {
+  display: block;
+  font-size: 26px;
+  line-height: 1;
+  margin-bottom: var(--sp-3);
+}
+
+.landing-trust__title {
+  margin: 0 0 var(--sp-2);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.landing-trust__text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* ---- Липкая кнопка (только телефон) ---- */
+
+.landing-sticky {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  padding: var(--sp-2) var(--sp-3) calc(var(--sp-2) + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--tg-bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--tg-separator);
+  animation: sheet-in var(--dur-slow) var(--ease-out);
+}
+
+.landing-sticky button {
+  width: 100%;
+  min-height: 48px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-size: 15.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (min-width: 860px) {
+  .landing-sticky {
+    display: none;
+  }
+}
