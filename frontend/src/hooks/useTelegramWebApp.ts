@@ -70,6 +70,7 @@ declare global {
         };
         showAlert?: (message: string) => void;
         showConfirm?: (message: string, callback: (confirmed: boolean) => void) => void;
+        isVersionAtLeast?: (version: string) => boolean;
         openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
         BackButton: {
           isVisible: boolean;

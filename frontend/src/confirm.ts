@@ -93,12 +93,30 @@ function webConfirm(message: string, confirmLabel: string, danger: boolean): Pro
  */
 export function confirmDialog(message: string, confirmLabel: string = CONFIRM): Promise<boolean> {
   const webApp = window.Telegram?.WebApp;
-  if (webApp?.showConfirm) {
+  // Нативный лист годится только внутри настоящего Mini App. Скрипт Telegram
+  // на странице создаёт объект `Telegram.WebApp` и в обычном браузере тоже —
+  // с версией 6.0 и функцией showConfirm, которая при вызове бросает
+  // WebAppMethodUnsupported (окна поддерживаются с 6.2). Раньше хватало
+  // проверки «функция есть», и в браузере кнопки «Выйти», «Удалить» и
+  // «Разослать» молча ничего не делали: исключение уходило в никуда.
+  const native =
+    !!webApp?.showConfirm &&
+    !!webApp.initData &&
+    (typeof webApp.isVersionAtLeast !== "function" || webApp.isVersionAtLeast("6.2"));
+  if (native) {
     // Нативный лист Telegram рисует свои «ОК/Отмена» и подписи не принимает,
     // поэтому глагол уходит в сам вопрос — иначе внутри Telegram кнопка
     // осталась бы безымянной.
     const text = confirmLabel === CONFIRM ? message : `${message}\n\n${confirmLabel}?`;
-    return new Promise((resolve) => webApp.showConfirm!(text, resolve));
+    return new Promise((resolve) => {
+      try {
+        webApp!.showConfirm!(text, resolve);
+      } catch {
+        // Старый клиент Telegram или окно уже открыто: свой диалог лучше,
+        // чем молчание на кнопке, которая что-то удаляет.
+        void webConfirm(message, confirmLabel, confirmLabel === CONFIRM).then(resolve);
+      }
+    });
   }
   return webConfirm(message, confirmLabel, confirmLabel === CONFIRM);
 }
