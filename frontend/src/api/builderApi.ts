@@ -436,6 +436,9 @@ export interface PublicConfig {
   legal_name: string;
   /** Есть ли что открыть по ссылкам «Оферта» и «Политика». */
   legal_documents: boolean;
+  /** Документы для подвала: путь и название. Пусто, пока реквизиты не
+   * заполнены. Отсутствует у старого сервера — тогда ссылок просто нет. */
+  legal_docs?: { path: string; title: string }[];
 }
 
 export interface PublicationInfo {

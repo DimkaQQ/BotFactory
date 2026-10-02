@@ -46,20 +46,16 @@ export function SiteFooter({ config: given, compact = false }: Props) {
         {config.support_email && <a href={`mailto:${config.support_email}`}>{config.support_email}</a>}
         {/* Пока реквизиты не заполнены, документов нет — и ссылки на них не
             показываются: пустая «Оферта» хуже её отсутствия. */}
-        {config.legal_documents && (
-          <>
-            <a href="/legal/offer" target="_blank" rel="noreferrer">
-              Публичная оферта
-            </a>
-            <a href="/legal/privacy" target="_blank" rel="noreferrer">
-              Политика конфиденциальности
-            </a>
-          </>
-        )}
+        {(config.legal_docs ?? []).map((doc) => (
+          <a key={doc.path} href={doc.path} target="_blank" rel="noreferrer">
+            {doc.title}
+          </a>
+        ))}
       </div>
       {!compact && (
         <p className="landing-footer__note">
           Деньги покупателей идут напрямую на счёт владельца бота — сервис их не принимает и не хранит.
+          Bot Factory — независимый сервис и не связан с Telegram Messenger Inc.
         </p>
       )}
     </footer>

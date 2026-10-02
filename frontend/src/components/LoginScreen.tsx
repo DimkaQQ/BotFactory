@@ -239,6 +239,11 @@ export function LoginScreen({ onLoggedIn }: Props) {
     heroRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  const legalLinks = {
+    offer: config?.legal_docs?.find((d) => d.path === "/legal/offer")?.path,
+    privacy: config?.legal_docs?.find((d) => d.path === "/legal/privacy")?.path,
+  };
+
   const loginWidget = (
     <div className="login-card">
       <p className="login-card__title">Войти через Telegram</p>
@@ -269,6 +274,22 @@ export function LoginScreen({ onLoggedIn }: Props) {
       ) : null}
       {error && <p className="publish-form__error">{error}</p>}
       <p className="login-card__trust">Регистрация и сборка — бесплатно · Платный только запуск</p>
+      {/* Согласие стоит у кнопки, а не в подвале: виджет Telegram — единственный
+          способ войти, и «вход = принятие условий» должно быть написано там,
+          где человек его нажимает. Пока документов нет, строки нет тоже. */}
+      {legalLinks.offer && legalLinks.privacy && (
+        <p className="login-card__consent">
+          Входя, вы принимаете{" "}
+          <a href={legalLinks.offer} target="_blank" rel="noreferrer">
+            оферту
+          </a>{" "}
+          и{" "}
+          <a href={legalLinks.privacy} target="_blank" rel="noreferrer">
+            политику конфиденциальности
+          </a>
+          .
+        </p>
+      )}
     </div>
   );
 

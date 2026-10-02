@@ -52,6 +52,9 @@ class PublicConfig(BaseModel):
     #: документы, потому что документов в этом случае тоже нет.
     legal_name: str = ""
     legal_documents: bool = False
+    #: Какие документы показать в подвале (путь и название). Пусто, пока
+    #: реквизиты не заполнены.
+    legal_docs: list[dict[str, str]] = []
     # What the landing says about taking money. Served rather than written
     # into the page so the claim cannot drift from the code: adding or
     # removing an adapter moves the number on the landing with it.
@@ -76,6 +79,7 @@ async def get_public_config() -> PublicConfig:
     """Unauthenticated — what a browser needs before anyone has logged in:
     which bot to render the Telegram Login Widget for, and the acquirer list
     the landing page sells."""
+    from app.routers import legal
     from app.services import payment_service, platform_billing
     from app.services import payments as payment_providers
 
@@ -104,6 +108,7 @@ async def get_public_config() -> PublicConfig:
         support_email=settings.support_email,
         legal_name=settings.legal_name if settings.legal_ready else "",
         legal_documents=settings.legal_ready,
+        legal_docs=legal.document_links(),
         # An empty heading would render as a section title with nothing
         # under it, which is exactly how "Украина" looked.
         payment_regions=[r for r in regions if r.gateways],

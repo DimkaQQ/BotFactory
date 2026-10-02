@@ -6396,3 +6396,15 @@ html {
     display: none;
   }
 }
+
+.login-card__consent {
+  margin: var(--sp-2) 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.login-card__consent a {
+  color: var(--accent-on-surface);
+}
