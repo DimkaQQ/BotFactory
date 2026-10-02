@@ -32,6 +32,7 @@ cd "$ROOT"
 
 MODE_FILE=".deploy-mode"
 PREV_FILE=".deploy-prev"
+RUNNING_FILE=".deploy-running"   # коммит, который реально работает сейчас
 BACKUP_DIR="${BACKUP_DIR:-$ROOT/backups}"
 KEEP_DUMPS=7
 
@@ -123,6 +124,12 @@ fi
 # ---------------------------------------------------------------- состояние
 
 CURRENT="$(git rev-parse HEAD)"
+# «Что работает» — это не HEAD папки: код мог быть подтянут руками (git pull),
+# а контейнеры остаться старыми. Берём коммит, записанный после последнего
+# успешного обновления; если записи нет (первый запуск) — версия неизвестна,
+# и скрипт считает, что миграции в обновлении ЕСТЬ.
+RUNNING="$(cat "$RUNNING_FILE" 2>/dev/null || true)"
+git cat-file -e "${RUNNING:-x}^{commit}" 2>/dev/null || RUNNING=""
 if [ "$RESTART_ONLY" -ne 1 ]; then
   [ -z "$(git status --porcelain --untracked-files=no)" ] \
     || die "в проекте есть локальные правки отслеживаемых файлов — закоммить или отмени их (git status), иначе обновление затрёт их"
@@ -163,7 +170,7 @@ elif "${COMPOSE[@]}" ps --status running db 2>/dev/null | grep -q db; then
 else
   warn "контейнер базы не запущен — копию не делаю"
 fi
-echo "$CURRENT" > "$PREV_FILE"
+echo "${RUNNING:-$CURRENT}" > "$PREV_FILE"
 
 # ---------------------------------------------------------------- код
 
@@ -206,7 +213,11 @@ if [ "$DRY" -eq 1 ]; then
 fi
 
 MIGRATIONS_CHANGED=0
-if [ -n "${CURRENT:-}" ] && ! git diff --quiet "$CURRENT" HEAD -- migrations/versions 2>/dev/null; then
+if [ -z "$RUNNING" ]; then
+  MIGRATIONS_CHANGED=1
+  warn "неизвестно, какая версия работает сейчас (первый запуск скрипта) — считаю, что миграции будут;"
+  warn "автоматический откат кода выключен, копия базы сделана"
+elif ! git diff --quiet "$RUNNING" HEAD -- migrations/versions 2>/dev/null; then
   MIGRATIONS_CHANGED=1
   warn "в этом обновлении есть миграции базы — автоматический откат кода будет невозможен"
 fi
@@ -217,9 +228,9 @@ say "Перезапускаю (миграции применятся автом�
 say "Жду, пока API ответит на /health"
 if ! wait_healthy; then
   "${COMPOSE[@]}" logs --tail=80 api migrate || true
-  if [ "$MIGRATIONS_CHANGED" -eq 0 ] && [ "$RESTART_ONLY" -ne 1 ] && [ -n "${CURRENT:-}" ]; then
+  if [ "$MIGRATIONS_CHANGED" -eq 0 ] && [ "$RESTART_ONLY" -ne 1 ] && [ -n "$RUNNING" ]; then
     warn "Новая версия не поднялась. Миграций не было — возвращаю прежний код автоматически."
-    git checkout --quiet "$CURRENT"
+    git checkout --quiet "$RUNNING"
     "${COMPOSE[@]}" up -d --build
     if wait_healthy; then
       die "Откат выполнен: сервис работает на прежней версии ($(git rev-parse --short HEAD)). Причина — в логах выше."
@@ -235,6 +246,7 @@ fi
 # `docker image prune` действует на весь хост. Если место кончается —
 # `docker image prune` и `docker builder prune` вручную, когда сам решишь.
 
+git rev-parse HEAD > "$RUNNING_FILE"
 say "Готово: $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s)"
 "${COMPOSE[@]}" ps
 }
