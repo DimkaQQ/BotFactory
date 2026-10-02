@@ -10,6 +10,7 @@ import {
   formatAmount,
 } from "../api/builderApi";
 import { confirmDialog } from "../confirm";
+import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
 
 interface Props {
@@ -58,6 +59,7 @@ function when(iso: string): string {
  */
 export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
   useEscape(onClose);
+  const { panelRef, handleProps: dragProps } = useDraggablePanel();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [totals, setTotals] = useState<OrdersReport["totals"]>([]);
   const [subs, setSubs] = useState<SubscribersReport | null>(null);
@@ -152,8 +154,12 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
   return (
     <>
       <div className="sheet-backdrop edit-panel-backdrop" onClick={onClose} />
-      <div className="edit-panel">
-        <div className="edit-panel__header">
+      <div className="edit-panel" ref={panelRef}>
+        <div
+          className="edit-panel__header"
+          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          {...dragProps}
+        >
           <span className="edit-panel__icon block-card__icon--payment" aria-hidden="true">
             💰
           </span>
@@ -228,6 +234,20 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Пустой экран и был вопросом «а что это вообще?»: окно с одним
+              заголовком и больше ничем. Объясняем, зачем оно, пока нечего
+              показывать. */}
+          {totals.length === 0 && orders.length === 0 && !(subs && subs.subscriptions.length > 0) && (
+            <div className="orders orders--empty">
+              <p className="orders__empty-title">Пока ни одной продажи</p>
+              <p className="orders__lead">
+                Здесь будет журнал заказов вашего бота: кто и что купил, на какую сумму, оплачено ли и выдан ли
+                товар. Отсюда же подтверждаются оплаты «по ссылке», оформляются возвраты и выгружается таблица
+                для бухгалтера. Подписки (если вы их продаёте) тоже появятся на этом экране.
+              </p>
             </div>
           )}
 

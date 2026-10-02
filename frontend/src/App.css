@@ -4654,7 +4654,7 @@
 .payment-settings__none {
   width: 100%;
   min-height: 44px;
-  margin-top: var(--sp-2);
+  margin-top: var(--sp-3);
   padding: 10px;
   border-radius: 12px;
   border: 1.5px dashed var(--tg-separator);
@@ -4727,6 +4727,9 @@
 .payment-settings__save {
   width: 100%;
   min-height: 44px;
+  /* Кнопка «Сохранить» стояла вплотную к «Без оплаты» над ней и к «Продажам»
+     под ней: три широкие кнопки подряд сливались в одну колонку. */
+  margin-top: var(--sp-5);
   padding: 12px;
   border: none;
   border-radius: var(--radius-md);
@@ -4748,7 +4751,7 @@
 .payment-settings__sales-link {
   width: 100%;
   min-height: 44px;
-  margin-top: var(--sp-3);
+  margin-top: var(--sp-4);
   padding: 12px;
   border: 1px solid var(--tg-separator);
   border-radius: var(--radius-md);
@@ -4762,6 +4765,19 @@
 .payment-settings__sales-link:hover {
   border-color: var(--tg-link);
   color: var(--tg-link);
+}
+
+/* Пока нет продаж: заголовок и объяснение, а не пустое окно. */
+.orders--empty {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.orders__empty-title {
+  margin: 0 0 var(--sp-2);
+  font-size: 15px;
+  font-weight: 700;
 }
 
 /* ---- Orders waiting on the owner ---- */
