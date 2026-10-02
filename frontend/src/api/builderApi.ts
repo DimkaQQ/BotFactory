@@ -439,6 +439,8 @@ export interface PublicConfig {
   /** Документы для подвала: путь и название. Пусто, пока реквизиты не
    * заполнены. Отсутствует у старого сервера — тогда ссылок просто нет. */
   legal_docs?: { path: string; title: string }[];
+  /** Платёжный агент, принимающий оплату от имени владельца сервиса. */
+  payment_agent?: string;
 }
 
 export interface PublicationInfo {

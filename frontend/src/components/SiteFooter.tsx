@@ -35,6 +35,9 @@ export function SiteFooter({ config: given, compact = false }: Props) {
         <div className="landing-footer__row">
           <span className="landing-footer__brand">Bot Factory</span>
           {config.legal_name && <span className="landing-footer__legal">{config.legal_name}</span>}
+          {config.payment_agent && (
+            <span className="landing-footer__legal">Оплату принимает платёжный агент {config.payment_agent}</span>
+          )}
         </div>
       )}
       <div className="landing-footer__row landing-footer__links">

@@ -84,3 +84,48 @@ async def test_the_policy_does_not_promise_what_the_service_does_not_do(api, wit
     настраиваются отдельно. Обещание в юридическом тексте — это обязательство."""
     body = (await api.get("/legal/privacy")).text
     assert "регулярно" not in body
+
+
+@pytest.fixture
+def with_agent(monkeypatch, with_requisites):
+    monkeypatch.setenv("AGENT_NAME", "MoraAgency OÜ")
+    monkeypatch.setenv("AGENT_ID", "Registry code 17094028")
+    monkeypatch.setenv("AGENT_ADDRESS", "Kuldnoka 5, Tallinn")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_documents_stay_silent_about_an_agent_that_does_not_exist(api, with_requisites):
+    for slug in SLUGS:
+        assert "платёжный агент" not in (await api.get(f"/legal/{slug}")).text.lower(), slug
+    assert (await api.get("/api/config")).json()["payment_agent"] == ""
+
+
+@pytest.mark.asyncio
+async def test_the_agent_is_named_and_is_not_a_party_to_the_contract(api, with_agent):
+    offer = (await api.get("/legal/offer")).text
+    assert "MoraAgency OÜ" in offer and "17094028" in offer
+    assert "от имени и по поручению Исполнителя" in offer
+    assert "не является стороной договора" in offer
+    # Исполнитель по-прежнему тот, кто в LEGAL_NAME.
+    assert "ИП «Ромашка» &amp; Co" in offer
+
+    for slug in ("refunds", "privacy", "data-processing"):
+        assert "MoraAgency OÜ" in (await api.get(f"/legal/{slug}")).text, slug
+
+    config = (await api.get("/api/config")).json()
+    assert config["payment_agent"] == "MoraAgency OÜ"
+
+
+@pytest.mark.asyncio
+async def test_an_agent_without_a_registration_number_is_ignored(api, with_requisites, monkeypatch):
+    """Агент без номера — это не агент, а строка без реквизитов: хуже отсутствия."""
+    monkeypatch.setenv("AGENT_NAME", "MoraAgency OÜ")
+    monkeypatch.setenv("AGENT_ID", "")
+    get_settings.cache_clear()
+    try:
+        assert "MoraAgency" not in (await api.get("/legal/offer")).text
+    finally:
+        get_settings.cache_clear()

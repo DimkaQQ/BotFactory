@@ -195,6 +195,19 @@ class Settings(BaseSettings):
     #: ИИН/БИН, ИНН/ОГРНИП — что есть в юрисдикции.
     legal_id: str = ""
     legal_address: str = ""
+    #: Платёжный агент — лицо, которое принимает оплату ОТ ИМЕНИ Исполнителя
+    #: (LEGAL_NAME), например зарубежная компания со своим аккаунтом Stripe.
+    #: Пусто — агента нет, и документы про него молчат. Включать только
+    #: при наличии письменного агентского договора между сторонами: текст
+    #: на сайте его не заменяет.
+    agent_name: str = ""
+    agent_id: str = ""
+    agent_address: str = ""
+
+    @property
+    def agent_ready(self) -> bool:
+        """Назначен ли платёжный агент (нужны и название, и номер)."""
+        return bool(self.agent_name.strip() and self.agent_id.strip())
 
     @property
     def legal_ready(self) -> bool:

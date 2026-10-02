@@ -55,6 +55,8 @@ class PublicConfig(BaseModel):
     #: Какие документы показать в подвале (путь и название). Пусто, пока
     #: реквизиты не заполнены.
     legal_docs: list[dict[str, str]] = []
+    #: Кто принимает оплату от имени Исполнителя. Пусто, если агента нет.
+    payment_agent: str = ""
     # What the landing says about taking money. Served rather than written
     # into the page so the claim cannot drift from the code: adding or
     # removing an adapter moves the number on the landing with it.
@@ -109,6 +111,7 @@ async def get_public_config() -> PublicConfig:
         legal_name=settings.legal_name if settings.legal_ready else "",
         legal_documents=settings.legal_ready,
         legal_docs=legal.document_links(),
+        payment_agent=settings.agent_name if settings.legal_ready and settings.agent_ready else "",
         # An empty heading would render as a section title with nothing
         # under it, which is exactly how "Украина" looked.
         payment_regions=[r for r in regions if r.gateways],

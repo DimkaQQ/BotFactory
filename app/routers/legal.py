@@ -110,12 +110,35 @@ def _page(title: str, body: str) -> Response:
 <div class="req">
   <p><strong>{html.escape(settings.legal_name)}</strong><br>
   {html.escape(settings.legal_id)}{"<br>" + html.escape(settings.legal_address) if settings.legal_address else ""}</p>
+  {_agent_block(settings)}
   <p>Связаться: {" · ".join(contacts) if contacts else "—"}</p>
 </div>
 </body>
 </html>
 """,
         media_type="text/html; charset=utf-8",
+    )
+
+
+def _agent_block(settings) -> str:
+    """Реквизиты платёжного агента внизу страницы — если он назначен."""
+    if not settings.agent_ready:
+        return ""
+    address = "<br>" + html.escape(settings.agent_address) if settings.agent_address else ""
+    return (
+        "<p>Платёжный агент (принимает оплату от имени Исполнителя):<br>"
+        f"<strong>{html.escape(settings.agent_name)}</strong><br>{html.escape(settings.agent_id)}{address}</p>"
+    )
+
+
+def _agent_clause(settings, *, what: str) -> str:
+    """Один и тот же абзац про агента во всех документах, где он уместен."""
+    if not settings.agent_ready:
+        return ""
+    return (
+        f"<li>{what} осуществляет платёжный агент {html.escape(settings.agent_name)} "
+        f"({html.escape(settings.agent_id)}) от имени и по поручению Исполнителя. Агент не является "
+        "стороной договора: обязательства перед Пользователем несёт Исполнитель.</li>"
     )
 
 
@@ -157,6 +180,8 @@ async def offer() -> Response:
   <li>Стоимость показывается Пользователю до списания — на экране публикации бота.</li>
   <li>Оплата производится через платёжные сервисы, указанные на странице оплаты.
       Исполнитель не хранит данные банковских карт Пользователя.</li>
+  {_agent_clause(settings, what="Приём платежей от Пользователя")}
+  {"<li>В выписке банка платёж может отображаться под названием платёжного агента.</li>" if settings.agent_ready else ""}
   <li>Если период работы бота не оплачен, бот продолжает работать ещё
       {grace} дней, после чего снимается с публикации. Сценарий, настройки и
       данные при этом сохраняются и остаются доступны Пользователю.</li>
@@ -260,6 +285,7 @@ async def privacy() -> Response:
   <li>Данные передаются только тем сервисам, без которых бот не работает:
       Telegram и выбранной Пользователем платёжной системе.</li>
   <li>Данные не продаются и не передаются в рекламных целях.</li>
+  {_agent_clause(settings, what="Данные платежа (сумма, время, адрес электронной почты плательщика, если его запрашивает платёжная система) обрабатывает при приёме оплаты")}
 </ul>
 
 <h2>4. Хранение и защита</h2>
@@ -331,6 +357,7 @@ async def refunds() -> Response:
   <li>Ответ — в течение 10 рабочих дней. Деньги возвращаются тем же способом,
       которым была оплата, и в той же валюте.</li>
   <li>Срок поступления зависит от банка или платёжной системы.</li>
+  {_agent_clause(settings, what="Возврат денег Пользователю")}
 </ul>
 
 <h2>4. Возвраты покупателям ваших ботов</h2>
@@ -443,6 +470,7 @@ async def data_processing() -> Response:
   <li>Telegram — как платформа, в которой работает бот.</li>
   <li>Платёжная система, выбранная владельцем бота, — в части данных платежа.</li>
   <li>Хостинг-провайдер, на серверах которого работает сервис.</li>
+  {_agent_clause(get_settings(), what="Приём платежей владельцев ботов за запуск и работу сервиса")}
 </ul>
 <p>Других получателей нет, данные не продаются и не используются для рекламы.</p>
 
