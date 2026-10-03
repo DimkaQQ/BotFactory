@@ -1,0 +1,204 @@
+[
+ {
+  "id": "one-time-product",
+  "label": "Разовый продукт",
+  "needsSubscriptions": false,
+  "blocks": [
+   {
+    "block_type": "welcome",
+    "content": {
+     "text": "Привет! Здесь можно получить [название продукта] 👋"
+    }
+   },
+   {
+    "block_type": "description",
+    "content": {
+     "text": "Расскажи, что внутри и кому это подойдёт — 2-3 предложения хватит."
+    }
+   },
+   {
+    "block_type": "image",
+    "content": {
+     "media_type": "photo",
+     "media_file_id": "",
+     "text": "Как это выглядит"
+    }
+   },
+   {
+    "block_type": "buttons",
+    "content": {
+     "text": "Готов забрать?",
+     "buttons": [
+      {
+       "label": "Купить",
+       "action_type": "text",
+       "action_value": ""
+      }
+     ]
+    }
+   },
+   {
+    "block_type": "payment",
+    "content": {
+     "text": "Стоимость — [цена]. После оплаты материал придёт сюда автоматически.",
+     "title": "[название продукта]",
+     "price": "990",
+     "currency": "RUB"
+    }
+   },
+   {
+    "block_type": "delivery",
+    "content": {
+     "text": "Спасибо за покупку! Вот твой материал 🎁 (пришли сюда ссылку или файл)"
+    }
+   }
+  ]
+ },
+ {
+  "id": "subscription",
+  "label": "Платная подписка",
+  "needsSubscriptions": true,
+  "blocks": [
+   {
+    "block_type": "welcome",
+    "content": {
+     "text": "Привет! Здесь открывается доступ в закрытый канал 🔔"
+    }
+   },
+   {
+    "block_type": "description",
+    "content": {
+     "text": "Расскажи, что внутри канала и как часто там появляется новое. Это главный текст, который решает, купят или нет."
+    }
+   },
+   {
+    "block_type": "buttons",
+    "content": {
+     "text": "Готов присоединиться?",
+     "buttons": [
+      {
+       "label": "Оформить подписку",
+       "action_type": "text",
+       "action_value": ""
+      }
+     ]
+    }
+   },
+   {
+    "block_type": "payment",
+    "content": {
+     "text": "Подписка стоит [цена] в месяц. После оплаты бот сразу пришлёт ссылку на вход.",
+     "title": "Доступ в закрытый канал",
+     "price": "590",
+     "currency": "RUB",
+     "subscription": true,
+     "period_days": 30
+    }
+   },
+   {
+    "block_type": "delivery",
+    "content": {
+     "text": "Готово! Вот твоя персональная ссылка на вход — она одноразовая и только для тебя 👇",
+     "group_chat_id": ""
+    }
+   }
+  ]
+ },
+ {
+  "id": "one-on-one",
+  "label": "Запись на сессию",
+  "needsSubscriptions": false,
+  "blocks": [
+   {
+    "block_type": "welcome",
+    "content": {
+     "text": "Привет! Здесь можно записаться на личную сессию со мной 📅"
+    }
+   },
+   {
+    "block_type": "description",
+    "content": {
+     "text": "Опиши формат: длительность, что разбираем, что получит клиент на выходе."
+    }
+   },
+   {
+    "block_type": "buttons",
+    "content": {
+     "text": "Выбери, когда удобно — я подтвержу время в переписке.",
+     "buttons": [
+      {
+       "label": "Записаться",
+       "action_type": "text",
+       "action_value": ""
+      }
+     ]
+    }
+   },
+   {
+    "block_type": "payment",
+    "content": {
+     "text": "Сессия стоит [цена]. После оплаты я напишу тебе лично и подтвержу время.",
+     "title": "Личная сессия",
+     "price": "3000",
+     "currency": "RUB",
+     "repeatable": true
+    }
+   },
+   {
+    "block_type": "delivery",
+    "content": {
+     "text": "Записал! Я получу уведомление с твоим именем и временем и свяжусь с тобой здесь, чтобы подтвердить. До встречи 👋"
+    }
+   }
+  ]
+ },
+ {
+  "id": "promo-broadcast",
+  "label": "Акции и новости",
+  "needsSubscriptions": false,
+  "blocks": [
+   {
+    "block_type": "welcome",
+    "content": {
+     "text": "Привет! Подпишись, чтобы не пропускать акции и новинки 🎉"
+    }
+   },
+   {
+    "block_type": "description",
+    "content": {
+     "text": "Расскажи о заведении или магазине в паре предложений."
+    }
+   },
+   {
+    "block_type": "poll",
+    "content": {
+     "question": "Что вам интереснее всего?",
+     "options": [
+      "Скидки",
+      "Новинки",
+      "Акции выходного дня"
+     ]
+    }
+   },
+   {
+    "block_type": "buttons",
+    "content": {
+     "text": "Загляни к нам:",
+     "buttons": [
+      {
+       "label": "Наш сайт / меню",
+       "action_type": "url",
+       "action_value": ""
+      }
+     ]
+    }
+   }
+  ]
+ },
+ {
+  "id": "blank",
+  "label": "С нуля",
+  "needsSubscriptions": false,
+  "blocks": []
+ }
+]
