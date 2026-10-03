@@ -12,6 +12,7 @@ import { BLOCK_TYPES } from "../blockTypes";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
 import { HeroMockup } from "./HeroMockup";
 import { LandingDemo } from "./LandingDemo";
+import { PaybackCalculator } from "./PaybackCalculator";
 import { SiteFooter } from "./SiteFooter";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -357,7 +358,8 @@ export function LoginScreen({ onLoggedIn }: Props) {
             <p className="login-hero__lead">
               Bot Factory — это конструктор: ты рисуешь диалог схемой, блоками и стрелками, без кода. Клиент
               нажимает кнопку, платит в твою кассу — и бот сам присылает файл, ссылку или пускает в закрытый
-              чат.
+              чат. Ты спишь — продажи идут: так к твоему бизнесу добавляется ещё один канал оплаты, который
+              работает без тебя.
             </p>
             <ul className="landing-promise" aria-label="Что бесплатно">
               <li>
@@ -601,11 +603,11 @@ export function LoginScreen({ onLoggedIn }: Props) {
         <div className="landing-section__head">
           <p className="landing-section__eyebrow">Сколько стоит</p>
           <h2 className="landing-section__title">
-            {pricing.length ? "Платишь за запуск бота — не за попытки" : "Сейчас запуск бота бесплатный"}
+            {pricing.length ? "Бот, который зарабатывает, — по цене пары продаж" : "Сейчас запуск бота бесплатный"}
           </h2>
           <p className="landing-section__lead">
             {pricing.length
-              ? "Собирать, сохранять, переделывать и проверять бота — бесплатно, без срока. Платить нужно, когда бот выходит в Telegram."
+              ? "Разработчик на заказ обычно просит $200–300 за такого бота и неделю ожидания. У нас — собираешь сам за вечер, платишь только за запуск, а дальше бот сам продаёт и принимает оплату. Собирать и проверять — бесплатно, без срока."
               : "Собирать, сохранять, проверять и запускать бота можно без оплаты. Если условия изменятся, цена будет видна на кнопке публикации до того, как что-то спишется."}
           </p>
         </div>
@@ -615,7 +617,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
               <div key={price.method} className="landing-price">
                 <p className="landing-price__method">{price.method}</p>
                 <p className="landing-price__amount">{price.launch}</p>
-                <p className="landing-price__label">за запуск бота</p>
+                <p className="landing-price__label">один раз — за запуск бота</p>
                 {price.who && <p className="landing-price__who">{price.who}</p>}
                 <p className="landing-price__renewal">
                   {price.renewal
@@ -626,6 +628,13 @@ export function LoginScreen({ onLoggedIn }: Props) {
             ))}
           </div>
         )}
+        {config?.launch_usd ? (
+          <PaybackCalculator
+            launchUsd={config.launch_usd}
+            renewalUsd={config.renewal_usd ?? null}
+            onStart={scrollToLogin}
+          />
+        ) : null}
         <p className="landing-gateways__note">
           Деньги ваших покупателей сюда не входят — они идут напрямую в вашу кассу, без нашей комиссии.
           {pricing.some((p) => p.renewal) && config?.renewal_grace_days

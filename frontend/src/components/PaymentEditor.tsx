@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import type { BlockContent, PaymentProviderInfo } from "../api/builderApi";
+import { currencyUnit, type BlockContent, type PaymentProviderInfo } from "../api/builderApi";
 
 interface Props {
   /** Only used to keep this block's radio group to itself. */
@@ -126,7 +126,7 @@ export function PaymentEditor({
     if (!Number.isFinite(amount) || amount <= 0) return null;
     if (amount > 10_000_000) return "слишком много — проверь цену";
     const shown = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
-    return isStars ? `${shown} ⭐` : `${shown} ${currency}`;
+    return isStars ? `${shown} ⭐` : `${shown} ${currencyUnit(currency)}`;
   })();
   const labelNumbers = (content.button_label ?? "").match(/\d+(?:[.,]\d+)?/g) ?? [];
   const staleLabel =

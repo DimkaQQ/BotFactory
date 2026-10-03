@@ -249,6 +249,13 @@ fi
 git rev-parse HEAD > "$RUNNING_FILE"
 say "Готово: $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s)"
 "${COMPOSE[@]}" ps
+
+# Бэкап и сторож по расписанию: ставятся один раз, дальше деплой их не трогает.
+# Не фатально — сервис уже обновлён, и отсутствие cron его не ломает.
+if command -v crontab >/dev/null 2>&1 && ! crontab -l 2>/dev/null | grep -q "# botfactory:"; then
+  say "Ставлю ежедневный бэкап и сторожа в cron"
+  ./deploy/install-cron.sh || warn "cron не установлен — запусти ./deploy/install-cron.sh сам"
+fi
 }
 
 main "$@"

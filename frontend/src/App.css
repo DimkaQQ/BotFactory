@@ -6730,3 +6730,117 @@ html {
     overflow-y: auto;
   }
 }
+
+/* ---------- Калькулятор окупаемости ---------- */
+
+.payback {
+  max-width: 760px;
+  margin: var(--sp-5) auto 0;
+  padding: var(--sp-5);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-success) 10%, var(--tg-bg)), var(--tg-bg));
+  border: 1px solid color-mix(in srgb, var(--accent-success) 30%, transparent);
+  text-align: center;
+}
+
+.payback__title {
+  margin: 0 0 var(--sp-3);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.payback__label {
+  display: block;
+  margin-bottom: var(--sp-2);
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.payback__label strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.payback__range {
+  width: 100%;
+  max-width: 460px;
+  accent-color: var(--tg-button);
+}
+
+.payback__results {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin: var(--sp-4) 0 var(--sp-3);
+}
+
+.payback__result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+}
+
+.payback__big {
+  font-size: 40px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--accent-success-ink);
+}
+
+.payback__small {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.payback__note {
+  margin: 0 0 var(--sp-3);
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.payback__cta {
+  padding: 13px 22px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-size: 15.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--tg-button) 30%, transparent);
+}
+
+/* ---------- Ещё полировка ---------- */
+
+.edit-panel__textarea {
+  min-height: 64px;
+  field-sizing: content;
+  max-height: 40dvh;
+}
+
+@media (max-width: 719px) {
+  /* Внизу уже есть липкая кнопка — вторая такая же сверху лишняя. */
+  .landing-sticky ~ * .landing-nav__cta,
+  .landing-nav__cta {
+    padding: 8px 12px;
+    font-size: 13.5px;
+  }
+}
+
+/* Для тех, кто отключил анимацию, и пока демо ждёт появления в зоне видимости,
+   пустой чат не должен выглядеть сломанным. */
+.demo-chat__body:empty::before {
+  content: "Нажми «Да, интересно» — и бот покажет, как он ведёт покупателя.";
+  display: block;
+  padding: var(--sp-4);
+  color: var(--text-tertiary);
+  font-size: 14px;
+  text-align: center;
+}

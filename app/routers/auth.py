@@ -69,6 +69,10 @@ class PublicConfig(BaseModel):
     pricing: list[PricePoint] = []
     renewal_period_days: int = 0
     renewal_grace_days: int = 0
+    #: Цена запуска и периода в долларах (если есть способ в USD/USDT), для
+    #: калькулятора окупаемости на лендинге. None — считать нечего.
+    launch_usd: float | None = None
+    renewal_usd: float | None = None
 
 
 #: Not acquirers, and listing them as such would be a lie on a sales page.
@@ -106,7 +110,10 @@ async def get_public_config() -> PublicConfig:
         )
         for m in methods
     ]
+    usd = next((m for m in methods if m.currency in ("USD", "USDT")), None)
     return PublicConfig(
+        launch_usd=usd.price_minor / 100 if usd else None,
+        renewal_usd=usd.renewal_price_minor / 100 if usd and usd.renewal_price_minor > 0 else None,
         meta_bot_username=settings.meta_bot_username,
         support_telegram=settings.support_contact,
         support_email=settings.support_email,

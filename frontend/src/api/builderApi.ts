@@ -428,6 +428,8 @@ export interface PublicConfig {
   /** Что стоит запуск. Пусто — запуск бесплатный (платёжных способов у
    * платформы нет). Цифры приходят с сервера, чтобы лендинг не обещал не то,
    * что спишется на кнопке публикации. */
+  launch_usd?: number | null;
+  renewal_usd?: number | null;
   pricing?: { method: string; launch: string; renewal: string; who?: string }[];
   renewal_period_days?: number;
   renewal_grace_days?: number;

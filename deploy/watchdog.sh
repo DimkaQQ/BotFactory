@@ -40,6 +40,7 @@ log() { printf '%s  %s\n' "$(date -u +'%Y-%m-%d %H:%M:%S')" "$*"; }
 [ -f .env ] || { log "нет .env"; exit 1; }
 # shellcheck disable=SC1091
 set -a; . ./.env; set +a
+BACKUP_CHAT_ID="${BACKUP_CHAT_ID:-${SUPPORT_CHAT_ID:-}}"
 mkdir -p "$STATE_DIR"
 # Тот же адрес, что и у самого сервиса: на серверах в России api.telegram.org
 # бывает недоступен напрямую, и там в .env уже стоит прокси (см. config.py).

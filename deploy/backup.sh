@@ -6,15 +6,15 @@
 # Почему в Telegram: копия, которая лежит на том же сервере, — не копия.
 # Умер диск или хостер отключил машину — умерло и то и другое разом. Отправка
 # в Telegram даёт копию вне сервера, сразу на телефоне, без отдельного
-# аккаунта в облаке. Когда база перевалит за ~45 МБ, скрипт сам скажет, что
-# пора заводить S3, и не будет молча ничего не отправлять.
+# аккаунта в облаке. Большой архив режется на части по 45 МБ, так что в
+# Telegram уезжает всё, включая файлы клиентов.
 #
 # Почему зашифровано: в архиве лежит .env, а в нём FERNET_KEY. Без этого
 # ключа бэкап базы бесполезен — токены ботов и ключи от касс расшифровать
 # нечем. Вместе с ним архив стоит ровно столько же, сколько весь сервис,
 # поэтому без BACKUP_PASSPHRASE скрипт не запускается вообще.
 #
-# Установка (раз в сутки в 04:17):
+# Установка: deploy/install-cron.sh (его же запускает deploy.sh). Вручную, раз в сутки в 04:17:
 #   chmod +x deploy/backup.sh
 #   crontab -e
 #   17 4 * * * BACKUP_PASSPHRASE='…' /srv/botfactory/deploy/backup.sh >> /var/log/bf-backup.log 2>&1
@@ -45,7 +45,9 @@ set -a; . ./.env; set +a
 
 : "${BACKUP_PASSPHRASE:?нужен BACKUP_PASSPHRASE — в архиве лежит FERNET_KEY, без шифрования его отдавать нельзя}"
 : "${META_BOT_TOKEN:?нужен META_BOT_TOKEN, чтобы прислать бэкап в Telegram}"
-: "${BACKUP_CHAT_ID:?нужен BACKUP_CHAT_ID — твой Telegram id, куда слать архив}"
+# Куда слать: свой Telegram id; если не задан — тот же чат, что и поддержка.
+BACKUP_CHAT_ID="${BACKUP_CHAT_ID:-${SUPPORT_CHAT_ID:-}}"
+: "${BACKUP_CHAT_ID:?нужен BACKUP_CHAT_ID (или SUPPORT_CHAT_ID) — твой Telegram id, куда слать архив}"
 
 command -v openssl >/dev/null || die "нет openssl"
 # Тот же адрес, что и у самого сервиса: на серверах в России api.telegram.org
@@ -127,45 +129,58 @@ SIZE_MB=$(( $(stat -c%s "$ARCHIVE") / 1024 / 1024 ))
 log "архив готов: $ARCHIVE (${SIZE_MB} МБ)"
 
 # --- 4. Унести с сервера ----------------------------------------------------
-SEND="$ARCHIVE"
-SEND_NOTE=""
-if [ "$SIZE_MB" -ge "$MAX_SEND_MB" ]; then
-  # Полный архив не влезает в Telegram. Не оставляем сервис вообще без копии
-  # вне сервера: база и .env — это то, без чего не восстановиться, и они
-  # маленькие. Файлы клиентов остаются только на сервере.
+# Telegram не берёт от бота файлы больше 50 МБ. Раньше при росте файлов копия
+# вне сервера просто переставала уходить; теперь большой архив режется на
+# части по MAX_SEND_MB — так в Telegram уезжает всё, включая файлы клиентов.
+# Совсем огромные архивы (больше BACKUP_MAX_TOTAL_MB) не заливаем в чат целиком:
+# уходят только база и .env, а о файлах приходит предупреждение.
+MAX_TOTAL_MB="${BACKUP_MAX_TOTAL_MB:-1500}"
+CAPTION_TAIL="Расшифровать: openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in <файл> | tar xz
+Если файлов несколько (части): cat botfactory-*.part-* > full.enc и расшифровать full.enc"
+
+send_file() {  # send_file путь подпись
+  curl -sS --max-time 600 \
+    "${TG_API}/bot${META_BOT_TOKEN}/sendDocument" \
+    -F chat_id="${BACKUP_CHAT_ID}" \
+    -F document=@"$1" \
+    -F caption="$2" \
+    | grep -q '"ok":true'
+}
+
+SENT_OK=0
+if [ "$SIZE_MB" -lt "$MAX_SEND_MB" ]; then
+  log "отправляю в Telegram"
+  send_file "$ARCHIVE" "🗄 Бэкап Bot Factory · $STAMP UTC · ${SIZE_MB} МБ
+$CAPTION_TAIL" || die "не смог отправить архив в Telegram"
+  SENT_OK=1
+elif [ "$SIZE_MB" -lt "$MAX_TOTAL_MB" ]; then
+  log "архив ${SIZE_MB} МБ — режу на части по ${MAX_SEND_MB} МБ"
+  split -b "${MAX_SEND_MB}m" -d "$ARCHIVE" "$ARCHIVE.part-"
+  TOTAL="$(ls -1 "$ARCHIVE".part-* | wc -l)"
+  N=0
+  for part in "$ARCHIVE".part-*; do
+    N=$((N + 1))
+    log "часть $N/$TOTAL"
+    send_file "$part" "🗄 Бэкап Bot Factory · $STAMP UTC · часть $N из $TOTAL (всего ${SIZE_MB} МБ)
+$CAPTION_TAIL" || { rm -f "$ARCHIVE".part-*; die "не смог отправить часть $N/$TOTAL в Telegram"; }
+  done
+  rm -f "$ARCHIVE".part-*
+  SENT_OK=1
+else
   CORE="$BACKUP_DIR/botfactory-core-$STAMP.tar.gz.enc"
   tar -C "$WORK" -czf - db.sql .env \
     | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt \
         -pass env:BACKUP_PASSPHRASE -out "$CORE"
-  CORE_MB=$(( $(stat -c%s "$CORE") / 1024 / 1024 ))
-  if [ "$CORE_MB" -ge "$MAX_SEND_MB" ]; then
-    tell "⚠️ Даже база без файлов — ${CORE_MB} МБ, Telegram такое от бота не примет (потолок 50 МБ).
-Архив лежит на сервере: $ARCHIVE
-Пора подключать внешнее хранилище — до тех пор копии вне сервера нет."
-    log "слишком большой для Telegram, не отправляю"
-    SEND=""
-  else
-    SEND="$CORE"
-    SEND_NOTE=" (только база и .env: файлы клиентов в ${SIZE_MB} МБ не влезли в Telegram и остались на сервере)"
-    log "полный архив ${SIZE_MB} МБ не влезает в Telegram — отправляю только базу и .env"
-    tell "⚠️ Файлы клиентов выросли, полный бэкап (${SIZE_MB} МБ) не влезает в Telegram. Отправляю только базу и .env; файлы лежат на сервере: $ARCHIVE. Подключите внешнее хранилище для файлов."
-  fi
+  tell "⚠️ Файлы клиентов выросли до ${SIZE_MB} МБ — это больше, чем стоит лить в чат Telegram. Отправляю только базу и .env; полный архив лежит на сервере: $ARCHIVE. Пора подключать внешнее хранилище."
+  send_file "$CORE" "🗄 Бэкап Bot Factory (только база и .env) · $STAMP UTC
+$CAPTION_TAIL" || die "не смог отправить архив в Telegram"
+  SENT_OK=1
 fi
-if [ -n "$SEND" ]; then
-  log "отправляю в Telegram"
-  curl -sS --max-time 300 \
-    "${TG_API}/bot${META_BOT_TOKEN}/sendDocument" \
-    -F chat_id="${BACKUP_CHAT_ID}" \
-    -F document=@"$SEND" \
-    -F caption="🗄 Бэкап Bot Factory · $STAMP UTC · ${SIZE_MB} МБ${SEND_NOTE}
-Расшифровать: openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in <файл> | tar xz" \
-    >/dev/null || die "не смог отправить архив в Telegram"
-  # Отпечаток пишется ТОЛЬКО здесь — после того, как архив реально уехал.
-  # Стоял выше, до отправки: упавшая отправка (лежит сеть, лежит Telegram)
-  # оставляла отпечаток записанным, и следующий запуск говорил «ничего не
-  # изменилось» и выходил молча. Копии вне сервера не появлялось больше
-  # никогда, и тревога об этом шла через тот же Telegram, который в этот
-  # момент недоступен. Ровно то ложное спокойствие, о котором шапка.
+if [ "$SENT_OK" = 1 ]; then
+  # Отпечаток пишется ТОЛЬКО после того, как копия реально уехала: упавшая
+  # отправка иначе оставляла бы его записанным, и следующий запуск молча
+  # говорил бы «ничего не изменилось» — копии вне сервера не появлялось бы
+  # больше никогда.
   echo "$FINGERPRINT" > "$LAST_FILE"
 fi
 
