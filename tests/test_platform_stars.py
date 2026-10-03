@@ -103,3 +103,12 @@ def test_stars_are_listed_as_a_launch_method(monkeypatch):
     )
     methods = payment_service.platform_methods()
     assert [m.provider for m in methods] == ["stars"]
+
+
+@pytest.mark.asyncio
+async def test_a_stripe_refund_event_is_acknowledged_not_retried_forever(api):
+    response = await api.post(
+        "/webhook/pay/stripe", content=json.dumps({"type": "charge.refunded", "data": {"object": {}}}),
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 200

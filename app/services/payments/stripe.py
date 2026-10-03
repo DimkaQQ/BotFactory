@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import time
 import uuid
 
@@ -54,6 +55,8 @@ def _interval(period_days: int) -> tuple[str, int]:
         return "week", period_days // 7
     return "day", max(1, period_days)
 
+
+logger = logging.getLogger(__name__)
 
 class StripeProvider(ProviderDefaults):
     slug = "stripe"
@@ -130,6 +133,22 @@ class StripeProvider(ProviderDefaults):
             return PaymentRef(payment_id=uuid.UUID(raw_id))
         except (ValueError, AttributeError):
             return PaymentRef()
+
+    def error_body(self, *, form: dict[str, str], raw_body: bytes, found: bool) -> tuple[str, str] | None:
+        """Событие, которое не про оплату нашей сессии (возврат, спор, счёт, ...),
+        подтверждаем кодом 200: на HTTP-ошибку Stripe повторяет доставку трое
+        суток и в конце отключает адрес вебхука. Возвраты и споры разбираются
+        вручную — см. deploy/runbook.md."""
+        if found:
+            return None
+        try:
+            kind = str(json.loads(raw_body or b"{}").get("type") or "")
+        except (json.JSONDecodeError, AttributeError):
+            return None
+        if kind and not kind.startswith("checkout.session."):
+            logger.error("Stripe event %s needs manual handling (no payment is attached to it)", kind)
+            return '{"received": true, "handled": false}', "application/json"
+        return None
 
     async def verify_webhook(
         self,
