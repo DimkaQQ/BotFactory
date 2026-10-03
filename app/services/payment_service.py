@@ -14,6 +14,7 @@ owner and the checkout link points straight at their merchant account.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -1049,7 +1050,7 @@ async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: b
                 logger.exception("Payment %s settled but the subscription could not be updated", payment.id)
             if deliver:
                 await resume_after_payment(db, payment)
-            await _notify_owner_of_sale(db, payment)
+            _later(_notify_owner_of_sale, payment.id, name=f"sale-notice-{payment.id}")
             return True
         return False
 
@@ -1252,7 +1253,7 @@ async def tell_owner(owner_id: int, shop_bot, text: str) -> None:
     meta = platform_billing._meta_bot()
     if meta is not None:
         try:
-            await meta.send_message(owner_id, text)
+            await asyncio.wait_for(meta.send_message(owner_id, text), timeout=10)
             return
         except Exception:  # noqa: BLE001
             logger.info("Meta bot could not reach owner %s", owner_id, exc_info=True)
@@ -1488,8 +1489,28 @@ async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str
     # caller (and anything it hands the payment to) sees the new state.
     await db.refresh(payment)
     if payment.kind in (PaymentKind.publication, PaymentKind.renewal):
-        await _confirm_to_client(db, payment)
+        _later(_confirm_to_client, payment.id, name=f"paid-notice-{payment.id}")
     return True
+
+
+def _later(notifier, payment_id: uuid.UUID, *, name: str) -> None:
+    """Сообщения людям — после ответа платёжной системе, а не до него.
+
+    Telegram с некоторых серверов отвечает медленно или не отвечает вовсе, и
+    ожидание таймаута внутри обработчика уведомления держало бы провайдера:
+    он решил бы, что мы не ответили, и стал бы повторять платёж. Поэтому
+    письма уходят отдельной задачей со своей сессией БД.
+    """
+    from app.database import AsyncSessionLocal
+    from app.services import background
+
+    async def run() -> None:
+        async with AsyncSessionLocal() as db:
+            payment = (await db.execute(select(Payment).where(Payment.id == payment_id))).scalar_one_or_none()
+            if payment is not None:
+                await asyncio.wait_for(notifier(db, payment), timeout=30)
+
+    background.spawn(run(), name=name)
 
 
 async def _confirm_to_client(db: AsyncSession, payment: Payment) -> None:

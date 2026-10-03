@@ -131,9 +131,13 @@ async def test_the_client_is_told_that_the_money_arrived(db: AsyncSession, owner
 
     monkeypatch.setattr(platform_billing, "_tell_owner", remember)
     assert await payment_service.mark_paid(db, payment, "chg_x") is True
+    from app.services import background
+
+    await background.wait_for_all()
     assert told and "Оплата получена" in told[0] and "Опубликовать" in told[0]
 
     # повтор не шлёт второй раз
     told.clear()
     assert await payment_service.mark_paid(db, payment, "chg_x") is False
+    await background.wait_for_all()
     assert told == []
