@@ -868,6 +868,16 @@ async def walk_chain(
     return delivered
 
 
+#: Что видит покупатель, пока владелец держит бота на паузе. Пауза не трогает
+#: оплату, возвраты, /stop и выдачу уже купленного — только новые диалоги.
+_PAUSED_TEXT = "Бот сейчас на паузе — владелец скоро вернёт его. Загляни чуть позже 🙏"
+
+
+async def _is_paused(db: AsyncSession, bot_id: uuid.UUID) -> bool:
+    result = await db.execute(select(BotModel.paused).where(BotModel.id == bot_id))
+    return bool(result.scalar_one_or_none())
+
+
 async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
     # Phase-1-style buttons (no branch configured) still exist and are
     # valid — the tap just has nowhere to go, so acknowledging it (stopping
@@ -889,6 +899,15 @@ async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UU
 
     if len(parts) != 3 or parts[0] != _CALLBACK_PREFIX:
         return
+
+    # Нажатие на кнопку сценария — это продолжение диалога, а на паузе новых
+    # диалогов нет (оплата и возвраты выше уже обработаны и сюда не доходят).
+    if await _is_paused(db, bot_id):
+        paused_chat = ((callback_query.get("message") or {}).get("chat") or {}).get("id")
+        if paused_chat is not None:
+            await bot.send_message(paused_chat, _PAUSED_TEXT)
+        return
+
     _, block_hex, index_str = parts
     try:
         source_block_id = uuid.UUID(hex=block_hex)
@@ -1130,8 +1149,13 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
         await _cancel_subscriptions(bot, chat_id, bot_id, db, sender_id)
         return
 
-    result = await db.execute(select(BotModel.start_block_id).where(BotModel.id == bot_id))
-    start_block_id = result.scalar_one_or_none()
+    result = await db.execute(select(BotModel.start_block_id, BotModel.paused).where(BotModel.id == bot_id))
+    row = result.one_or_none()
+    start_block_id, paused = (row[0], bool(row[1])) if row else (None, False)
+
+    if paused:
+        await bot.send_message(chat_id, _PAUSED_TEXT)
+        return
 
     if not text.startswith("/start"):
         # These bots answer taps, not typing. Saying nothing at all reads as

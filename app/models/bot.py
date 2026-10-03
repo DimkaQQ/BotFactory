@@ -66,6 +66,12 @@ class Bot(Base):
     # `platform_billing` decides what that adds up to.
     paid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Пауза, которую владелец включает сам (кнопкой в мета-боте): бот не
+    # начинает новых диалогов, но оплаты, возвраты, /stop и выдача уже
+    # купленного работают как работали. Не то же самое, что `disabled`:
+    # `disabled` ставит платформа за неоплату, и снимается он оплатой.
+    paused: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
     # How far the owner has already been warned about the current period
     # (see `platform_billing.NOTICE_*`). Reset to 0 every time `paid_until`
     # moves forward, which is what scopes it to one period and lets the

@@ -256,3 +256,12 @@ def _mock_http(handler: Callable[[httpx.Request], httpx.Response]):
 def mock_http():
     """`with mock_http(handler):` — every adapter's HTTP calls answered locally."""
     return _mock_http
+
+
+@pytest.fixture(scope="session")
+def meta_dp():
+    """Диспетчер мета-бота. Один на весь прогон: роутеры aiogram прикрепляются к
+    диспетчеру единожды, как и в проде, где он создаётся один раз."""
+    from meta_bot.main import build_dispatcher
+
+    return build_dispatcher()

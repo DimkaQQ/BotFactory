@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 
 from app.config import get_settings
@@ -35,9 +36,38 @@ LIMIT = 12
 #: Как часто подтверждать «принято», чтобы не отвечать на каждое слово.
 ACK_EVERY_SECONDS = 6 * 3600
 
+#: Сколько после обращения (или ответа владельца) разговор считается открытым:
+#: человек может продолжать писать без повторного нажатия «Поддержка».
+DIALOG_SECONDS = 24 * 3600
+
+_dialogs: dict[int, float] = {}
 _recent: dict[int, list[float]] = {}
 _acknowledged: dict[int, float] = {}
 _warned: set[int] = set()
+
+
+def open_dialog(user_id: int, seconds: float = DIALOG_SECONDS) -> None:
+    """Кнопка «Поддержка» нажата или владелец ответил: можно писать."""
+    if len(_dialogs) > 10_000:
+        _dialogs.clear()
+    _dialogs[user_id] = time.monotonic() + seconds
+
+
+async def _dialog_open(user_id: int) -> bool:
+    if _dialogs.get(user_id, 0) > time.monotonic():
+        return True
+    # После перезапуска бота память пуста, а разговор не должен рваться: если
+    # человек писал нам за последние сутки, он по-прежнему на связи.
+    async with AsyncSessionLocal() as db:
+        found = await db.execute(
+            select(SupportRelay.admin_message_id)
+            .where(
+                SupportRelay.user_chat_id == user_id,
+                SupportRelay.created_at > datetime.now(timezone.utc) - timedelta(seconds=DIALOG_SECONDS),
+            )
+            .limit(1)
+        )
+        return found.scalar_one_or_none() is not None
 
 
 def _throttled(user_id: int) -> bool:
@@ -120,6 +150,10 @@ async def _from_owner(message: Message, bot: Bot, admin: int) -> None:
         logger.warning("Support reply to %s failed: %s", user_chat, exc)
         await bot.send_message(admin, f"Не доставлено: {exc.message}")
     else:
+        # Ответ владельца открывает разговор: человек вправе ответить, а ответ на
+        # ответ должен дойти (поэтому и сообщение владельца запоминается).
+        await _remember(message.message_id, user_chat)
+        open_dialog(user_chat)
         await bot.send_message(admin, "✓ Отправлено", reply_to_message_id=message.message_id)
 
 
@@ -131,5 +165,20 @@ async def relay(message: Message, bot: Bot) -> None:
         return
     if message.chat.id == admin:
         await _from_owner(message, bot, admin)
-    else:
+    elif await _dialog_open(message.chat.id):
         await _to_owner(message, bot, admin)
+    else:
+        # Без нажатия «Поддержка» бот не лезет в личную переписку владельца
+        # чужими случайными сообщениями — подсказывает, где кнопка.
+        await bot.send_message(
+            message.chat.id,
+            "Чтобы написать нам, нажми «💬 Поддержка» в меню 👇",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="💬 Поддержка", callback_data="sup:start"),
+                        InlineKeyboardButton(text="🏠 Меню", callback_data="m:main"),
+                    ]
+                ]
+            ),
+        )

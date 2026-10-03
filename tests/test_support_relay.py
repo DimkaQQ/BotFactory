@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from _tg_fakes import FakeSession, text_update
 from aiogram import Bot
-from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramForbiddenError
 from aiogram.methods import CopyMessage, SendMessage
-from aiogram.types import Chat, Message, MessageEntity, MessageId, Update, User
 from sqlalchemy import delete
 
 from app.config import get_settings
@@ -56,6 +54,8 @@ async def _clean(monkeypatch):
     support._recent.clear()
     support._acknowledged.clear()
     support._warned.clear()
+    support._dialogs.clear()
+    support.open_dialog(USER)
     yield
     async with AsyncSessionLocal() as db:
         await db.execute(delete(SupportRelay).where(SupportRelay.user_chat_id == USER))
@@ -155,55 +155,17 @@ def test_commands_are_left_to_other_handlers():
 # ----------------------------------- сквозная проверка на настоящем диспетчере
 
 
-class _FakeSession(BaseSession):
-    """Сессия aiogram без сети: записывает вызовы Bot API и отвечает «успех»."""
-
-    def __init__(self):
-        super().__init__()
-        self.calls = []
-
-    async def close(self):
-        return None
-
-    async def make_request(self, bot, method, timeout=None):
-        self.calls.append(method)
-        number = 900 + len(self.calls)
-        if isinstance(method, CopyMessage):
-            return MessageId(message_id=number)
-        return Message(message_id=number, date=datetime.now(), chat=Chat(id=method.chat_id, type="private"))
-
-    async def stream_content(self, *args, **kwargs):  # pragma: no cover
-        raise NotImplementedError
-
-
-def _update(update_id, chat_id, message_id, text=None, reply_to=None):
-    entities = [MessageEntity(type="bot_command", offset=0, length=len(text.split()[0]))] if text and text.startswith("/") else None
-    return Update(
-        update_id=update_id,
-        message=Message(
-            message_id=message_id,
-            date=datetime.now(),
-            chat=Chat(id=chat_id, type="private"),
-            from_user=User(id=chat_id, is_bot=False, first_name="Аня", username="anna"),
-            text=text,
-            entities=entities,
-            reply_to_message=reply_to,
-        ),
-    )
-
-
 @pytest.mark.asyncio
-async def test_the_meta_bot_still_opens_the_constructor_and_relays_everything_else():
+async def test_the_meta_bot_still_opens_the_constructor_and_relays_everything_else(meta_dp):
     """Главное, что нельзя сломать: /start по-прежнему даёт кнопку конструктора
     (так клиент попадает с бота на сайт), а поддержка ловит только обычные
     сообщения."""
-    from meta_bot.main import build_dispatcher
 
-    session = _FakeSession()
+    session = FakeSession()
     bot = Bot("123456:AAAA-testtoken", session=session)
-    dp = build_dispatcher()
+    dp = meta_dp
 
-    await dp.feed_update(bot, _update(1, USER, 1, "/start"))
+    await dp.feed_update(bot, text_update(1, USER, 1, "/start"))
     starts = [c for c in session.calls if isinstance(c, SendMessage) and c.chat_id == USER]
     assert starts, "/start остался без ответа"
     button = starts[0].reply_markup.inline_keyboard[0][0]
@@ -211,8 +173,33 @@ async def test_the_meta_bot_still_opens_the_constructor_and_relays_everything_el
     assert not [c for c in session.calls if isinstance(c, CopyMessage)], "команда /start ушла в поддержку"
 
     session.calls.clear()
-    await dp.feed_update(bot, _update(2, USER, 2, "У меня не открывается конструктор"))
+    await dp.feed_update(bot, text_update(2, USER, 2, "У меня не открывается конструктор"))
     copies = [c for c in session.calls if isinstance(c, CopyMessage)]
     assert copies and copies[0].chat_id == ADMIN and copies[0].from_chat_id == USER
 
     await bot.session.close()
+
+
+@pytest.mark.asyncio
+async def test_a_plain_message_without_pressing_support_is_not_relayed_to_the_owner():
+    """Бот не лезет в личную переписку владельца случайными словами: пока человек
+    не нажал «Поддержка» (и не писал нам за сутки), он получает подсказку."""
+    support._dialogs.clear()
+    bot = _bot()
+    await support.relay(_msg(USER, 11), bot)
+    assert not bot.copy_message.await_args_list
+    assert "Поддержка" in bot.send_message.await_args_list[-1].args[1]
+
+
+@pytest.mark.asyncio
+async def test_the_owners_reply_keeps_the_conversation_open_both_ways():
+    bot = _bot()
+    await support.relay(_msg(USER, 11), bot)
+    await support.relay(_msg(ADMIN, 77, "Здравствуйте!", reply_to=502), bot)
+    support._dialogs.clear()  # перезапуск бота: память пуста, но в базе разговор есть
+    await support.relay(_msg(USER, 12, "спасибо, а ещё вопрос"), bot)
+    assert bot.copy_message.await_args_list[-1].kwargs["from_chat_id"] == USER
+
+    # и ответ на ответ владельца тоже находит человека
+    await support.relay(_msg(ADMIN, 79, "Конечно", reply_to=77), bot)
+    assert bot.copy_message.await_args_list[-1].args[0] == USER

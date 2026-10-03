@@ -81,6 +81,8 @@ export interface Bot {
   block_count: number;
   /** Entry point of the dialogue graph — where the "▶ Старт" node points. */
   start_block_id: string | null;
+  /** Владелец поставил бота на паузу (кнопка в мета-боте). */
+  paused?: boolean;
   /** End of the paid period, or null when the bot is not on a clock. */
   paid_until: string | null;
 }

@@ -1222,6 +1222,15 @@ async def _notify_owner_of_sale(db: AsyncSession, payment: Payment) -> None:
             return
         owner_id, instance = found
 
+        # Владелец мог выключить уведомления в мета-боте («Настройки»).
+        from app.models.client import Client
+
+        wants = (
+            await db.execute(select(Client.notify_sales).where(Client.telegram_user_id == owner_id))
+        ).scalar_one_or_none()
+        if wants is False:
+            return
+
         buyer = await subscribers.get(db, payment.bot_id, payment.telegram_user_id)
         who = buyer.title if buyer is not None else f"id {payment.telegram_user_id}"
         amount = payment_providers.money(payment.amount_minor, payment.currency)

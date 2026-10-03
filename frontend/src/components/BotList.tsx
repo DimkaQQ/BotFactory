@@ -378,7 +378,9 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 <div className="bot-card__info">
                   <span className="bot-card__name">{botTitle(bot)}</span>
                   <span className="bot-card__meta">
-                    <span className={`bot-card__status bot-card__status--${bot.status}`}>{STATUS_LABEL[bot.status]}</span>
+                    <span className={`bot-card__status bot-card__status--${bot.status}`}>
+                      {bot.status === "active" && bot.paused ? "На паузе" : STATUS_LABEL[bot.status]}
+                    </span>
                     <span className="bot-card__dot">·</span>
                     {blockCountLabel(bot.block_count)}
                     {bot.name && bot.telegram_bot_username && (

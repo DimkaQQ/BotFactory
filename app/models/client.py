@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,6 +33,10 @@ class Client(Base):
     #: написано «Входя, вы принимаете оферту и политику». Запись нужна на случай
     #: спора — «никто не соглашался» не должно быть правдой, которую нечем
     #: опровергнуть. Пусто у тех, кто зарегистрировался до этого.
+    #: Присылать ли владельцу сообщение о каждой оплате. Включено по умолчанию:
+    #: это то, ради чего бот и ставят; выключают те, у кого заказов много.
+    notify_sales: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+
     terms_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
     terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -22,6 +22,8 @@ class BotOut(BaseModel):
     # End of the paid period, when this deployment charges one. None means
     # the bot is not on a clock — see `Bot.paid_until`.
     paid_until: datetime | None = None
+    #: Владелец поставил бота на паузу (мета-бот): новых диалогов нет.
+    paused: bool = False
 
 
 class BotWithBlocksOut(BotOut):
@@ -33,6 +35,7 @@ class BotUpdate(BaseModel):
     # Explicit clear (dragging the "▶ Старт" arrow away) vs. "not sent"
     # matters here too — see BotBlockUpdate.next_block_id.
     start_block_id: uuid.UUID | None = None
+    paused: bool | None = None
 
 
 class PublishRequest(BaseModel):

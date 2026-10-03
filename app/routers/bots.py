@@ -99,6 +99,13 @@ async def update_bot(
     db: AsyncSession = Depends(get_db),
 ) -> Bot:
     bot = await _get_owned_bot(bot_id, client, db)
+    if payload.paused is not None:
+        from app.services import owner_panel
+
+        try:
+            await owner_panel.set_paused(db, client, bot_id, payload.paused)
+        except owner_panel.PauseError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if payload.name is not None:
         bot.name = payload.name.strip() or None
     if "start_block_id" in payload.model_fields_set:
