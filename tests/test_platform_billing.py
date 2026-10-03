@@ -262,7 +262,8 @@ async def test_a_new_period_makes_the_reminders_new_again(
     await db.commit()
     await platform_billing.sweep(db)
 
-    assert len(_about(told, live_bot)) == 2
+    reminders = [t for t in _about(told, live_bot) if "заканчивается" in t]
+    assert len(reminders) == 2  # плюс подтверждение оплаты между ними — это не напоминание
 
 
 @pytest.mark.asyncio
