@@ -80,9 +80,3 @@ async def on_successful_payment(message: Message, bot: Bot) -> None:
             logger.error("Мета-бот: отклоняю оплату звёздами %s — %s", payment.id, exc)
             return
         await payment_service.apply_result(db, payment, verdict)
-    await bot.send_message(
-        message.chat.id,
-        "✅ Оплата получена, спасибо! Вернись в конструктор — бот уже можно публиковать." 
-        if payment.kind == PaymentKind.publication
-        else "✅ Оплата получена — период бота продлён. Спасибо!",
-    )

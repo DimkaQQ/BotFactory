@@ -9,7 +9,7 @@ from datetime import datetime
 import pytest
 from _tg_fakes import FakeSession
 from aiogram import Bot
-from aiogram.methods import AnswerPreCheckoutQuery, SendMessage
+from aiogram.methods import AnswerPreCheckoutQuery
 from aiogram.types import Chat, Message, PreCheckoutQuery, SuccessfulPayment, Update, User
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -62,7 +62,7 @@ async def test_stars_for_launch_are_accepted_by_the_meta_bot(db: AsyncSession, o
     await db.refresh(bot)
     assert payment.status == PaymentStatus.paid
     assert bot.publication_paid_at is not None
-    assert "Оплата получена" in session.of(SendMessage)[-1].text
+    # подтверждение человеку отправляет общий код оплаты платформе (_confirm_to_client)
 
     # повтор доставки ничего не меняет и не падает
     await _feed(meta_dp, tg, Update(update_id=4, message=Message(
@@ -112,3 +112,28 @@ async def test_a_stripe_refund_event_is_acknowledged_not_retried_forever(api):
         headers={"content-type": "application/json"},
     )
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_the_client_is_told_that_the_money_arrived(db: AsyncSession, owner: Client, make_bot, monkeypatch):
+    """Подтверждение приходит в Telegram при ЛЮБОЙ оплате платформе — не только звёздами."""
+    from app.services import payment_service, platform_billing
+
+    bot, _ = await make_bot(owner, [(BlockType.welcome, {"text": "привет"})], status=BotStatus.draft)
+    payment = _stars_payment(bot, owner)
+    db.add(payment)
+    await db.commit()
+
+    told = []
+
+    async def remember(db_, bot_, text, **_):
+        told.append(text)
+
+    monkeypatch.setattr(platform_billing, "_tell_owner", remember)
+    assert await payment_service.mark_paid(db, payment, "chg_x") is True
+    assert told and "Оплата получена" in told[0] and "Опубликовать" in told[0]
+
+    # повтор не шлёт второй раз
+    told.clear()
+    assert await payment_service.mark_paid(db, payment, "chg_x") is False
+    assert told == []

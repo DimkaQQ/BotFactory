@@ -29,6 +29,27 @@ const METHOD_NOTE: Record<string, string> = {
   stars: "звёзды Telegram",
 };
 
+/** Какой способ предложить первым. По языку и часовому поясу угадываем страну:
+ * из РФ карта Stripe не пройдёт (звёзды или крипта), из Казахстана и
+ * Узбекистана удобнее всего карта. Это подсказка, а не ограничение: выбрать
+ * можно любой. */
+function recommendedProvider(providers: string[]): string | null {
+  let zone = "";
+  try {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    /* окружение без Intl — просто не угадываем */
+  }
+  const lang = (typeof navigator !== "undefined" ? navigator.language : "").toLowerCase();
+  const centralAsia = /^(Asia\/(Almaty|Aqtau|Aqtobe|Atyrau|Oral|Qostanay|Qyzylorda|Tashkent|Samarkand|Bishkek))$/.test(zone) ||
+    lang.startsWith("kk") || lang.startsWith("uz");
+  const order = centralAsia ? ["stripe", "stars", "cryptobot"] : ["stars", "cryptobot", "stripe"];
+  const isRussia = /^Europe\/(Moscow|Kaliningrad|Samara|Volgograd|Kirov|Saratov|Astrakhan|Ulyanovsk)$/.test(zone) ||
+    /^Asia\/(Yekaterinburg|Omsk|Novosibirsk|Krasnoyarsk|Irkutsk|Yakutsk|Vladivostok|Magadan|Kamchatka)$/.test(zone);
+  if (!centralAsia && !isRussia && !lang.startsWith("ru")) return null;
+  return order.find((slug) => providers.includes(slug)) ?? null;
+}
+
 function money(currency: string): string {
   return SYMBOLS[currency] ?? currency;
 }
@@ -131,6 +152,9 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
     );
   }
 
+  const best = methods.length > 1 ? recommendedProvider(methods.map((m) => m.provider)) : null;
+  const ordered = best ? [...methods].sort((a, b) => Number(b.provider === best) - Number(a.provider === best)) : methods;
+
   return (
     <div className="paywall paywall--open">
       <button type="button" className="paywall__fold" onClick={() => setOpen(false)}>
@@ -184,7 +208,11 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
         <div className="paywall__waiting">
           <span className="btn-spinner" aria-hidden="true" />
           <span>
-            Ждём подтверждение оплаты.{" "}
+            Ждём подтверждение — обычно несколько секунд, страница обновится сама. Если прошло больше минуты,{" "}
+            <a href="https://t.me/DragDropBot" target="_blank" rel="noreferrer">
+              напиши в поддержку
+            </a>
+            .{" "}
             {checkoutUrl && (
               <a href={checkoutUrl} target="_blank" rel="noreferrer">
                 Если страница не открылась — открой её здесь
@@ -205,7 +233,7 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
         </button>
       ) : (
         <div className="paywall__methods">
-          {methods.map((method) => (
+          {ordered.map((method) => (
             <button
               key={method.provider}
               type="button"
@@ -215,6 +243,8 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
             >
               <span className="paywall__method-title">
                 {method.title}
+                {method.provider === best && <span className="paywall__method-badge">Рекомендуем для вас</span>}
+                {method.how && <span className="paywall__method-how">{method.how}</span>}
                 {(method.who || METHOD_NOTE[method.provider]) && (
                   <span className="paywall__method-note">{method.who || METHOD_NOTE[method.provider]}</span>
                 )}

@@ -472,6 +472,8 @@ export interface PublicationMethod {
   renewal_price_minor: number;
   /** Кому подходит способ: страны и чем платить. */
   who?: string;
+  /** Что произойдёт после нажатия. */
+  how?: string;
 }
 
 /** Where a live bot stands with us. `state`: "off" — nothing is charged per

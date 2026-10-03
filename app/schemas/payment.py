@@ -60,6 +60,8 @@ class PublicationMethodOut(BaseModel):
     renewal_price_minor: int = 0
     #: Кому подходит способ (страны, чем платить) — одной строкой.
     who: str = ""
+    #: Что произойдёт после нажатия — короткое объяснение под названием способа.
+    how: str = ""
 
 
 class PublicationInfoOut(BaseModel):

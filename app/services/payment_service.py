@@ -60,6 +60,13 @@ _WHO_CAN_PAY = {
 }
 
 
+_HOW_IT_GOES = {
+    "stripe": "Откроется защищённая страница оплаты: введи данные карты — это минута. Карту мы не видим и не сохраняем.",
+    "cryptobot": "Откроется Crypto Bot в Telegram с готовым счётом. Нужен баланс USDT или TON — его можно купить прямо там.",
+    "stars": "Откроется окно оплаты Telegram. Звёзды покупаются в самом Telegram, если их нет на балансе.",
+}
+
+
 @dataclass(frozen=True)
 class PlatformMethod:
     """One way a client can pay us for publishing a bot."""
@@ -77,6 +84,11 @@ class PlatformMethod:
     @property
     def title(self) -> str:
         return payment_providers.get_provider(self.provider).title
+
+    @property
+    def how(self) -> str:
+        """Что произойдёт, когда человек нажмёт: чтобы не было страха неизвестности."""
+        return _HOW_IT_GOES.get(self.provider, "")
 
     @property
     def who(self) -> str:
@@ -1475,4 +1487,35 @@ async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str
     # The in-memory object was not touched by the UPDATE; refresh it so the
     # caller (and anything it hands the payment to) sees the new state.
     await db.refresh(payment)
+    if payment.kind in (PaymentKind.publication, PaymentKind.renewal):
+        await _confirm_to_client(db, payment)
     return True
+
+
+async def _confirm_to_client(db: AsyncSession, payment: Payment) -> None:
+    """Человек заплатил нам — он должен сразу увидеть, что деньги дошли.
+
+    Тихая оплата (закрыл вкладку, ждёт, не зная, прошло ли) — главный страх
+    платящего: он тут же идёт в поддержку. Подтверждение приходит в Telegram,
+    чем бы ни платили — картой, криптой или звёздами. Не критично: сбой здесь
+    ничего не откатывает.
+    """
+    from app.services import platform_billing
+
+    try:
+        bot = (await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))).scalar_one_or_none()
+        if bot is None:
+            return
+        name = bot.name or "бот"
+        amount = payment_providers.money(payment.amount_minor, payment.currency)
+        if payment.kind == PaymentKind.publication:
+            text = (
+                f"✅ Оплата получена: {amount}. Бот «{name}» готов к запуску — вернись в конструктор, "
+                f"вставь токен от @BotFather и нажми «Опубликовать»."
+            )
+        else:
+            until = dates.day(bot.paid_until) if bot.paid_until else ""
+            text = f"✅ Оплата получена: {amount}. Бот «{name}» работает" + (f" до {until}." if until else ".")
+        await platform_billing._tell_owner(db, bot, text)
+    except Exception:  # noqa: BLE001
+        logger.info("Could not confirm payment %s to the client", payment.id, exc_info=True)
