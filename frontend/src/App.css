@@ -3807,16 +3807,12 @@
 }
 
 .app-hint--narrow {
-  display: none;
+  display: block;
 }
 
-@media (max-width: 959px) {
-  .app-hint--wide {
-    display: none;
-  }
-
+@media (max-width: 719px) {
   .app-hint--narrow {
-    display: block;
+    display: none;
   }
 }
 
@@ -6843,4 +6839,188 @@ html {
   color: var(--text-tertiary);
   font-size: 14px;
   text-align: center;
+}
+
+
+/* ---------- Третья волна правок по ревью дизайна ---------- */
+
+/* Пейволл — лист поверх экрана на любой ширине: со своей прокруткой, не
+   прижат под холстом и не режется нижним краем. */
+.paywall--open {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  z-index: 40;
+  width: min(100%, 560px);
+  max-height: 88dvh;
+  overflow-y: auto;
+  transform: translateX(-50%);
+  padding: var(--sp-4);
+  border: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--tg-bg);
+  box-shadow: 0 -12px 40px color-mix(in srgb, black 28%, transparent);
+  animation: sheet-in var(--dur-slow) var(--ease-out);
+}
+
+.paywall__fold {
+  position: sticky;
+  top: 0;
+  align-self: flex-end;
+  float: right;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--tg-secondary-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.paywall__problems-hint {
+  display: none;
+}
+
+.paywall__method:first-child {
+  border-color: var(--tg-separator);
+}
+
+.paywall__collapsed-badge {
+  padding: 2px 8px;
+}
+
+/* Футер конструктора на десктопе — прижатая к низу окна полоса с главной
+   кнопкой, а не карточка где-то под холстом. */
+@media (min-width: 960px) {
+  .screen--builder .app-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 6;
+    padding: var(--sp-3) 0;
+    background: linear-gradient(to top, var(--tg-bg) 70%, transparent);
+  }
+}
+
+/* Подписи на узлах холста читаются, а не угадываются. */
+.flow-node__default-out span,
+.flow-node__button-tag {
+  font-size: 11.5px;
+}
+
+/* Кнопки в предпросмотре выглядят как кнопки Telegram. */
+.chat-buttons__pill--tappable {
+  border: 1px solid color-mix(in srgb, var(--tg-button) 35%, transparent);
+  background: color-mix(in srgb, var(--tg-button) 10%, var(--tg-bg));
+  font-weight: 600;
+  width: 100%;
+}
+
+.live-preview__hint {
+  font-size: 14px;
+}
+
+/* Лендинг: телефон */
+@media (max-width: 719px) {
+  .landing-nav__cta {
+    display: none;
+  }
+
+  .screen--login {
+    padding-bottom: 88px;
+  }
+
+  .landing-features {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-2);
+  }
+
+  .landing-features > * {
+    padding: var(--sp-3);
+  }
+
+  .landing-promise {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+}
+
+.landing-trust {
+  align-items: stretch;
+}
+
+.landing-gateways {
+  justify-content: center;
+}
+
+/* Цена */
+.landing-pricing {
+  max-width: none;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.landing-price {
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-price__who {
+  min-height: 3.2em;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.landing-price__renewal {
+  margin-top: auto;
+}
+
+.payback {
+  max-width: none;
+}
+
+.payback__range {
+  height: 28px;
+  max-width: 560px;
+  touch-action: pan-x;
+}
+
+.payback__scale {
+  display: flex;
+  justify-content: space-between;
+  max-width: 560px;
+  margin: 0 auto;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+
+.payback__sum {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.payback__headline {
+  margin: 0 0 var(--sp-3);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.landing-gateways__note {
+  font-size: 14.5px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 719px) {
+  .login-hero__lead {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+.paywall__collapsed,
+.paywall__collapsed span {
+  white-space: nowrap;
 }

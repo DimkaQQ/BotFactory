@@ -824,11 +824,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 lines — 80px of the 844 the canvas is fighting for — and half
                 of it described a block library that only exists on a big
                 screen. */}
-            <p className="app-hint app-hint--wide">
-              Блоки добавляются кнопкой «+ Добавить блок» под холстом (на большом экране — из списка слева).
-              Нажми на блок, чтобы изменить его; потяни от кружка снизу или от кнопки — чтобы решить, что дальше.
+            <p className="app-hint app-hint--narrow">
+              Нажми на блок, чтобы изменить. Потяни от кружка на блоке — что дальше.
             </p>
-            <p className="app-hint app-hint--narrow">Нажми на блок, чтобы изменить. Потяни от кружка — что дальше.</p>
           </>
         )
       )}

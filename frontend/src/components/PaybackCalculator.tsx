@@ -16,6 +16,10 @@ export function PaybackCalculator({ launchUsd, renewalUsd, onStart }: Props) {
 
   return (
     <div className="payback">
+      <p className="payback__headline">
+        Запуск ${launchUsd}
+        {renewalUsd ? ` · дальше $${renewalUsd} в месяц` : " · дальше без доплат"}
+      </p>
       <p className="payback__title">Посчитай, когда бот окупится</p>
       <label className="payback__label" htmlFor="payback-price">
         Твой товар или услуга стоит
@@ -31,12 +35,18 @@ export function PaybackCalculator({ launchUsd, renewalUsd, onStart }: Props) {
         value={price}
         onChange={(event) => setPrice(Number(event.target.value))}
       />
+      <div className="payback__scale" aria-hidden="true">
+        <span>$5</span>
+        <span>$100</span>
+        <span>$300</span>
+      </div>
       <div className="payback__results">
         <div className="payback__result">
           <span className="payback__big">{salesForLaunch}</span>
           <span className="payback__small">
             {salesForLaunch === 1 ? "продажа" : salesForLaunch < 5 ? "продажи" : "продаж"} — и запуск окупился
           </span>
+          <span className="payback__sum">запуск ${launchUsd}</span>
         </div>
         {salesForMonth !== null && (
           <div className="payback__result">
@@ -45,6 +55,7 @@ export function PaybackCalculator({ launchUsd, renewalUsd, onStart }: Props) {
               {salesForMonth === 1 ? "продажа" : salesForMonth < 5 ? "продажи" : "продаж"} в месяц покрывают работу
               бота
             </span>
+            <span className="payback__sum">${renewalUsd} в месяц</span>
           </div>
         )}
       </div>

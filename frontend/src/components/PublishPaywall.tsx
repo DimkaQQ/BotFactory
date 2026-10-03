@@ -45,7 +45,7 @@ function price(minor: number, currency: string): string {
 export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
   // На телефоне панель занимала три четверти экрана и закрывала холст, поэтому
   // она свёрнута в одну строку и раскрывается по нажатию.
-  const [open, setOpen] = useState(() => !window.matchMedia("(max-width: 959px)").matches);
+  const [open, setOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,17 +114,28 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
     const first = methods[0];
     return (
       <button type="button" className="paywall__collapsed" onClick={() => setOpen(true)}>
-        <span>🚀 Опубликовать бота</span>
+        <span>🚀 Опубликовать</span>
         <span className="paywall__collapsed-price">
           {first.price_minor > 0 ? `от ${price(first.price_minor, first.currency)} ›` : "›"}
-          {problems.length > 0 && <span className="paywall__collapsed-badge">{problems.length}</span>}
+          {problems.length > 0 && (
+            <span
+              className="paywall__collapsed-badge"
+              title={`Замечаний перед оплатой: ${problems.length}`}
+              aria-label={`Замечаний перед оплатой: ${problems.length}`}
+            >
+              ⚠ {problems.length}
+            </span>
+          )}
         </span>
       </button>
     );
   }
 
   return (
-    <div className="paywall">
+    <div className="paywall paywall--open">
+      <button type="button" className="paywall__fold" onClick={() => setOpen(false)}>
+        Свернуть ✕
+      </button>
       <div className="paywall__head">
         <span className="paywall__icon" aria-hidden="true">
           🚀

@@ -259,7 +259,8 @@ function Inner({
         });
       }
     }
-    return out;
+    // Плавные ломаные вместо кривых: стрелка не делает петель и не режет блоки по диагонали.
+    return out.map((edge) => ({ ...edge, type: "smoothstep" }));
   }, [bot.blocks, bot.start_block_id, blocksById]);
 
   const editingBlock = editingId ? (blocksById.get(editingId) ?? null) : null;
