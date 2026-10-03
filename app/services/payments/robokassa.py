@@ -55,6 +55,10 @@ class RobokassaProvider(ProviderDefaults):
         CredentialField("merchant_login", "Идентификатор магазина", "MerchantLogin из кабинета", secret=False),
         CredentialField("password1", "Пароль #1", "Используется для подписи ссылки на оплату"),
         CredentialField("password2", "Пароль #2", "Используется для проверки уведомления об оплате"),
+        CredentialField(
+            "test_password1", "Тестовый пароль #1", "нужен для тестового режима: отдельные тестовые пароли в кабинете"
+        ),
+        CredentialField("test_password2", "Тестовый пароль #2", "нужен для тестового режима"),
     )
 
     async def create_checkout(self, request: CheckoutRequest) -> Checkout:
@@ -62,6 +66,15 @@ class RobokassaProvider(ProviderDefaults):
         password1 = (request.credentials.get("password1") or "").strip()
         if not login or not password1:
             raise ProviderError("Robokassa: не заполнены идентификатор магазина или пароль #1")
+
+        if request.is_test:
+            # По документации Robokassa в тестовом режиме подпись считается ОТДЕЛЬНЫМИ
+            # тестовыми паролями (алгоритм тот же), а в запросе обязателен IsTest=1.
+            password1 = (request.credentials.get("test_password1") or "").strip()
+            if not password1:
+                raise ProviderError(
+                    "Robokassa: для тестового режима заполни тестовые пароли #1 и #2 (или выключи тестовый режим)"
+                )
 
         out_sum = minor_to_major(request.amount_minor)
         signature = hashlib.md5(f"{login}:{out_sum}:{request.invoice_no}:{password1}".encode(), usedforsecurity=False).hexdigest()
@@ -96,7 +109,12 @@ class RobokassaProvider(ProviderDefaults):
         if request.is_test:
             params["IsTest"] = "1"
 
-        return Checkout(url=f"{_CHECKOUT_URL}?{urlencode(params)}", provider_payment_id=str(request.invoice_no))
+        return Checkout(
+            url=f"{_CHECKOUT_URL}?{urlencode(params)}",
+            provider_payment_id=str(request.invoice_no),
+            # Запоминаем режим платежа: уведомление проверяется паролем именно этого режима.
+            meta={"robokassa_test": bool(request.is_test)},
+        )
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
         raw = (form.get("InvId") or form.get("inv_id") or "").strip()
@@ -119,9 +137,14 @@ class RobokassaProvider(ProviderDefaults):
         meta: dict | None = None,
         currency: str = "",
     ) -> WebhookResult:
-        password2 = (credentials.get("password2") or "").strip()
+        # Пароль выбирается по режиму ЭТОГО платежа, а не перебирается: иначе тестовая
+        # подпись могла бы провести боевой заказ.
+        is_test = bool((meta or {}).get("robokassa_test"))
+        password2 = (credentials.get("test_password2" if is_test else "password2") or "").strip()
         if not password2:
-            raise ProviderError("Robokassa: не заполнен пароль #2")
+            raise ProviderError("Robokassa: не заполнен пароль #2" + (" (тестовый)" if is_test else ""))
+        if (form.get("IsTest") or "").strip() == "1" and not is_test:
+            raise ProviderError("Robokassa: тестовое уведомление для боевого платежа")
 
         out_sum = (form.get("OutSum") or "").strip()
         received = (form.get("SignatureValue") or "").strip().lower()

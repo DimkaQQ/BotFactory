@@ -18,6 +18,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -38,12 +39,14 @@ from app.services.payments.base import (
     same_currency,
 )
 
+logger = logging.getLogger(__name__)
+
 _HOST = "https://www.liqpay.ua/api"
 _CHECKOUT = f"{_HOST}/3/checkout/"
 
 #: What LiqPay calls a payment that went through. "sandbox" is a test-mode
 #: success and only ever appears when we asked for sandbox.
-_PAID = {"success", "sandbox"}
+_PAID = {"success", "sandbox"}  # sandbox — только для тестового платежа (см. _verdict)
 _REFUNDED = {"reversed"}
 _FAILED = {"failure", "error"}
 
@@ -54,18 +57,17 @@ def _sign(private_key: str, data: str) -> str:
     return base64.b64encode(hashlib.sha1(joined, usedforsecurity=False).digest()).decode()
 
 
-#: LiqPay bills on named periods, not on a number of days. Anything that is
-#: not one of them is rounded to the nearest one it can express, because a
-#: subscription silently created on the wrong cycle is worse than one the
-#: owner can see is monthly.
+#: LiqPay умеет только `month` и `year` (так в его документации). Любой другой срок
+#: молча округлять нельзя: подписка на 90 дней списывала бы втрое чаще, чем продано.
 def _periodicity(period_days: int) -> str:
-    if period_days >= 365:
-        return "year"
-    if period_days >= 28:
+    if 28 <= period_days <= 35:
         return "month"
-    if period_days >= 7:
-        return "week"
-    return "day"
+    if 360 <= period_days <= 370:
+        return "year"
+    raise ProviderError(
+        "LiqPay: подписка возможна только на месяц (30 дней) или на год (365 дней) — "
+        f"срок {period_days} дн. не поддерживается; выбери другую кассу для такого тарифа"
+    )
 
 
 class LiqPayProvider(ProviderDefaults):
@@ -132,7 +134,12 @@ class LiqPayProvider(ProviderDefaults):
             # a page of ours that posts the form for them. Nothing in it is
             # secret — it is exactly what the browser would send anyway.
             url=f"{base}/api/pay/redirect/{request.payment_id}",
-            meta={"form_action": _CHECKOUT, "form_fields": {"data": data, "signature": _sign(private, data)}},
+            meta={
+                "form_action": _CHECKOUT,
+                "form_fields": {"data": data, "signature": _sign(private, data)},
+                # Режим платежа: статус `sandbox` засчитывается только тестовому.
+                "liqpay_test": bool(request.is_test),
+            },
         )
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
@@ -167,7 +174,7 @@ class LiqPayProvider(ProviderDefaults):
         if not hmac.compare_digest(received, _sign(private, data)):
             raise ProviderError("LiqPay: подпись уведомления не совпала")
 
-        return self._verdict(_decode(data), amount_minor, currency)
+        return self._verdict(_decode(data), amount_minor, currency, bool((meta or {}).get("liqpay_test")))
 
     async def check_status(
         self,
@@ -199,10 +206,16 @@ class LiqPayProvider(ProviderDefaults):
         # telling the buyer their money is missing.
         if payload.get("result") == "error" or payload.get("status") == "error":
             raise ProviderError(f"LiqPay: {payload.get('err_description') or payload.get('err_code') or 'ошибка'}")
-        return self._verdict(payload, amount_minor, currency)
+        return self._verdict(payload, amount_minor, currency, bool((meta or {}).get("liqpay_test")))
 
-    def _verdict(self, payload: dict, amount_minor: int, currency: str = "") -> WebhookResult:
+    def _verdict(
+        self, payload: dict, amount_minor: int, currency: str = "", is_test: bool = False
+    ) -> WebhookResult:
         status = str(payload.get("status") or "").lower()
+        if status == "sandbox" and not is_test:
+            # Тестовый платёж не оплачивает боевой заказ.
+            logger.warning("LiqPay: sandbox-платёж для боевого заказа — игнорирую")
+            return WebhookResult(status=PaymentStatus.pending, provider_payment_id=None)
         remote_id = payload.get("payment_id")
         remote_id = str(remote_id) if remote_id is not None else None
 

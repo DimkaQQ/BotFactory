@@ -40,6 +40,7 @@ from app.services.payments.base import (
     WebhookResult,
 )
 
+_CHECKOUT_TEST = "https://test.paycom.uz"
 _CHECKOUT = "https://checkout.paycom.uz"
 
 # Payme's error vocabulary, straight from the reference implementation.
@@ -138,7 +139,9 @@ class PaymeProvider(ProviderDefaults):
             f"m={merchant};ac.{field}={request.invoice_no};a={request.amount_minor};c={request.return_url}"
         )
         encoded = base64.b64encode(params.encode()).decode()
-        return Checkout(url=f"{_CHECKOUT}/{encoded}")
+        # Песочница Payme — отдельный хост (и тестовый ключ кассы TEST_KEY).
+        host = _CHECKOUT_TEST if request.is_test else _CHECKOUT
+        return Checkout(url=f"{host}/{encoded}")
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
         call = _parse(raw_body)
@@ -214,9 +217,13 @@ class PaymeProvider(ProviderDefaults):
         remote_id = str(params.get("id") or "")
         known = str(notes.get("id") or "")
 
-        if known and known != remote_id:
+        if known and known != remote_id and int(notes.get("state") or 0) not in (
+            _STATE_CANCELLED,
+            _STATE_CANCELLED_AFTER_DONE,
+        ):
             # One order, one transaction: Payme must not open a second one
-            # while the first is alive.
+            # while the first is alive. После отмены (-1 или -2) заказ свободен —
+            # новая транзакция с новым id разрешена.
             raise PaymeRefusal(
                 _fail(request_id, _ERR_CANNOT_PERFORM, "order already has a transaction"),
                 "Payme: у заказа уже есть транзакция",
@@ -227,6 +234,9 @@ class PaymeProvider(ProviderDefaults):
                     _fail(request_id, _ERR_CANNOT_PERFORM, "transaction is closed"),
                     "Payme: транзакция уже закрыта",
                 )
+            expired = _expired(request_id, notes)
+            if expired is not None:
+                return expired
             # A repeat of the same call gets the same answer, not a new one.
             return _reply(
                 _ok(
@@ -289,6 +299,10 @@ class PaymeProvider(ProviderDefaults):
                 "Payme: транзакция отменена",
             )
 
+        expired = _expired(request_id, notes)
+        if expired is not None:
+            return expired
+
         performed = _now_ms()
         return _reply(
             _ok(
@@ -339,6 +353,21 @@ class PaymeProvider(ProviderDefaults):
 
 
 # ---------------------------------------------------------------- helpers
+
+
+def _expired(request_id, notes: dict) -> WebhookResult | None:
+    """Транзакция, которую не провели за 12 часов, отменяется по таймауту (причина 4):
+    ответ -31008, платёж — неуспех."""
+    created = int(notes.get("create_time") or 0)
+    if not created or _now_ms() - created <= _TRANSACTION_TTL_MS:
+        return None
+    patch = {**notes, "state": _STATE_CANCELLED, "reason": 4, "cancel_time": _now_ms()}
+    return _reply(
+        _fail(request_id, _ERR_CANNOT_PERFORM, "transaction timed out"),
+        status=PaymentStatus.failed,
+        provider_payment_id=str(notes.get("id") or ""),
+        patch=patch,
+    )
 
 
 def _reply(

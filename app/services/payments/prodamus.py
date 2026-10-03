@@ -2,7 +2,7 @@
 
 The signature is the whole integration, and it is exacting: strip the
 signature key, sort every level of the structure by key, render every scalar
-as a string, JSON-encode without escaping unicode or slashes and without
+as a string, JSON-encode (кириллица как есть, «/» экранируется как «\/» — канон Prodamus) and without
 spaces, then HMAC-SHA256 with the shop's secret. Both directions use it —
 the outgoing link carries `signature`, the callback carries `Sign` — so the
 same serialiser has to produce byte-identical output from a dict we built
@@ -39,7 +39,7 @@ def _normalise(value):
     """PHP's loose scalars, spelled out: booleans become "1"/"0", null the
     empty string, numbers their decimal text."""
     if isinstance(value, bool):
-        return "1" if value else "0"
+        return "1" if value else ""
     if value is None:
         return ""
     if isinstance(value, (int, float)):
@@ -56,8 +56,15 @@ def _prepare(obj):
 
 
 def sign(data: dict, secret: str) -> str:
-    payload = {k: v for k, v in data.items() if k not in ("signature", "sign")}
-    encoded = json.dumps(_prepare(payload), ensure_ascii=False, separators=(",", ":"))
+    """Подпись по официальному канону Prodamus (github.com/PRODAMUS/integration-expert).
+
+    Значения приводятся к строкам как PHP `strval` (True → "1", False/None → ""),
+    словари сортируются по ключам, JSON — как PHP `json_encode(…, JSON_UNESCAPED_UNICODE)`:
+    кириллица как есть, пробелов нет, а `/` превращается в `\\/`. Без этого экранирования
+    подпись любых данных со ссылками не сходится с эталонными тест-векторами.
+    """
+    payload = {k: v for k, v in data.items() if k not in ("signature", "sign", "_payform_sign")}
+    encoded = json.dumps(_prepare(payload), ensure_ascii=False, separators=(",", ":")).replace("/", "\\/")
     return hmac.new(secret.encode(), encoded.encode(), hashlib.sha256).hexdigest()
 
 
@@ -146,6 +153,11 @@ class ProdamusProvider(ProviderDefaults):
     credential_fields = (
         CredentialField("shop_domain", "Домен платёжной формы", "myshop.payform.ru", secret=False),
         CredentialField("secret_key", "Секретный ключ", "из раздела «Интеграции» в кабинете"),
+        CredentialField(
+            "webhook_secret",
+            "Ключ уведомлений (если выдан отдельно)",
+            "необязательно: сервисный ключ, который выдают вместе с кодом sys",
+        ),
     )
     block_fields = (
         CredentialField(
@@ -232,7 +244,13 @@ class ProdamusProvider(ProviderDefaults):
             raise ProviderError("Prodamus: уведомление без заголовка Sign")
 
         data = parse_form(_notification_body(headers, raw_body, form))
-        if not hmac.compare_digest(sign(data, secret), received):
+        # Уведомления могут быть подписаны сервисным ключом (он выдаётся вместе с `sys`),
+        # а не секретом страницы: подходит любой из двух.
+        keys = [secret]
+        extra = (credentials.get("webhook_secret") or "").strip()
+        if extra:
+            keys.append(extra)
+        if not any(hmac.compare_digest(sign(data, key), received) for key in keys):
             raise ProviderError("Prodamus: подпись уведомления не совпала")
 
         status = str(data.get("payment_status", "")).lower()

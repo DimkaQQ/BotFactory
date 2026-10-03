@@ -31,6 +31,31 @@ from app.services.payments.base import (
 _BASE = "https://api.yookassa.ru/v3"
 
 
+def _receipt(credentials: dict[str, str], description: str, amount_minor: int, currency: str) -> dict | None:
+    """Чек 54-ФЗ из одной позиции. Только если продавец указал почту для чеков:
+    без неё не знаем, куда его слать, и платёж идёт без `receipt`, как раньше."""
+    email = (credentials.get("fiscal_email") or "").strip()
+    if not email:
+        return None
+    try:
+        vat_code = int((credentials.get("vat_code") or "1").strip())
+    except ValueError:
+        vat_code = 1
+    return {
+        "customer": {"email": email},
+        "items": [
+            {
+                "description": (description or "Оплата")[:128],
+                "quantity": "1.00",
+                "amount": {"value": minor_to_major(amount_minor), "currency": currency.upper()},
+                "vat_code": vat_code,
+                "payment_mode": "full_payment",
+                "payment_subject": "service",
+            }
+        ],
+    }
+
+
 class YooKassaProvider(ProviderDefaults):
     slug = "yookassa"
     title = "ЮKassa"
@@ -51,6 +76,14 @@ class YooKassaProvider(ProviderDefaults):
     credential_fields = (
         CredentialField("shop_id", "shopId", "идентификатор магазина", secret=False),
         CredentialField("secret_key", "Секретный ключ", "live_… или test_…"),
+        # Чек 54-ФЗ. Если у магазина подключены чеки ЮKassa, без `receipt` платёж не создаётся.
+        # Покупатель из Telegram почту не оставляет, поэтому чек уходит на этот адрес продавца.
+        CredentialField(
+            "fiscal_email", "Почта для чеков (если включены чеки)", "email для чека 54-ФЗ", secret=False
+        ),
+        CredentialField(
+            "vat_code", "Код ставки НДС для чека", "1 — без НДС (по умолчанию); см. справочник ЮKassa", secret=False
+        ),
     )
 
     @staticmethod
@@ -70,6 +103,9 @@ class YooKassaProvider(ProviderDefaults):
             "description": request.description[:128] or "Оплата",
             "metadata": {"order_id": str(request.payment_id)},
         }
+        receipt = _receipt(request.credentials, request.description, request.amount_minor, request.currency)
+        if receipt:
+            body["receipt"] = receipt
         if request.extra.get("subscription"):
             # Turns this into the *first* payment of an autopayment series:
             # the buyer confirms once, and the response carries a handle we
@@ -216,6 +252,9 @@ class YooKassaProvider(ProviderDefaults):
             "description": description[:128] or "Продление подписки",
             "metadata": {"order_id": str(payment_id)},
         }
+        receipt = _receipt(credentials, description or "Продление подписки", amount_minor, currency)
+        if receipt:
+            body["receipt"] = receipt
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
                 f"{_BASE}/payments", json=body, auth=auth, headers={"Idempotence-Key": str(payment_id)}

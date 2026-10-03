@@ -124,12 +124,16 @@ def test_prodamus_signature_ignores_the_signature_field_itself():
     assert sign({**parsed, "sign": "что угодно"}, SECRET) == base
 
 
-def test_prodamus_leaves_unicode_and_slashes_unescaped():
-    payload = {"url": "https://a.ru/b", "name": "Гайд «кофейня»"}
-    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+def test_prodamus_escapes_slashes_like_php_json_encode_but_keeps_cyrillic():
+    """Канон Prodamus: `/` → `\\/`, кириллица как есть, без пробелов (проверено на их тест-векторах)."""
+    from app.services.payments import prodamus
 
-    assert "\\/" not in encoded and "\\u" not in encoded
-    assert sign(payload, SECRET) == hmac.new(SECRET.encode(), encoded.encode(), hashlib.sha256).hexdigest()
+    payload = {"order_id": "7", "urlSuccess": "https://t.me/bot", "name": "Гайд", "paid": True, "none": None}
+    prepared = json.dumps(prodamus._prepare(payload), ensure_ascii=False, separators=(",", ":"))
+    expected = hmac.new(b"k", prepared.replace("/", "\\/").encode(), hashlib.sha256).hexdigest()
+    assert prodamus.sign(payload, "k") == expected
+    assert "\\/" in prepared.replace("/", "\\/") and "Гайд" in prepared
+    assert '"paid":"1"' in prepared and '"none":""' in prepared
 
 
 async def test_prodamus_link_verifies_against_its_own_signature():
@@ -196,13 +200,41 @@ async def test_prodamus_rejects_a_tampered_callback(body, signature, why):
 # ------------------------------------------------------------------ Robokassa
 
 
-async def test_robokassa_signs_the_checkout_link():
-    checkout = await get_provider("robokassa").create_checkout(
-        checkout_request({"merchant_login": "demo_shop", "password1": "pass1", "password2": "pass2"})
-    )
+async def test_robokassa_signs_the_checkout_link_with_the_test_password_in_test_mode():
+    """В тестовом режиме подпись считается тестовым паролем #1 (отдельным в кабинете Robokassa)."""
+    creds = {"merchant_login": "demo_shop", "password1": "pass1", "password2": "pass2",
+             "test_password1": "tpass1", "test_password2": "tpass2"}
+    checkout = await get_provider("robokassa").create_checkout(checkout_request(creds))
 
-    assert hashlib.md5(b"demo_shop:990.00:4242:pass1").hexdigest() in checkout.url
+    assert hashlib.md5(b"demo_shop:990.00:4242:tpass1").hexdigest() in checkout.url
     assert "IsTest=1" in checkout.url
+    assert checkout.meta == {"robokassa_test": True}
+
+
+async def test_robokassa_test_mode_without_test_passwords_is_refused_not_guessed():
+    with pytest.raises(ProviderError, match="тестов"):
+        await get_provider("robokassa").create_checkout(
+            checkout_request({"merchant_login": "demo_shop", "password1": "pass1", "password2": "pass2"})
+        )
+
+
+async def test_robokassa_checks_the_callback_with_the_password_of_the_payments_own_mode():
+    live = {"merchant_login": "s", "password1": "p1", "password2": "p2", "test_password2": "t2"}
+    sign_live = hashlib.md5(b"990.00:4242:p2").hexdigest()
+    sign_test = hashlib.md5(b"990.00:4242:t2").hexdigest()
+    args = dict(headers={}, raw_body=b"", credentials=live, amount_minor=99000, invoice_no=4242,
+                payment_id=PAYMENT_ID, provider_payment_id="4242")
+    provider = get_provider("robokassa")
+    # боевой платёж не проводится тестовой подписью
+    with pytest.raises(ProviderError):
+        await provider.verify_webhook(form={"OutSum": "990.00", "InvId": "4242", "SignatureValue": sign_test}, **args)
+    # тестовый платёж проверяется тестовым паролем
+    ok = await provider.verify_webhook(
+        form={"OutSum": "990.00", "InvId": "4242", "SignatureValue": sign_test},
+        meta={"robokassa_test": True}, **args,
+    )
+    assert ok.status.value == "paid"
+    assert sign_live != sign_test
 
 
 async def test_robokassa_accepts_a_valid_callback():
@@ -626,3 +658,20 @@ async def test_ioka_a_hold_is_not_a_sale_but_a_capture_is():
     from app.services.payments.ioka import IokaProvider  # noqa: F401 — модуль импортируется без ошибок
 
     assert hasattr(ioka, "logger")
+
+
+def test_receipts_are_added_only_when_the_seller_gave_an_email_for_them():
+    from app.services.payments import tbank, yookassa
+
+    creds = {"fiscal_email": "shop@example.com", "taxation": "usn_income", "tax": "none", "vat_code": "1"}
+    receipt = yookassa._receipt(creds, "Гайд", 99000, "RUB")
+    assert receipt["customer"]["email"] == "shop@example.com"
+    assert receipt["items"][0]["amount"]["value"] == "990.00" and receipt["items"][0]["vat_code"] == 1
+    assert yookassa._receipt({}, "Гайд", 99000, "RUB") is None
+
+    tb = tbank._receipt(creds, "Гайд", 99000)["Receipt"]
+    assert tb["Email"] == "shop@example.com" and tb["Items"][0]["Amount"] == 99000
+    assert tb["Taxation"] == "usn_income" and tbank._receipt({}, "Гайд", 99000) == {}
+    # вложенный Receipt в подпись Token не входит (документация Т-Банка)
+    payload = {"TerminalKey": "t", "Amount": 99000, "Receipt": tb}
+    assert tbank._token(payload, "pw") == tbank._token({"TerminalKey": "t", "Amount": 99000}, "pw")

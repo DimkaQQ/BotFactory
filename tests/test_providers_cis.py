@@ -596,9 +596,14 @@ async def test_payme_check_transaction_reports_what_we_stored():
 
 
 async def test_payme_checkout_link_carries_the_cashbox_order_and_amount():
-    checkout = await get_provider("payme").create_checkout(
+    import dataclasses
+
+    live = dataclasses.replace(checkout_request(PAYME_CREDS, currency="UZS", amount_minor=99000), is_test=False)
+    checkout = await get_provider("payme").create_checkout(live)
+    test = await get_provider("payme").create_checkout(
         checkout_request(PAYME_CREDS, currency="UZS", amount_minor=99000)
     )
+    assert test.url.startswith("https://test.paycom.uz/"), "тестовый режим — песочница Payme"
 
     assert checkout.url.startswith("https://checkout.paycom.uz/")
     decoded = base64.b64decode(checkout.url.rsplit("/", 1)[1]).decode()

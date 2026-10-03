@@ -47,6 +47,7 @@ from app.services.payments.base import (
 # Адрес из официальной документации Freedom Pay (docs.freedompay.kz). Для
 # мерчантов в Кыргызстане у них отдельный хост api.freedompay.kg.
 _BASE = "https://api.freedompay.kz"
+_BASE_KG = "https://api.freedompay.kg"
 #: The tail of our own callback address — what Freedom Pay signs its
 #: notification with. Must match the route in `payments.py`.
 _CALLBACK_SCRIPT = "freedompay"
@@ -94,7 +95,13 @@ class FreedomPayProvider(ProviderDefaults):
     credential_fields = (
         CredentialField("merchant_id", "Merchant ID", "номер магазина из кабинета", secret=False),
         CredentialField("secret_key", "Секретный ключ", "секретный ключ мерчанта"),
+        CredentialField("country", "Страна магазина", "kz (по умолчанию) или kg — Кыргызстан", secret=False),
     )
+
+    @staticmethod
+    def _base(credentials: dict[str, str]) -> str:
+        """Хост API: у Казахстана и Кыргызстана они разные (тот же протокол и подпись)."""
+        return _BASE_KG if (credentials.get("country") or "").strip().lower() == "kg" else _BASE
 
     @staticmethod
     def _keys(credentials: dict[str, str]) -> tuple[str, str]:
@@ -138,7 +145,7 @@ class FreedomPayProvider(ProviderDefaults):
         params["pg_sig"] = _sign("init_payment.php", params, secret)
 
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(f"{_BASE}/init_payment.php", data=params)
+            response = await client.post(f"{self._base(request.credentials)}/init_payment.php", data=params)
         if response.status_code >= 400:
             raise ProviderError(f"Freedom Pay: HTTP {response.status_code}")
 
@@ -262,7 +269,7 @@ class FreedomPayProvider(ProviderDefaults):
         params["pg_sig"] = _sign(_RECURRING_SCRIPT, params, secret)
 
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(f"{_BASE}/{_RECURRING_SCRIPT}", data=params)
+            response = await client.post(f"{self._base(credentials)}/{_RECURRING_SCRIPT}", data=params)
         if response.status_code >= 400:
             raise ProviderError(f"Freedom Pay: HTTP {response.status_code}")
 

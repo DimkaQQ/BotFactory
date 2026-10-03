@@ -53,6 +53,31 @@ _FAILED = {"REJECTED", "CANCELED", "DEADLINE_EXPIRED", "AUTH_FAIL", "REVERSED", 
 _REFUNDED = {"REFUNDED", "PARTIAL_REFUNDED"}
 
 
+def _receipt(credentials: dict[str, str], description: str, amount_minor: int) -> dict:
+    """`Receipt` для Init (в подпись Token он не входит). Пусто, если продавец не указал
+    почту для чеков — тогда платёж идёт как раньше."""
+    email = (credentials.get("fiscal_email") or "").strip()
+    if not email:
+        return {}
+    return {
+        "Receipt": {
+            "Email": email,
+            "Taxation": (credentials.get("taxation") or "usn_income").strip(),
+            "Items": [
+                {
+                    "Name": (description or "Оплата")[:128],
+                    "Price": amount_minor,
+                    "Quantity": 1,
+                    "Amount": amount_minor,
+                    "Tax": (credentials.get("tax") or "none").strip(),
+                    "PaymentMethod": "full_payment",
+                    "PaymentObject": "service",
+                }
+            ],
+        }
+    }
+
+
 def _as_text(value) -> str:
     """Булевы в подписи — строки `true`/`false` (как в документации Т-Банка), а не `True`."""
     if value is True:
@@ -90,6 +115,14 @@ class TBankProvider(ProviderDefaults):
     credential_fields = (
         CredentialField("terminal_key", "Terminal Key", "идентификатор терминала", secret=False),
         CredentialField("password", "Пароль терминала", "он же Secret Key"),
+        # Чек 54-ФЗ: обязателен, если к терминалу подключена онлайн-касса. Покупатель из
+        # Telegram почту не оставляет, поэтому чек уходит на адрес продавца.
+        CredentialField("fiscal_email", "Почта для чеков (если есть онлайн-касса)", "email для Receipt", secret=False),
+        CredentialField(
+            "taxation", "Система налогообложения", "osn, usn_income, usn_income_outcome, envd, esn или patent",
+            secret=False,
+        ),
+        CredentialField("tax", "Ставка НДС в чеке", "none (по умолчанию), vat0, vat5, vat7, vat10, vat22", secret=False),
     )
 
     @staticmethod
@@ -129,6 +162,7 @@ class TBankProvider(ProviderDefaults):
                 # Одностадийная оплата: без этого схему задаёт терминал, а на двухстадийном
                 # платёж навсегда остался бы AUTHORIZED (мы не вызываем Confirm).
                 "PayType": "O",
+                **_receipt(request.credentials, request.description, request.amount_minor),
                 "Description": (request.description or "Оплата")[:250],
                 "SuccessURL": request.return_url,
                 "FailURL": request.return_url,
