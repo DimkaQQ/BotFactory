@@ -117,6 +117,7 @@ export function BlockEditPanel({
             /* Выдача — это и есть товар: методичка, архив, запись. Текст плюс
                файл, а не текст вместо файла. */
             <>
+              <p className="edit-panel__section-label">Сообщение покупателю</p>
               <textarea
                 className="chat-bubble__textarea edit-panel__textarea"
                 autoFocus

@@ -7158,3 +7158,115 @@ details.live-problems > summary::-webkit-details-marker {
 .paywall--open {
   border: 1px solid var(--tg-separator);
 }
+
+/* ---------- Последняя волна по проверке дизайна ---------- */
+
+/* Форма токена — тот же лист, что и пейволл: поле первым, замечания ниже. */
+.publish-form--sheet {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: min(100%, 560px);
+  max-height: 88dvh;
+  overflow-y: auto;
+  transform: translateX(-50%);
+  padding: var(--sp-4);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--tg-bg);
+  box-shadow: 0 0 0 100vmax color-mix(in srgb, black 42%, transparent), 0 -12px 40px color-mix(in srgb, black 28%, transparent);
+  animation: sheet-in var(--dur-slow) var(--ease-out);
+}
+
+.publish-form--sheet > * {
+  order: 3;
+}
+
+.publish-form--sheet > .publish-form__hint {
+  order: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.publish-form--sheet > .publish-form__input {
+  order: 1;
+}
+
+.publish-form--sheet > .publish-form__error {
+  order: 2;
+}
+
+.publish-form--sheet > .publish-form__actions {
+  order: 2;
+}
+
+/* Подписи полей — отдельно от соседнего поля, ближе к своему. */
+.buttons-editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: var(--sp-3);
+}
+
+.payment-settings__heading {
+  margin: var(--sp-3) 0 var(--sp-2);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.payment-settings__region-title {
+  margin-top: var(--sp-4);
+}
+
+.media-editor__caption {
+  padding: 10px 12px;
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-md);
+  background: var(--tg-secondary-bg);
+}
+
+.edit-panel__section-label {
+  margin: var(--sp-3) 0 6px;
+}
+
+/* Узкий экран 360×640: вход виден без прокрутки. */
+@media (max-width: 400px) {
+  .landing-eyebrow {
+    font-size: 11.5px;
+    padding: 4px 10px;
+    white-space: normal;
+  }
+
+  .login-title {
+    font-size: 26px;
+    line-height: 1.15;
+  }
+
+  .login-hero__lead--short {
+    font-size: 14px;
+  }
+
+  .login-card {
+    padding: var(--sp-3);
+  }
+
+  .login-card .publish-button {
+    font-size: 14.5px;
+    padding: 12px 10px;
+  }
+
+  .landing-promise__label {
+    margin-top: 2px;
+  }
+}
+
+@media (max-width: 400px) {
+  .landing-hero__links {
+    display: none;
+  }
+}

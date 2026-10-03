@@ -142,7 +142,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
               </p>
 
               <div className="buttons-editor__field">
-                <span className="buttons-editor__field-label">Платёжная система</span>
+                <h3 className="payment-settings__heading">Платёжная система</h3>
                 {subscriptionsEnabled && (
                   <p className="app-hint payment-settings__recurring-legend">
                     🔁 — умеет списывать подписку сама. У остальных бот присылает новый счёт каждый период.
@@ -209,7 +209,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                           className="payment-editor__input"
                           type={field.secret ? "password" : "text"}
                           autoComplete="off"
-                          placeholder={filled ? "•••••••• (оставь пустым, чтобы не менять)" : field.hint}
+                          placeholder={filled ? "•••••••• (не менять — пусто)" : field.hint}
                           value={values[field.key] ?? ""}
                           onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
                         />

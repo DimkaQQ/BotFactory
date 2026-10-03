@@ -55,7 +55,7 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
   }
 
   return (
-    <form className="publish-form" ref={formRef} onSubmit={handleSubmit}>
+    <form className="publish-form publish-form--sheet" ref={formRef} onSubmit={handleSubmit}>
       <p className="publish-form__hint">
         Вставь токен бота от <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather</a>
       </p>

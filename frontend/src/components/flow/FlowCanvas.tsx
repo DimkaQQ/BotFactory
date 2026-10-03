@@ -194,15 +194,30 @@ function Inner({
   // canvas and the nodes half off-screen, showing slivers of white cards
   // with no text. Fit again the first time there is something to fit to.
   const { fitView, setCenter, getZoom, zoomIn, zoomOut } = useReactFlow();
+  // На телефоне открываем схему с «▶ Старт» и первыми блоками цепочки, а не
+  // с её середины: вписать всё целиком — значит ужать текст до нечитаемого.
+  const fitOpts = useCallback(() => {
+    const base = fitViewOptions();
+    if (typeof window === "undefined" || window.innerWidth >= 960) return base;
+    const ids = [START_ID];
+    const seen = new Set<string>();
+    let current: string | null = bot.start_block_id;
+    while (current && !seen.has(current) && ids.length < 4) {
+      seen.add(current);
+      ids.push(current);
+      current = blocksById.get(current)?.next_block_id ?? null;
+    }
+    return { ...base, nodes: ids.map((id) => ({ id })) };
+  }, [bot.start_block_id, blocksById]);
   const hasFitted = useRef(false);
   useEffect(() => {
     if (hasFitted.current || bot.blocks.length === 0) return;
     hasFitted.current = true;
     // One frame later: React Flow measures nodes after they render, and
     // fitting before that measures zero-sized boxes.
-    const frame = requestAnimationFrame(() => fitView(fitViewOptions()));
+    const frame = requestAnimationFrame(() => fitView(fitOpts()));
     return () => cancelAnimationFrame(frame);
-  }, [bot.blocks.length, fitView]);
+  }, [bot.blocks.length, fitView, fitOpts]);
 
   // Холст менял размер уже после того, как в него вписались: над ним
   // появляются баннер оплаченного периода и чек-лист проблем, и каждый
@@ -219,14 +234,14 @@ function Inner({
     const observer = new ResizeObserver(() => {
       if (userMoved.current || bot.blocks.length === 0) return;
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => fitView(fitViewOptions()));
+      frame = requestAnimationFrame(() => fitView(fitOpts()));
     });
     observer.observe(node);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [bot.blocks.length, fitView]);
+  }, [bot.blocks.length, fitView, fitOpts]);
 
   // Панель правки на десктопе сужает холст: выбранный блок нужно вернуть в
   // видимую часть, иначе он остаётся под краем или вовсе скрыт.
@@ -444,7 +459,7 @@ function Inner({
         <button
           type="button"
           className="flow-canvas__tool flow-canvas__tool--wide"
-          onClick={() => fitView({ ...fitViewOptions(), duration: 300 })}
+          onClick={() => fitView({ padding: 0.15, maxZoom: 1, minZoom: 0.3, duration: 300 })}
         >
           Вписать в экран
         </button>
@@ -478,7 +493,7 @@ function Inner({
             elementsSelectable={!disabled}
             deleteKeyCode={disabled ? null : ["Backspace", "Delete"]}
             fitView
-            fitViewOptions={fitViewOptions()}
+            fitViewOptions={fitOpts()}
             // Первое же движение холста руками означает «я сам разберусь»:
             // дальше автоматическое вписывание только мешало бы.
             onMoveStart={() => {

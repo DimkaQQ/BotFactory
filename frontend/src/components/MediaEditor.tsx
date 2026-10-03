@@ -134,6 +134,7 @@ export function MediaEditor({ kind, botId, content, onChange }: Props) {
         }
         onPointerDown={(e) => e.stopPropagation()}
       />
+      <p className="edit-panel__section-label">Подпись под файлом</p>
       <textarea
         className="chat-bubble__textarea media-editor__caption"
         placeholder="Подпись (необязательно)"
