@@ -231,3 +231,14 @@ async def test_typing_at_the_bot_gets_an_answer(db, owner, make_bot, telegram):
 
     assert len(telegram.sent()) == 1
     assert "/start" in telegram.sent()[0]
+
+
+async def test_a_paying_bot_answers_the_terms_command(db, owner, make_bot, telegram):
+    """Telegram требует ответа на /terms у бота, принимающего оплату."""
+    from app.models.bot_block import BlockType
+
+    bot, _ = await make_bot(owner, [(BlockType.welcome, {"text": "Привет"})])
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "from": {"id": CHAT_ID}, "text": "/terms"}}, bot.id, db
+    )
+    assert any("Условия покупки" in text for text in telegram.sent())

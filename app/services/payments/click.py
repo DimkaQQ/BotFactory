@@ -53,6 +53,7 @@ _COMPLETE = "1"
 _ERR_OK = 0
 _ERR_SIGN = -1
 _ERR_AMOUNT = -2
+_ERR_CANCELLED = -9
 _ERR_ORDER_NOT_FOUND = -5
 
 
@@ -191,6 +192,10 @@ class ClickProvider(ProviderDefaults):
             except ValueError:
                 remote_error = 0
             status = PaymentStatus.paid if remote_error >= 0 else PaymentStatus.failed
+            if remote_error < 0:
+                # По документации Click: пришёл отрицательный error — отменяем у себя и
+                # отвечаем -9 («транзакция отменена»).
+                reply = _reply(form, error=_ERR_CANCELLED, note="Transaction cancelled", prepare_id=invoice_no)
             return WebhookResult(
                 status=status,
                 provider_payment_id=click_trans_id,

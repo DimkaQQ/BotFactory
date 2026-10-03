@@ -1013,3 +1013,34 @@ async def test_ioka_reports_the_gateways_own_error(mock_http):
 
     with mock_http(handler), pytest.raises(ProviderError, match="Неверный ключ"):
         await get_provider("ioka").create_checkout(checkout_request(IOKA_CREDS, currency="KZT"))
+
+
+async def test_click_answers_the_wrong_amount_with_its_own_code_minus_two():
+    """По документации Click: неверная сумма — error -2, а не «подпись»."""
+    import json
+
+    with pytest.raises(ProviderError) as caught:
+        await get_provider("click").verify_webhook(
+            headers={}, raw_body=b"", form=click_form("1", amount="10.00", prepare_id="4242"),
+            credentials=CLICK_CREDS, amount_minor=99000, invoice_no=4242,
+            payment_id=PAYMENT_ID, provider_payment_id=None,
+        )
+    assert json.loads(caught.value.body)["error"] == -2
+
+
+async def test_click_cancelled_on_its_side_is_answered_with_minus_nine():
+    import json
+
+    form = click_form("1", prepare_id="4242")
+    form["error"] = "-5017"  # Click сообщил, что платёж отменён у него
+    raw = (
+        form["click_trans_id"] + form["service_id"] + "click_secret" + form["merchant_trans_id"]
+        + form["merchant_prepare_id"] + form["amount"] + form["action"] + form["sign_time"]
+    )
+    form["sign_string"] = hashlib.md5(raw.encode()).hexdigest()
+    result = await get_provider("click").verify_webhook(
+        headers={}, raw_body=b"", form=form, credentials=CLICK_CREDS, amount_minor=99000,
+        invoice_no=4242, payment_id=PAYMENT_ID, provider_payment_id=None,
+    )
+    assert result.status.value == "failed"
+    assert json.loads(result.response_body)["error"] == -9

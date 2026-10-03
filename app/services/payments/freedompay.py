@@ -44,7 +44,9 @@ from app.services.payments.base import (
     same_currency,
 )
 
-_BASE = "https://api.freedompay.money"
+# Адрес из официальной документации Freedom Pay (docs.freedompay.kz). Для
+# мерчантов в Кыргызстане у них отдельный хост api.freedompay.kg.
+_BASE = "https://api.freedompay.kz"
 #: The tail of our own callback address — what Freedom Pay signs its
 #: notification with. Must match the route in `payments.py`.
 _CALLBACK_SCRIPT = "freedompay"

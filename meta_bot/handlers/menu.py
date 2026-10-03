@@ -251,6 +251,28 @@ async def cmd_start(message: Message, bot: Bot) -> None:
     await bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="HTML")
 
 
+@router.message(Command("terms"))
+async def cmd_terms(message: Message, bot: Bot) -> None:
+    """Условия сервиса — Telegram требует ответ на /terms у бота, принимающего оплату."""
+    settings = get_settings()
+    if settings.legal_ready:
+        base = settings.public_base_url.rstrip("/")
+        text = f"📄 Условия сервиса: {base}/legal/offer\nПолитика конфиденциальности: {base}/legal/privacy"
+    else:
+        text = "Условия сервиса скоро появятся. Вопросы — кнопка «Поддержка» в меню (/menu)."
+    await bot.send_message(message.chat.id, text)
+
+
+@router.message(Command("paysupport"))
+async def cmd_paysupport(message: Message, bot: Bot) -> None:
+    """Вопросы по оплате запуска и продления: открывает диалог с поддержкой."""
+    await bot.send_message(
+        message.chat.id,
+        "💬 По оплате запуска или продления напиши сюда одним сообщением, что случилось (когда платил, "
+        "чем, на какую сумму) — мы ответим в этом же чате. Нажми «Поддержка» в меню: /menu",
+    )
+
+
 # ---------------------------------------------------------------- кнопки
 
 
