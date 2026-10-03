@@ -7100,3 +7100,61 @@ html {
     box-shadow: 0 6px 20px color-mix(in srgb, var(--tg-button) 28%, transparent);
   }
 }
+
+
+/* ---------- Правки по полной проверке дизайна ---------- */
+
+.landing-promise__label {
+  margin: var(--sp-3) 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-success-ink);
+}
+
+@media (min-width: 960px) {
+  .landing-gateways {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+}
+
+@media (max-width: 719px) {
+  .landing-promise {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .landing-promise li {
+    padding: 4px 8px;
+    font-size: 12.5px;
+  }
+}
+
+/* Чек-лист замечаний у опубликованного бота — одной строкой, раскрывается. */
+details.live-problems > summary {
+  cursor: pointer;
+  list-style: none;
+  font-weight: 700;
+}
+
+details.live-problems > summary::-webkit-details-marker {
+  display: none;
+}
+
+.login-card a {
+  color: var(--accent-on-surface);
+}
+
+.paywall__method {
+  min-height: 56px;
+}
+
+.paywall__method-go,
+.paywall__method-renewal {
+  font-size: 13.5px;
+}
+
+.paywall--open {
+  border: 1px solid var(--tg-separator);
+}

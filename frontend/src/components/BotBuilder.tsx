@@ -793,7 +793,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             {bot.paused && (
               <p className="published-banner__hint">
                 Новых диалогов нет, оплаты и выдача купленного продолжают работать. Включить обратно — в меню
-                @DragDropBot или в списке ботов.
+                Telegram-бота Bot Factory или в списке ботов.
               </p>
             )}
             <p className="published-banner__hint">
@@ -844,18 +844,17 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           кассу или оставить кнопку без продолжения можно было молча, на боте,
           который в эту секунду открыт у покупателей. */}
       {bot.status !== "draft" && publishProblems.length > 0 && (
-        <div className="live-problems" role="status">
-          <p className="live-problems__title">
-            {bot.status === "active"
-              ? "Бот в эфире, и покупатели уже это видят:"
-              : "Стоит поправить до следующего запуска:"}
-          </p>
+        <details className="live-problems" role="status">
+          <summary className="live-problems__title">
+            ⚠ {publishProblems.length}{" "}
+            {bot.status === "active" ? "замечаний у бота в эфире — покупатели уже это видят" : "замечаний до следующего запуска"}
+          </summary>
           <ul>
             {publishProblems.map((problem) => (
               <li key={problem}>{problem}</li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
 
       <FlowCanvas

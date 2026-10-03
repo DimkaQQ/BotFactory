@@ -365,15 +365,16 @@ export function LoginScreen({ onLoggedIn }: Props) {
               Рисуешь диалог блоками и стрелками — без кода. Клиент платит в твою кассу, бот сам выдаёт товар.
               Ты спишь — продажи идут.
             </p>
+            <p className="landing-promise__label">Бесплатно, без срока:</p>
             <ul className="landing-promise" aria-label="Что бесплатно">
               <li>
-                <span aria-hidden="true">✓</span> Собирать — бесплатно
+                <span aria-hidden="true">✓</span> Собирать
               </li>
               <li>
-                <span aria-hidden="true">✓</span> Хранить — бесплатно
+                <span aria-hidden="true">✓</span> Хранить
               </li>
               <li>
-                <span aria-hidden="true">✓</span> Тестировать — бесплатно
+                <span aria-hidden="true">✓</span> Тестировать
               </li>
             </ul>
             <p className="landing-hero__links">

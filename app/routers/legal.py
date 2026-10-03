@@ -140,10 +140,15 @@ def _page(title: str, body: str, lang: str = "ru") -> Response:
   li {{ margin-bottom: 6px; }}
   .meta {{ opacity: 0.65; font-size: 14px; }}
   .req {{ margin-top: 40px; padding: 16px; border-radius: 10px; background: rgba(127,127,127,0.12); font-size: 14px; }}
-  a {{ color: inherit; }}
+  a {{ color: #4f46e5; }}
+  @media (prefers-color-scheme: dark) {{ a {{ color: #a5b4fc; }} }}
+  .top {{ display: flex; align-items: center; gap: 10px; margin-bottom: 18px; font-weight: 700; text-decoration: none; }}
+  .top a {{ text-decoration: none; }}
+  h1 {{ margin-top: 0; }}
 </style>
 </head>
 <body>
+<p class="top"><a href="/">🏭 Bot Factory</a> <span class="meta">·</span> <a href="/">{"← back to the site" if en else "← на сайт"}</a></p>
 <h1>{html.escape(title)}</h1>
 <p class="meta">{("Revision of " if en else "Редакция от ")}{REVISION} · <a href="/legal/{"?lang=en" if en else ""}">{"all documents" if en else "все документы"}</a> · {switch}</p>
 {body}

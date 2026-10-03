@@ -193,7 +193,7 @@ function Inner({
   // have been fetched. On a phone that left the viewport fitted to an empty
   // canvas and the nodes half off-screen, showing slivers of white cards
   // with no text. Fit again the first time there is something to fit to.
-  const { fitView, setCenter, zoomIn, zoomOut } = useReactFlow();
+  const { fitView, setCenter, getZoom, zoomIn, zoomOut } = useReactFlow();
   const hasFitted = useRef(false);
   useEffect(() => {
     if (hasFitted.current || bot.blocks.length === 0) return;
@@ -227,6 +227,19 @@ function Inner({
       observer.disconnect();
     };
   }, [bot.blocks.length, fitView]);
+
+  // Панель правки на десктопе сужает холст: выбранный блок нужно вернуть в
+  // видимую часть, иначе он остаётся под краем или вовсе скрыт.
+  useEffect(() => {
+    if (!editingId || window.innerWidth < 960) return;
+    const block = bot.blocks.find((b) => b.id === editingId);
+    if (!block) return;
+    const timer = setTimeout(() => {
+      setCenter(block.position_x + 120, block.position_y + 60, { zoom: Math.max(getZoom(), 0.75), duration: 250 });
+    }, 150);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId]);
 
   const edges = useMemo<Edge[]>(() => {
     const out: Edge[] = [];
@@ -358,8 +371,9 @@ function Inner({
     setSheetOpen(false);
     // Cascade new nodes so they don't all land in the same spot — a rough
     // grid, not a real layout algorithm; the user drags from there.
-    const count = bot.blocks.length;
-    const position = { x: 360 + (count % 3) * 260, y: 40 + Math.floor(count / 3) * 220 };
+    // Новый блок — под самым нижним, а не поверх существующих.
+    const lowest = bot.blocks.reduce((max, b) => Math.max(max, b.position_y ?? 0), 0);
+    const position = bot.blocks.length === 0 ? { x: 80, y: 170 } : { x: 80, y: lowest + 200 };
     let newId: string;
     try {
       newId = await onAdd(type, position);

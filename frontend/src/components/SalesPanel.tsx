@@ -386,8 +386,7 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
                         {SUB_STATUS[sub.status]}
                         {sub.status === "active" && ` до ${when(sub.current_period_end)}`}
                         {" · "}
-                        {sub.periods_paid === 1 ? "1-й период" : `${sub.periods_paid}-й период`}
-                        {" · "}
+                        {sub.periods_paid ? `${sub.periods_paid}-й период · ` : ""}
                         {sub.billing_mode === "auto" ? "списывает Telegram" : "по счёту"}
                       </span>
                     </span>
