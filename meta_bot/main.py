@@ -12,6 +12,7 @@ from aiogram import Bot, Dispatcher
 from app.config import get_settings
 from app.services.telegram_session import build_bot_session
 from meta_bot.handlers.menu import router as menu_router
+from meta_bot.handlers.payments import router as payments_router
 from meta_bot.handlers.support import router as support_router
 
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +25,8 @@ logger = logging.getLogger(__name__)
 def build_dispatcher() -> Dispatcher:
     """Порядок роутеров важен и потому собран в одном месте (его проверяет тест)."""
     dp = Dispatcher()
+    # Платежи первыми: сообщение об оплате не должно попасть в «поддержку».
+    dp.include_router(payments_router)
     dp.include_router(menu_router)
     # Последним: он ловит всё, что не команда, — команды должны достаться раньше.
     dp.include_router(support_router)

@@ -50,6 +50,16 @@ def decrypt_credentials(blob: bytes | None) -> dict[str, str]:
         return {}
 
 
+#: Подсказки «чем платить за запуск» по странам клиентов. Карта Stripe не
+#: подходит плательщикам из РФ и Беларуси (санкции), поэтому им предлагаются
+#: крипта и звёзды Telegram; клиентам из Казахстана и Узбекистана доступно всё.
+_WHO_CAN_PAY = {
+    "stripe": "Банковская карта · Казахстан, Узбекистан и другие страны (кроме РФ и Беларуси)",
+    "cryptobot": "USDT или TON в Crypto Bot · из любой страны, в том числе из РФ",
+    "stars": "Звёзды Telegram · из любой страны, в том числе из РФ",
+}
+
+
 @dataclass(frozen=True)
 class PlatformMethod:
     """One way a client can pay us for publishing a bot."""
@@ -67,6 +77,11 @@ class PlatformMethod:
     @property
     def title(self) -> str:
         return payment_providers.get_provider(self.provider).title
+
+    @property
+    def who(self) -> str:
+        """Кому подходит этот способ — чтобы человек сразу видел свой."""
+        return _WHO_CAN_PAY.get(self.provider, "")
 
 
 def platform_methods() -> list[PlatformMethod]:
@@ -498,6 +513,18 @@ async def _open_platform_payment(
     return payment
 
 
+def _platform_bot_token(method: PlatformMethod) -> str | None:
+    """Счёт в звёздах выставляет бот, а принимает деньги платформа — поэтому
+    для оплаты запуска это мета-бот: подтверждение придёт ему же
+    (см. meta_bot/handlers/payments.py)."""
+    if method.provider != "stars":
+        return None
+    token = get_settings().meta_bot_token
+    if not token:
+        raise ProviderError("Оплата звёздами недоступна: у сервиса не задан токен мета-бота")
+    return token
+
+
 async def create_publication_payment(
     db: AsyncSession, *, bot: BotModel, client_id: uuid.UUID, provider: str | None = None
 ) -> tuple[Payment, str]:
@@ -527,6 +554,7 @@ async def create_publication_payment(
         return_url=f"{settings.public_base_url.rstrip('/')}/?paid={bot.id}",
         bot_id=bot.id,
         client_id=client_id,
+        bot_token=_platform_bot_token(method),
     )
 
 
@@ -566,6 +594,7 @@ async def create_renewal_payment(
         return_url=f"{settings.public_base_url.rstrip('/')}/?paid={bot.id}",
         bot_id=bot.id,
         client_id=client_id,
+        bot_token=_platform_bot_token(method),
     )
 
 

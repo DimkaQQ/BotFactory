@@ -3,6 +3,7 @@ import { Handle, Position } from "@xyflow/react";
 
 import type { BotBlock } from "../../api/builderApi";
 import { BLOCK_TYPE_BY_ID } from "../../blockTypes";
+import { useWideScreen } from "../../hooks/useWideScreen";
 import { humanDelay } from "../../humanDelay";
 import { useFlowActions } from "./flowActions";
 
@@ -61,12 +62,13 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
         ? false
         : !block.content.text?.trim() && !block.content.media_file_id;
   const isPayment = block.block_type === "payment";
+  const wide = useWideScreen();
 
   return (
     <div className={`flow-node ${selected ? "flow-node--selected" : ""}`} onClick={() => onEdit(id)}>
       <Handle
         type="target"
-        position={Position.Top}
+        position={wide ? Position.Left : Position.Top}
         id="target"
         className="flow-node__handle"
         title="Сюда приходят стрелки от других блоков"
@@ -160,7 +162,7 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
         >
           {isButtons && hasBranch ? "ждёт нажатия" : isPayment ? "после оплаты" : "дальше"}
         </span>
-        <Handle type="source" position={Position.Bottom} id="default" className="flow-node__handle flow-node__handle--default" />
+        <Handle type="source" position={wide ? Position.Right : Position.Bottom} id="default" className="flow-node__handle flow-node__handle--default" />
       </div>
     </div>
   );

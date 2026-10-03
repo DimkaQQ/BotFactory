@@ -21,7 +21,7 @@ const SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", RUB: "₽", KZT:
 
 /** Which method is yours — the same guidance the settings panel gives. */
 const METHOD_NOTE: Record<string, string> = {
-  stripe: "зарубежная карта",
+  stripe: "карта (кроме РФ и Беларуси)",
   cryptobot: "USDT или TON из Telegram",
   robokassa: "карта РФ или KZT",
   yookassa: "карта РФ",
@@ -182,8 +182,8 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
             >
               <span className="paywall__method-title">
                 {method.title}
-                {METHOD_NOTE[method.provider] && (
-                  <span className="paywall__method-note">{METHOD_NOTE[method.provider]}</span>
+                {(method.who || METHOD_NOTE[method.provider]) && (
+                  <span className="paywall__method-note">{method.who || METHOD_NOTE[method.provider]}</span>
                 )}
               </span>
               <span className="paywall__method-price">

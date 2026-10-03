@@ -124,7 +124,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
           else x += 280;
         }
         created.push(await builderApi.createBlock(bot.id, block.block_type, block.content, { x, y }));
-        if (acrossTheWidth) x += 300;
+        if (acrossTheWidth) x += 262;
         else y += 190;
       }
 

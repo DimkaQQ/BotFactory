@@ -39,6 +39,7 @@ class PricePoint(BaseModel):
     method: str
     launch: str
     renewal: str = ""
+    who: str = ""
 
 
 class PublicConfig(BaseModel):
@@ -101,6 +102,7 @@ async def get_public_config() -> PublicConfig:
             method=m.title,
             launch=payment_providers.money(m.price_minor, m.currency),
             renewal=payment_providers.money(m.renewal_price_minor, m.currency) if m.renewal_price_minor > 0 else "",
+            who=m.who,
         )
         for m in methods
     ]

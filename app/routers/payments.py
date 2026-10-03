@@ -400,6 +400,7 @@ async def publication_info(bot_id: uuid.UUID, bot: BotModel = Depends(get_owned_
                 price_minor=m.price_minor,
                 currency=m.currency,
                 renewal_price_minor=m.renewal_price_minor,
+                who=m.who,
             )
             for m in methods
         ],

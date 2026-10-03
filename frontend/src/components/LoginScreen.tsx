@@ -616,6 +616,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
                 <p className="landing-price__method">{price.method}</p>
                 <p className="landing-price__amount">{price.launch}</p>
                 <p className="landing-price__label">за запуск бота</p>
+                {price.who && <p className="landing-price__who">{price.who}</p>}
                 <p className="landing-price__renewal">
                   {price.renewal
                     ? `Дальше — ${price.renewal} за каждые ${config?.renewal_period_days ?? 30} дн. работы`

@@ -428,7 +428,7 @@ export interface PublicConfig {
   /** Что стоит запуск. Пусто — запуск бесплатный (платёжных способов у
    * платформы нет). Цифры приходят с сервера, чтобы лендинг не обещал не то,
    * что спишется на кнопке публикации. */
-  pricing?: { method: string; launch: string; renewal: string }[];
+  pricing?: { method: string; launch: string; renewal: string; who?: string }[];
   renewal_period_days?: number;
   renewal_grace_days?: number;
   /** Куда писать живому человеку — без @. Пусто не бывает. */
@@ -468,6 +468,8 @@ export interface PublicationMethod {
   price_minor: number;
   currency: string;
   renewal_price_minor: number;
+  /** Кому подходит способ: страны и чем платить. */
+  who?: string;
 }
 
 /** Where a live bot stands with us. `state`: "off" — nothing is charged per

@@ -6589,3 +6589,48 @@ html {
     display: block;
   }
 }
+
+.landing-price__who {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* ---------- Ещё правки по ревью дизайна ---------- */
+
+/* Список ботов: не жмётся в левый угол на широком экране. */
+@media (min-width: 960px) {
+  .screen--list {
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Панель редактирования — боковой инспектор, а не модальное окно: холст
+     остаётся видимым и живым, видно, какой блок правишь. */
+  .edit-panel-backdrop {
+    background: transparent;
+    pointer-events: none;
+  }
+
+  .edit-panel-backdrop > * {
+    pointer-events: auto;
+  }
+}
+
+/* Следом идут две «тинт»-секции — «Надёжность» и «Вопросы»: без разрыва они
+   читаются как один блок со швом. */
+#faq.landing-section--tint {
+  background: transparent;
+}
+
+@media (min-width: 960px) {
+  .login-hero__lead {
+    max-width: 520px;
+  }
+
+  .landing-hero {
+    padding-top: var(--sp-6);
+  }
+}

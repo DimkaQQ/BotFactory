@@ -58,6 +58,8 @@ class PublicationMethodOut(BaseModel):
     #: What one more period costs through this method; 0 if the launch is
     #: all this deployment charges.
     renewal_price_minor: int = 0
+    #: Кому подходит способ (страны, чем платить) — одной строкой.
+    who: str = ""
 
 
 class PublicationInfoOut(BaseModel):
