@@ -151,7 +151,7 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
               conversation as a refund request. */}
           {info.renewal_price_minor > 0 && (
             <p className="paywall__terms">
-              Дальше — {formatAmount(info.renewal_price_minor)} {money(info.currency)} за каждые{" "}
+              Дальше — {price(info.renewal_price_minor, info.currency)} за каждые{" "}
               {info.renewal_period_days} дней работы. Первый период входит в эту оплату: следующий счёт придёт
               через {info.renewal_period_days} дней, и бот напомнит заранее.
             </p>

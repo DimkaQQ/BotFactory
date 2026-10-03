@@ -355,11 +355,15 @@ export function LoginScreen({ onLoggedIn }: Props) {
               <span aria-hidden="true">🏭</span> Конструктор Telegram-ботов для продаж
             </div>
             <h1 className="login-title">Бот, который сам продаёт и сам выдаёт</h1>
-            <p className="login-hero__lead">
+            <p className="login-hero__lead login-hero__lead--wide">
               Bot Factory — это конструктор: ты рисуешь диалог схемой, блоками и стрелками, без кода. Клиент
               нажимает кнопку, платит в твою кассу — и бот сам присылает файл, ссылку или пускает в закрытый
               чат. Ты спишь — продажи идут: так к твоему бизнесу добавляется ещё один канал оплаты, который
               работает без тебя.
+            </p>
+            <p className="login-hero__lead login-hero__lead--short">
+              Рисуешь диалог блоками и стрелками — без кода. Клиент платит в твою кассу, бот сам выдаёт товар.
+              Ты спишь — продажи идут.
             </p>
             <ul className="landing-promise" aria-label="Что бесплатно">
               <li>

@@ -7024,3 +7024,79 @@ html {
 .paywall__collapsed span {
   white-space: nowrap;
 }
+
+
+/* ---------- Четвёртая волна ---------- */
+
+.login-hero__lead--short {
+  display: none;
+}
+
+@media (max-width: 719px) {
+  .login-hero__lead--wide {
+    display: none;
+  }
+
+  .login-hero__lead--short {
+    display: block;
+    -webkit-line-clamp: unset;
+  }
+
+  .landing-promise {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .landing-promise li {
+    font-size: 12.5px;
+    padding: 4px 9px;
+  }
+
+  .landing-features > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Пейволл: способы оплаты сразу под ценой, затемнение фона, прокрутка. */
+.paywall--open > * {
+  order: 2;
+}
+
+.paywall--open > .paywall__fold {
+  order: -1;
+}
+
+.paywall--open > .paywall__head,
+.paywall--open > .paywall__terms {
+  order: 0;
+}
+
+.paywall--open > .paywall__methods,
+.paywall--open > .paywall__waiting,
+.paywall--open > .publish-button,
+.paywall--open > .publish-form__error {
+  order: 1;
+}
+
+.paywall--open {
+  max-height: calc(100dvh - 48px);
+  box-shadow: 0 0 0 100vmax color-mix(in srgb, black 42%, transparent), 0 -12px 40px color-mix(in srgb, black 28%, transparent);
+}
+
+/* Панель редактирования на десктопе — инспектор сбоку: холст сужается,
+   а не прячется под ней; выбранный блок хорошо заметен. */
+@media (min-width: 960px) {
+  .screen--builder:has(.edit-panel) .flow-canvas {
+    margin-right: 392px;
+  }
+
+  .screen--builder .flow-canvas {
+    margin-bottom: 64px;
+  }
+
+  .flow-node--selected {
+    outline: 2px solid var(--tg-button);
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--tg-button) 28%, transparent);
+  }
+}

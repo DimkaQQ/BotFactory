@@ -43,7 +43,13 @@ const NODE_HEIGHT = 110;
 // и ничего не разобрать. 0.45 — примерно та граница, за которой подпись
 // блока перестаёт читаться.
 const READABLE_MIN_ZOOM = 0.45;
-const FIT_VIEW_OPTIONS = { padding: 0.15, maxZoom: 1, minZoom: READABLE_MIN_ZOOM };
+// На телефоне вписывать всю схему нельзя — она ужимается до нечитаемых 0.45.
+// Лучше открыть её крупно сверху (Старт и первые блоки) и дать прокрутить.
+const fitViewOptions = () => ({
+  padding: 0.15,
+  maxZoom: 1,
+  minZoom: typeof window !== "undefined" && window.innerWidth < 960 ? 0.8 : READABLE_MIN_ZOOM,
+});
 
 /** Which model field a dropped/deleted arrow maps back to — carried on the
  * edge itself so onConnect/onEdgesDelete don't need to re-derive it from
@@ -194,7 +200,7 @@ function Inner({
     hasFitted.current = true;
     // One frame later: React Flow measures nodes after they render, and
     // fitting before that measures zero-sized boxes.
-    const frame = requestAnimationFrame(() => fitView(FIT_VIEW_OPTIONS));
+    const frame = requestAnimationFrame(() => fitView(fitViewOptions()));
     return () => cancelAnimationFrame(frame);
   }, [bot.blocks.length, fitView]);
 
@@ -213,7 +219,7 @@ function Inner({
     const observer = new ResizeObserver(() => {
       if (userMoved.current || bot.blocks.length === 0) return;
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => fitView(FIT_VIEW_OPTIONS));
+      frame = requestAnimationFrame(() => fitView(fitViewOptions()));
     });
     observer.observe(node);
     return () => {
@@ -424,7 +430,7 @@ function Inner({
         <button
           type="button"
           className="flow-canvas__tool flow-canvas__tool--wide"
-          onClick={() => fitView({ ...FIT_VIEW_OPTIONS, duration: 300 })}
+          onClick={() => fitView({ ...fitViewOptions(), duration: 300 })}
         >
           Вписать в экран
         </button>
@@ -458,7 +464,7 @@ function Inner({
             elementsSelectable={!disabled}
             deleteKeyCode={disabled ? null : ["Backspace", "Delete"]}
             fitView
-            fitViewOptions={FIT_VIEW_OPTIONS}
+            fitViewOptions={fitViewOptions()}
             // Первое же движение холста руками означает «я сам разберусь»:
             // дальше автоматическое вписывание только мешало бы.
             onMoveStart={() => {
