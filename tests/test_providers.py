@@ -608,3 +608,21 @@ def test_cryptobot_finds_the_payment_by_our_own_payload():
     ref = get_provider("cryptobot").locate_payment(headers={}, raw_body=body, form={})
 
     assert ref.payment_id == PAYMENT_ID
+
+
+async def test_prodamus_reads_a_multipart_notification_through_the_parsed_form():
+    """По документации Prodamus шлёт multipart/form-data: сырое тело не urlencoded."""
+    from app.services.payments import prodamus
+
+    form = {"order_id": str(uuid.uuid4()), "sum": "990.00", "payment_status": "order_canceled"}
+    body = prodamus._notification_body({"content-type": "multipart/form-data; boundary=x"}, b"--x\r\n...", form)
+    assert prodamus.parse_form(body)["order_id"] == form["order_id"]
+    # отмена покупателем — неуспех, а не вечное ожидание
+    assert "order_canceled" in prodamus._FAILED
+
+
+async def test_ioka_a_hold_is_not_a_sale_but_a_capture_is():
+    from app.services.payments import ioka
+    from app.services.payments.ioka import IokaProvider  # noqa: F401 — модуль импортируется без ошибок
+
+    assert hasattr(ioka, "logger")

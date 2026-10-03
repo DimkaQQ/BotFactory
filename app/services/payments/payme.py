@@ -305,7 +305,13 @@ class PaymeProvider(ProviderDefaults):
         if not notes or str(notes.get("id") or "") != remote_id:
             raise PaymeRefusal(_fail(request_id, _ERR_TRANSACTION_NOT_FOUND), "Payme: транзакция не найдена")
 
-        was_done = int(notes.get("state") or 0) == _STATE_DONE
+        current = int(notes.get("state") or 0)
+        if current in (_STATE_CANCELLED, _STATE_CANCELLED_AFTER_DONE):
+            # Песочница Payme присылает CancelTransaction дважды и ждёт тот же ответ:
+            # отменённая транзакция остаётся в своём состоянии (-1 или -2).
+            return _reply(_ok(request_id, _state_of(notes)))
+
+        was_done = current == _STATE_DONE
         state = _STATE_CANCELLED_AFTER_DONE if was_done else _STATE_CANCELLED
         cancelled = int(notes.get("cancel_time") or 0) or _now_ms()
         patch = {**notes, "state": state, "cancel_time": cancelled, "reason": params.get("reason")}
@@ -323,7 +329,11 @@ class PaymeProvider(ProviderDefaults):
 
     def error_body(self, *, form: dict[str, str], raw_body: bytes, found: bool) -> tuple[str, str]:
         """Payme answers 200 to everything; a refusal is a body, not a status."""
-        request_id = _parse(raw_body).get("id")
+        parsed = _parse(raw_body)
+        request_id = parsed.get("id")
+        if not found and parsed.get("method") in ("CheckTransaction", "PerformTransaction", "CancelTransaction"):
+            # Неизвестный id транзакции — это -31003, а не «заказ не найден».
+            return _fail(request_id, _ERR_TRANSACTION_NOT_FOUND), "application/json"
         code = _ERR_ORDER_NOT_FOUND if not found else _ERR_CANNOT_PERFORM
         return _fail(request_id, code), "application/json"
 

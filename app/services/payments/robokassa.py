@@ -74,7 +74,9 @@ class RobokassaProvider(ProviderDefaults):
             "SignatureValue": signature,
             "Culture": "ru",
             "Encoding": "utf-8",
-            "SuccessURL2": request.return_url,
+            # `SuccessURL2` здесь не передаётся: по документации Robokassa такие
+            # модификаторы входят в строку подписи, и ошибка в её составе ломает ВСЕ платежи.
+            # Адрес возврата покупателя задаётся в кабинете (Success URL).
         }
         # `OutSumCurrency` is deliberately not sent. With it, Robokassa
         # converts and then reports ResultURL's OutSum in the shop's *base*

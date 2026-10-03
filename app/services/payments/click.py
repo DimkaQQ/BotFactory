@@ -53,6 +53,9 @@ _COMPLETE = "1"
 _ERR_OK = 0
 _ERR_SIGN = -1
 _ERR_AMOUNT = -2
+_ERR_ACTION = -3
+_ERR_ALREADY_PAID = -4
+_ERR_TRANSACTION = -6
 _ERR_CANCELLED = -9
 _ERR_ORDER_NOT_FOUND = -5
 
@@ -174,6 +177,22 @@ class ClickProvider(ProviderDefaults):
         action = (form.get("action") or "").strip()
         click_trans_id = (form.get("click_trans_id") or "").strip() or None
         reply = _reply(form, error=_ERR_OK, note="Success", prepare_id=invoice_no)
+
+        if action not in (_PREPARE, _COMPLETE):
+            raise _ClickRefusal(
+                f"Click: неизвестное действие {action!r}", _reply(form, error=_ERR_ACTION, note="Action not found")
+            )
+        # Уже оплаченный заказ повторно не принимаем (код -4 по документации Click).
+        if (meta or {}).get("_status") == "paid":
+            raise _ClickRefusal(
+                "Click: заказ уже оплачен", _reply(form, error=_ERR_ALREADY_PAID, note="Already paid")
+            )
+        # В Complete merchant_prepare_id должен быть тем, что мы отдали на Prepare.
+        if action == _COMPLETE and (form.get("merchant_prepare_id") or "").strip() != str(invoice_no):
+            raise _ClickRefusal(
+                "Click: merchant_prepare_id не совпал",
+                _reply(form, error=_ERR_TRANSACTION, note="Transaction does not exist"),
+            )
 
         if action == _PREPARE:
             # "Yes, this order exists and the amount matches." No money yet.

@@ -21,6 +21,7 @@ tied to a row even if one of the two goes missing.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 
 import httpx
@@ -66,6 +67,8 @@ def _periodicity(extra: dict) -> str:
             return value
     return "MONTHLY"
 
+
+logger = logging.getLogger(__name__)
 
 class LavaTopProvider(ProviderDefaults):
     slug = "lavatop"
@@ -163,6 +166,23 @@ class LavaTopProvider(ProviderDefaults):
         contract = event.get("contractId") or event.get("parentContractId")
         return PaymentRef(provider_payment_id=str(contract) if contract else None)
 
+    def error_body(self, *, form: dict[str, str], raw_body: bytes, found: bool) -> tuple[str, str] | None:
+        """Событие без нашего платежа подтверждаем кодом 200.
+
+        Возвраты (`refund.success`) и чарджбэки приходят в другой структуре и без
+        `contractId`, и привязать их к платежу нечем. На 4xx/5xx lava.top повторяет
+        доставку 19 раз; такие события разбираются вручную (deploy/runbook.md).
+        """
+        if found:
+            return None
+        try:
+            event = json.loads(raw_body or b"{}")
+            kind = str(event.get("eventType") or event.get("event_type") or "")
+        except (json.JSONDecodeError, AttributeError):
+            return None
+        logger.warning("lava.top event %r has no payment of ours attached", kind)
+        return "{}", "application/json"
+
     async def verify_webhook(
         self,
         *,
@@ -218,7 +238,7 @@ class LavaTopProvider(ProviderDefaults):
     ) -> WebhookResult:
         headers = self._headers(credentials)
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(f"{_BASE}/api/v1/invoices/{contract_id}", headers=headers)
+            response = await client.get(f"{_BASE}/api/v2/invoices/{contract_id}", headers=headers)
         if response.status_code >= 400:
             raise ProviderError(f"lava.top: {_error(response)}")
 

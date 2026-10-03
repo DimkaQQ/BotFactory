@@ -298,17 +298,22 @@ class IokaProvider(ProviderDefaults):
         payment = _unwrap(paid) or (paid if isinstance(paid, dict) else {})
         status = str(payment.get("status") or "").upper()
 
-        if status == "APPROVED":
-            # Under AUTO this is a real charge; the guard is here because a
-            # shop can still have MANUAL configured at the acquirer level.
-            captured = payment.get("captured_amount")
-            if isinstance(captured, int) and captured <= 0:
-                return WebhookResult(
-                    status=PaymentStatus.pending,
-                    provider_payment_id=str(order_id),
-                    meta={"decline": "деньги только заблокированы, а не списаны"},
-                )
+        if status == "CAPTURED":
+            # Списано — это и есть оплата (при AUTO платёж сразу попадает сюда).
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(order_id))
+
+        if status == "APPROVED":
+            # APPROVED — холд: деньги заблокированы, но не списаны (ioka сама спишет
+            # через 48 часов, если не подтвердить). Товар за холд не выдаём, пока не
+            # видно списанной суммы.
+            captured = payment.get("captured_amount")
+            if isinstance(captured, int) and captured > 0:
+                return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(order_id))
+            return WebhookResult(
+                status=PaymentStatus.pending,
+                provider_payment_id=str(order_id),
+                meta={"decline": "деньги только заблокированы, а не списаны"},
+            )
 
         if status == "DECLINED":
             error = payment.get("error") or {}
@@ -364,10 +369,11 @@ class IokaProvider(ProviderDefaults):
             return WebhookResult(status=PaymentStatus.failed, provider_payment_id=remote_id)
         if status in _PENDING:
             return WebhookResult(status=PaymentStatus.pending, provider_payment_id=remote_id)
-        # An unfamiliar status is not a sale. Said out loud rather than
-        # guessed at, so a new one shows up in the log instead of silently
-        # counting as "not paid forever".
-        raise ProviderError(f"ioka: неизвестный статус заказа {status!r}")
+        # An unfamiliar status is not a sale; it is logged so a new one is noticed.
+        # Не теряем оплату из-за незнакомого статуса: ошибка (400) заставила бы ioka
+        # повторять уведомление, а продавец остался бы без заказа.
+        logger.warning("ioka: неизвестный статус заказа %r — считаю платёж ещё не завершённым", status)
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=remote_id)
 
 
 def _unwrap(payload) -> dict | None:

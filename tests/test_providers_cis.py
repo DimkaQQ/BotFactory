@@ -21,6 +21,7 @@ import uuid
 import httpx
 import pytest
 
+from app.models.payment import PaymentStatus
 from app.services.payments import get_provider
 from app.services.payments.base import CheckoutRequest, ProviderError
 
@@ -954,14 +955,15 @@ async def test_ioka_refuses_an_order_paid_for_less(mock_http):
         )
 
 
-async def test_ioka_says_so_rather_than_guessing_at_a_status_it_does_not_know(mock_http):
-    """A status nobody has seen before must show up in the log, not settle
-    silently into "not paid" for the rest of time."""
-    with mock_http(ioka_api(status="SOMETHING_NEW")), pytest.raises(ProviderError, match="SOMETHING_NEW"):
-        await get_provider("ioka").check_status(
+async def test_ioka_does_not_lose_a_payment_over_a_status_it_does_not_know(mock_http):
+    """Незнакомый статус — не оплата и не ошибка: платёж остаётся в ожидании, а в логе
+    остаётся предупреждение. Ошибка (400) заставляла ioka повторять уведомление."""
+    with mock_http(ioka_api(status="SOMETHING_NEW")):
+        result = await get_provider("ioka").check_status(
             credentials=IOKA_CREDS, amount_minor=99000, invoice_no=4242,
             payment_id=PAYMENT_ID, provider_payment_id=IOKA_ORDER_ID, meta={"is_test": True},
         )
+    assert result.status == PaymentStatus.pending
 
 
 async def test_ioka_finds_the_order_by_our_own_id_when_theirs_was_never_stored(mock_http):
@@ -1044,3 +1046,37 @@ async def test_click_cancelled_on_its_side_is_answered_with_minus_nine():
     )
     assert result.status.value == "failed"
     assert json.loads(result.response_body)["error"] == -9
+
+
+async def _click_error(form, meta=None):
+    try:
+        await get_provider("click").verify_webhook(
+            headers={}, raw_body=b"", form=form, credentials=CLICK_CREDS, amount_minor=99000,
+            invoice_no=4242, payment_id=PAYMENT_ID, provider_payment_id=None, meta=meta or {},
+        )
+    except ProviderError as exc:
+        return json.loads(exc.body)["error"]
+    return 0
+
+
+async def test_click_refuses_an_already_paid_order_with_minus_four():
+    assert await _click_error(click_form("0"), meta={"_status": "paid"}) == -4
+    assert await _click_error(click_form("0"), meta={"_status": "pending"}) == 0
+
+
+async def test_click_complete_with_a_foreign_prepare_id_is_minus_six():
+    assert await _click_error(click_form("1", prepare_id="9999")) == -6
+    assert await _click_error(click_form("1", prepare_id="4242")) == 0
+
+
+def test_tbank_signs_booleans_as_lowercase_words_and_reversed_is_not_a_refund():
+    from app.services.payments import tbank
+
+    assert tbank._as_text(True) == "true" and tbank._as_text(False) == "false" and tbank._as_text(5) == "5"
+    assert "REVERSED" in tbank._FAILED and "REVERSED" not in tbank._REFUNDED
+
+
+def test_paymaster_reads_the_saved_card_from_payment_token():
+    from app.services.payments.paymaster import PayMasterProvider
+
+    assert PayMasterProvider._token_id({"paymentToken": {"id": "tok_1", "expires": "x"}}) == "tok_1"

@@ -128,7 +128,7 @@ class FreedomPayProvider(ProviderDefaults):
         }
         if request.extra.get("subscription"):
             params["pg_recurring_start"] = "1"
-            # How long the profile stays chargeable, in days. Asked for a
+            # How long the profile stays chargeable, in months (per the provider docs: 1..156; units still worth confirming). Asked for a
             # good deal longer than one period so a subscription is not
             # silently cut off at the first renewal; Freedom Pay caps it at
             # the card's own expiry anyway.

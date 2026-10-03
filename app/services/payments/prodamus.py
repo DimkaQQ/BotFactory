@@ -112,7 +112,19 @@ def _flatten(data: dict) -> list[tuple[str, str]]:
 
 # Everything else Prodamus may report — "pending", "hold", a blank — means
 # the payment is still in play and must not be written off.
-_FAILED = {"failed", "fail", "canceled", "cancelled", "rejected", "error", "expired"}
+_FAILED = {"failed", "fail", "canceled", "cancelled", "order_canceled", "rejected", "error", "expired"}
+
+
+def _notification_body(headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> str:
+    """Тело уведомления как строка `ключ=значение&…`.
+
+    По документации Prodamus шлёт `multipart/form-data`: сырое тело тогда не
+    разобрать как urlencoded, но роутер уже собрал поля в `form` — с теми же
+    плоскими ключами вида `products[0][name]`. Обычный urlencoded идёт как есть.
+    """
+    if "multipart" in (headers.get("content-type") or "").lower() and form:
+        return urlencode(list(form.items()))
+    return raw_body.decode("utf-8", "replace")
 
 
 class ProdamusProvider(ProviderDefaults):
@@ -189,7 +201,7 @@ class ProdamusProvider(ProviderDefaults):
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
         try:
-            data = parse_form(raw_body.decode("utf-8", "replace"))
+            data = parse_form(_notification_body(headers, raw_body, form))
         except ProviderError:
             return PaymentRef()
         try:
@@ -219,7 +231,7 @@ class ProdamusProvider(ProviderDefaults):
         if not received:
             raise ProviderError("Prodamus: уведомление без заголовка Sign")
 
-        data = parse_form(raw_body.decode("utf-8", "replace"))
+        data = parse_form(_notification_body(headers, raw_body, form))
         if not hmac.compare_digest(sign(data, secret), received):
             raise ProviderError("Prodamus: подпись уведомления не совпала")
 

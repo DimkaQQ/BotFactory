@@ -129,7 +129,8 @@ async def payment_callback(provider_slug: str, request: Request, db: AsyncSessio
             invoice_no=payment.invoice_no,
             payment_id=payment.id,
             provider_payment_id=payment.provider_payment_id,
-            meta=payment.meta or {},
+            # `_status` — текущее состояние заказа у нас: Click и Payme различают «уже оплачено».
+            meta={**(payment.meta or {}), "_status": payment.status.value},
             currency=payment.currency,
         )
     except ProviderError as exc:

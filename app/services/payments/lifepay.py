@@ -96,7 +96,12 @@ class LifePayProvider(ProviderDefaults):
             event = json.loads(raw_body or b"{}")
         except json.JSONDecodeError:
             event = form or {}
-        number = event.get("number") or (event.get("data") or {}).get("number")
+        # У возврата свой `number`, а номер исходного платежа — в `original_number`
+        # (по документации LIFE PAY): ищем платёж по нему.
+        if str(event.get("type") or "").lower() == "refund" and event.get("original_number"):
+            number = event.get("original_number")
+        else:
+            number = event.get("number") or (event.get("data") or {}).get("number")
         return PaymentRef(provider_payment_id=str(number)) if number else PaymentRef()
 
     async def verify_webhook(
@@ -146,7 +151,11 @@ class LifePayProvider(ProviderDefaults):
             raise ProviderError(f"LIFE PAY: {response.text[:200]}")
 
         payload = response.json()
-        data = payload.get("data") or {}
+        # По документации ответ `/bill/status` — словарь `{number: {status, msg}}`;
+        # на случай обёртки `data` разбираем и её, и «плоский» вид.
+        root = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        entry = root.get(str(number)) if isinstance(root.get(str(number)), dict) else None
+        data = entry if entry is not None else (root if "status" in root else {})
         status = data.get("status")
 
         if status in _SUCCESS:

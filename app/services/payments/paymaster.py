@@ -108,6 +108,10 @@ class PayMasterProvider(ProviderDefaults):
     @staticmethod
     def _token_id(payment: dict) -> str:
         """The saved-card handle, wherever this response happens to put it."""
+        # По документации PayMaster в деталях платежа токен лежит в `paymentToken{id}`.
+        saved = payment.get("paymentToken")
+        if isinstance(saved, dict) and saved.get("id"):
+            return str(saved["id"])
         for holder in (payment.get("paymentData") or {}, payment):
             token = holder.get("token")
             if isinstance(token, dict) and token.get("id"):

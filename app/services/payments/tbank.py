@@ -48,15 +48,25 @@ _UNSIGNED = {"Token", "Receipt", "DATA", "Shops", "Items"}
 #: money is held, not taken — handing over goods for a hold would be giving
 #: them away to anyone who can cancel the authorisation.
 _PAID = {"CONFIRMED"}
-_FAILED = {"REJECTED", "CANCELED", "DEADLINE_EXPIRED", "AUTH_FAIL"}
-_REFUNDED = {"REFUNDED", "PARTIAL_REFUNDED", "REVERSED", "PARTIAL_REVERSED"}
+# REVERSED — отмена холда (деньги не списывались), поэтому это не возврат, а неуспех.
+_FAILED = {"REJECTED", "CANCELED", "DEADLINE_EXPIRED", "AUTH_FAIL", "REVERSED", "PARTIAL_REVERSED"}
+_REFUNDED = {"REFUNDED", "PARTIAL_REFUNDED"}
+
+
+def _as_text(value) -> str:
+    """Булевы в подписи — строки `true`/`false` (как в документации Т-Банка), а не `True`."""
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    return str(value)
 
 
 def _token(payload: dict, password: str) -> str:
     values = {key: value for key, value in payload.items() if key not in _UNSIGNED}
     values = {key: value for key, value in values.items() if not isinstance(value, (dict, list))}
     values["Password"] = password
-    joined = "".join(str(values[key]) for key in sorted(values))
+    joined = "".join(_as_text(values[key]) for key in sorted(values))
     return hashlib.sha256(joined.encode()).hexdigest()
 
 
@@ -116,6 +126,9 @@ class TBankProvider(ProviderDefaults):
                 # Kopecks, which is what we store anyway.
                 "Amount": request.amount_minor,
                 "OrderId": str(request.payment_id),
+                # Одностадийная оплата: без этого схему задаёт терминал, а на двухстадийном
+                # платёж навсегда остался бы AUTHORIZED (мы не вызываем Confirm).
+                "PayType": "O",
                 "Description": (request.description or "Оплата")[:250],
                 "SuccessURL": request.return_url,
                 "FailURL": request.return_url,
@@ -238,6 +251,7 @@ class TBankProvider(ProviderDefaults):
             {
                 "Amount": amount_minor,
                 "OrderId": str(payment_id),
+                "PayType": "O",
                 "Description": (description or "Продление подписки")[:250],
                 **({"CustomerKey": setup.customer} if setup.customer else {}),
             },

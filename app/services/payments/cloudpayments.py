@@ -81,7 +81,9 @@ class CloudPaymentsProvider(ProviderDefaults):
             raise ProviderError("CloudPayments: не заполнены Public ID или API-пароль")
         return public_id, secret
 
-    async def _call(self, path: str, body: dict, credentials: dict[str, str]) -> dict:
+    async def _call(
+        self, path: str, body: dict, credentials: dict[str, str], headers: dict[str, str] | None = None
+    ) -> dict:
         """The raw call, without treating a business refusal as an error.
 
         `_post` below turns `Success: false` into a ProviderError, which is
@@ -92,7 +94,7 @@ class CloudPaymentsProvider(ProviderDefaults):
         """
         auth = self._auth(credentials)
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(f"{_BASE}{path}", json=body, auth=auth)
+            response = await client.post(f"{_BASE}{path}", json=body, auth=auth, headers=headers or {})
         if response.status_code >= 400:
             raise ProviderError(f"CloudPayments: HTTP {response.status_code}")
         try:
@@ -158,11 +160,22 @@ class CloudPaymentsProvider(ProviderDefaults):
     ) -> WebhookResult:
         _public_id, secret = self._auth(credentials)
 
-        received = (
-            headers.get("content-hmac") or headers.get("x-content-hmac") or ""
-        ).strip()
-        expected = base64.b64encode(hmac.new(secret.encode(), raw_body, hashlib.sha256).digest()).decode()
-        if not received or not hmac.compare_digest(received, expected):
+        # Уведомление несёт два заголовка: `Content-HMAC` и `X-Content-HMAC`. Чем
+        # они отличаются (HMAC от закодированного и от раскодированного тела),
+        # документация коротко не говорит, поэтому подходит любой из них и
+        # любой из двух вариантов тела.
+        from urllib.parse import unquote_plus
+
+        received = [
+            value.strip()
+            for value in (headers.get("content-hmac"), headers.get("x-content-hmac"))
+            if value and value.strip()
+        ]
+        variants = [raw_body, unquote_plus(raw_body.decode("utf-8", "replace")).encode()]
+        expected = [
+            base64.b64encode(hmac.new(secret.encode(), body, hashlib.sha256).digest()).decode() for body in variants
+        ]
+        if not any(hmac.compare_digest(got, want) for got in received for want in expected):
             raise ProviderError("CloudPayments: подпись уведомления не совпала")
 
         # The header proves who sent it; this proves what it says. Both,
@@ -225,8 +238,16 @@ class CloudPaymentsProvider(ProviderDefaults):
             "Token": setup.token,
             "InvoiceId": str(payment_id),
             "Description": description[:250] or "Продление подписки",
+            # По документации CloudPayments эти поля обязательны для списания по токену:
+            # инициатор — магазин (0), платёж плановый (1).
+            "TrInitiatorCode": 0,
+            "PaymentScheduled": 1,
         }
-        parsed = await self._call("/payments/tokens/charge", body, credentials)
+        # X-Request-ID: повтор запроса с тем же ключом (час) вернёт тот же результат,
+        # а не спишет деньги второй раз.
+        parsed = await self._call(
+            "/payments/tokens/charge", body, credentials, headers={"X-Request-ID": str(payment_id)}
+        )
         model = parsed.get("Model") or {}
         transaction_id = model.get("TransactionId")
         remote_id = str(transaction_id) if transaction_id is not None else None
