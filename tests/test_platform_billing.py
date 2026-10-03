@@ -364,7 +364,7 @@ def _recorder(sink: list[tuple[uuid.UUID, str]]):
     on whatever another test (or a leftover row) happened to leave behind.
     """
 
-    async def remember(db, bot, text):
+    async def remember(db, bot, text, **_):
         sink.append((bot.id, text))
 
     return remember
@@ -393,7 +393,7 @@ async def test_the_grace_notice_does_not_shave_off_a_day(
 
     told: list[str] = []
 
-    async def remember(db_, bot_, message):
+    async def remember(db_, bot_, message, **_):
         told.append(message)
 
     monkeypatch.setattr(platform_billing, "_tell_owner", remember)

@@ -806,7 +806,7 @@ async def _notify_owner_of_stuck_delivery(
                 f"Свяжись с покупателем и восстанови блок «Выдача»."
             )
         await instance.send_message(owner.telegram_user_id, text)
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.info("Could not warn the owner about stuck payment %s", payment.id, exc_info=True)
 
 
@@ -953,7 +953,7 @@ async def _notify_owner_gave_up(db: AsyncSession, payment: Payment) -> None:
             f"и проверь блок «Выдача» (чаще всего дело в слишком длинном тексте или в ссылке "
             f"на файл, которую Telegram не может скачать).",
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.info("Could not tell the owner we gave up on payment %s", payment.id, exc_info=True)
 
 
@@ -1177,7 +1177,7 @@ async def _notify_owner_of_claim(db: AsyncSession, payment: Payment) -> None:
             f"Покупатель говорит, что оплатил. Деньги пришли?",
             reply_markup=keyboard,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.info("Could not notify the owner about claimed payment %s", payment.id, exc_info=True)
 
 
@@ -1196,6 +1196,26 @@ async def _owner_of(db: AsyncSession, bot_id) -> tuple[int, object] | None:
     if instance is None:
         return None
     return owner.telegram_user_id, instance
+
+
+async def tell_owner(owner_id: int, shop_bot, text: str) -> None:
+    """Написать владельцу магазина.
+
+    Сначала через мета-бота — тем же путём, что и напоминания об оплате тарифа:
+    владелец читает там свой кабинет, а при входе через сайт он разрешил
+    боту писать ему. Бот магазина может писать только тем, кто ему уже
+    писал, поэтому он — запасной путь.
+    """
+    from app.services import platform_billing
+
+    meta = platform_billing._meta_bot()
+    if meta is not None:
+        try:
+            await meta.send_message(owner_id, text)
+            return
+        except Exception:  # noqa: BLE001
+            logger.info("Meta bot could not reach owner %s", owner_id, exc_info=True)
+    await shop_bot.send_message(owner_id, text)
 
 
 async def _notify_owner_of_sale(db: AsyncSession, payment: Payment) -> None:
@@ -1251,8 +1271,8 @@ async def _notify_owner_of_sale(db: AsyncSession, payment: Payment) -> None:
         if subscription is not None:
             until = dates.day(subscription.current_period_end)
             lines.append(f"Доступ оплачен до {until}")
-        await instance.send_message(owner_id, "\n".join(lines))
-    except Exception:
+        await tell_owner(owner_id, instance, "\n".join(lines))
+    except Exception:  # noqa: BLE001
         logger.info("Could not notify the owner about paid order %s", payment.id, exc_info=True)
 
 
@@ -1331,7 +1351,7 @@ async def reject_by_owner(db: AsyncSession, payment: Payment) -> None:
                 payment.chat_id,
                 "Пока не видим оплату по этому заказу. Если платёж прошёл — напиши продавцу, разберёмся.",
             )
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.info("Could not tell the buyer that payment %s was rejected", payment.id, exc_info=True)
 
 

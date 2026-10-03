@@ -501,7 +501,7 @@ async def _tell_owner(db: AsyncSession, bot_id: uuid.UUID, message: str) -> None
         found = await payment_service._owner_of(db, bot_id)
         if found is not None:
             owner_id, instance = found
-            await instance.send_message(owner_id, message)
+            await payment_service.tell_owner(owner_id, instance, message)
 
 
 async def _remember_poll(db: AsyncSession | None, block: BotBlock, sent) -> None:

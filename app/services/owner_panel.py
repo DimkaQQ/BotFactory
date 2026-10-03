@@ -52,6 +52,24 @@ async def client_by_telegram(db: AsyncSession, telegram_user_id: int) -> Client 
     return result.scalar_one_or_none()
 
 
+async def accept_terms(db: AsyncSession, telegram_user_id: int, full_name: str | None) -> Client:
+    """Записать, что человек принял действующую редакцию условий (кнопка в
+    мета-боте). Аккаунта может ещё не быть — тогда он создаётся, как при первом
+    входе в конструктор."""
+    from app.routers.legal import REVISION
+
+    client = await client_by_telegram(db, telegram_user_id)
+    if client is None:
+        client = Client(telegram_user_id=telegram_user_id, full_name=full_name)
+        db.add(client)
+    if client.terms_version != REVISION:
+        client.terms_version = REVISION
+        client.terms_accepted_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(client)
+    return client
+
+
 async def list_cards(db: AsyncSession, client: Client) -> list[BotCard]:
     """Все боты клиента с цифрами. Один проход по каждой таблице, а не запрос
     на бота: у владельца до двадцати ботов, и меню не должно тормозить."""

@@ -68,7 +68,18 @@ def _constructor_button(path: str = "", text: str = "🛠 Открыть кон�
 # ---------------------------------------------------------------- экраны
 
 
-def main_screen(name: str, cards: list[owner_panel.BotCard]) -> tuple[str, InlineKeyboardMarkup]:
+def _needs_terms(client: Client | None) -> bool:
+    """Показывать ли «Принимаю»: документы опубликованы, а человек их ещё не принимал."""
+    if not get_settings().legal_ready:
+        return False
+    from app.routers.legal import REVISION
+
+    return client is None or client.terms_version != REVISION
+
+
+def main_screen(
+    name: str, cards: list[owner_panel.BotCard], client: Client | None = None
+) -> tuple[str, InlineKeyboardMarkup]:
     greeting = f"🏭 <b>Bot Factory</b>\nПривет, {_esc(name)}!\n\n"
     if cards:
         total = owner_panel.totals(cards)
@@ -80,8 +91,21 @@ def main_screen(name: str, cards: list[owner_panel.BotCard]) -> tuple[str, Inlin
             "Выбери, что показать 👇"
         )
     else:
-        body = "У тебя пока нет ботов. Собери первого в конструкторе — это занимает пару минут 👇"
+        body = (
+            "Здесь собирают Telegram-ботов без программирования: бот сам продаёт, принимает оплату и выдаёт "
+            "купленное. Собирать и пробовать бесплатно — платишь только за запуск.\n\n"
+            "У тебя пока нет ботов. Собери первого в конструкторе — это занимает пару минут 👇"
+        )
+    needs_terms = _needs_terms(client)
+    if needs_terms:
+        base = get_settings().public_base_url.rstrip("/")
+        body += (
+            f'\n\nПродолжая, ты принимаешь <a href="{base}/legal/offer">оферту</a> и '
+            f'<a href="{base}/legal/privacy">политику конфиденциальности</a>.'
+        )
     rows = [[_constructor_button()]]
+    if needs_terms:
+        rows.append([InlineKeyboardButton(text="✅ Принимаю условия", callback_data="m:terms")])
     if cards:
         rows.append([InlineKeyboardButton(text="🤖 Мои боты", callback_data="m:bots")])
     rows.append(
@@ -144,7 +168,8 @@ def settings_screen(client: Client | None) -> tuple[str, InlineKeyboardMarkup]:
     text = (
         "⚙️ <b>Настройки</b>\n\n"
         f"🔔 Уведомления о продажах: <b>{'включены' if notify else 'выключены'}</b>\n"
-        "Когда кто-то оплатил, я пришлю сюда сообщение: кто и что купил.\n\n"
+        "Когда кто-то оплатил, я пришлю сюда сообщение: кто и что купил. Если выключить, "
+        "заказы всё равно видны в «Моих ботах» и в конструкторе.\n\n"
         "🚪 «Выйти везде» закрывает вход в конструктор на всех устройствах. "
         "Боты, клиенты и заказы остаются на месте."
     )
@@ -212,7 +237,7 @@ async def _main_for(user_id: int, name: str) -> tuple[str, InlineKeyboardMarkup]
     async with AsyncSessionLocal() as db:
         client = await owner_panel.client_by_telegram(db, user_id)
         cards = await owner_panel.list_cards(db, client) if client else []
-    return main_screen(name, cards)
+    return main_screen(name, cards, client)
 
 
 # ---------------------------------------------------------------- команды
@@ -240,11 +265,19 @@ async def on_button(query: CallbackQuery, bot: Bot) -> None:
 
         if data == "m:main":
             cards = await owner_panel.list_cards(db, client) if client else []
-            text, markup = main_screen(query.from_user.first_name or "друг", cards)
+            text, markup = main_screen(query.from_user.first_name or "друг", cards, client)
+
+        elif data == "m:terms":
+            client = await owner_panel.accept_terms(db, user_id, query.from_user.full_name)
+            cards = await owner_panel.list_cards(db, client)
+            toast = "Спасибо! Условия приняты ✅"
+            text, markup = main_screen(query.from_user.first_name or "друг", cards, client)
 
         elif data == "m:bots":
             cards = await owner_panel.list_cards(db, client) if client else []
-            text, markup = bots_screen(cards) if cards else main_screen(query.from_user.first_name or "друг", cards)
+            text, markup = (
+                bots_screen(cards) if cards else main_screen(query.from_user.first_name or "друг", cards, client)
+            )
 
         elif data.startswith(("b:", "bp:", "br:")):
             action, _, raw = data.partition(":")

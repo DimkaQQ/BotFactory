@@ -355,3 +355,28 @@ async def test_support_button_opens_a_dialog_and_the_next_message_reaches_the_ow
         support._dialogs.clear()
         get_settings.cache_clear()
         await tg.session.close()
+
+
+@pytest.mark.asyncio
+async def test_terms_are_offered_once_and_accepting_is_recorded(db: AsyncSession, owner: Client, meta_dp, monkeypatch):
+    from app.config import get_settings
+    from app.routers.legal import REVISION
+
+    monkeypatch.setattr(type(get_settings()), "legal_ready", property(lambda self: True))
+    owner.terms_version = None
+    await db.commit()
+
+    session = FakeSession()
+    tg = Bot("123456:AAAA-testtoken", session=session)
+    uid = owner.telegram_user_id
+
+    await _feed(meta_dp, tg, text_update(1, uid, 1, "/start"))
+    sent = session.of(SendMessage)[0]
+    assert "принимаешь" in sent.text
+    assert "✅ Принимаю условия" in dict(_buttons(sent))
+
+    await _feed(meta_dp, tg, button_update(2, uid, "m:terms"))
+    await db.refresh(owner)
+    assert owner.terms_version == REVISION and owner.terms_accepted_at is not None
+    assert "принимаешь" not in session.of(EditMessageText)[-1].text
+    await tg.session.close()

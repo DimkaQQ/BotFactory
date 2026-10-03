@@ -239,8 +239,8 @@ async def _notify_once(db: AsyncSession, bot: BotModel, stage: int, text: str) -
     if bot.billing_notice_stage >= stage:
         return
     try:
-        await _tell_owner(db, bot, text)
-    except Exception:
+        await _tell_owner(db, bot, text, renew=True)
+    except Exception:  # noqa: BLE001
         # Left unrecorded on purpose: unreachable today, reachable tomorrow
         # (the owner opens the bot), and the next sweep will try again.
         logger.warning("Could not reach the owner of bot %s about billing", bot.id, exc_info=True)
@@ -362,7 +362,7 @@ def _name(bot: BotModel) -> str:
     return f"«{bot.name or 'Новый бот'}»"
 
 
-async def _tell_owner(db: AsyncSession, bot: BotModel, text: str) -> None:
+async def _tell_owner(db: AsyncSession, bot: BotModel, text: str, *, renew: bool = False) -> None:
     """Through the constructor's own bot, not the client's.
 
     The client's bot is the wrong messenger twice over: it is the thing
@@ -379,7 +379,16 @@ async def _tell_owner(db: AsyncSession, bot: BotModel, text: str) -> None:
     if meta is None:
         logger.warning("No meta bot token — bot %s owner cannot be told about billing", bot.id)
         return
-    await meta.send_message(owner.telegram_user_id, text)
+    markup = None
+    if renew:
+        # Кнопка ведёт прямо в этого бота в конструкторе, где лежит оплата.
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+        url = get_settings().webapp_url.rstrip("/") + f"/bot/{bot.id}/"
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🔄 Продлить", web_app=WebAppInfo(url=url))]]
+        )
+    await meta.send_message(owner.telegram_user_id, text, reply_markup=markup)
 
 
 #: One shared instance rather than one per message. The sweep runs hourly

@@ -100,7 +100,7 @@ def put(bot_id: uuid.UUID, instance: Bot, *, source: str | None = None) -> None:
 async def _close_quietly(instance: Bot) -> None:
     try:
         await instance.session.close()
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.debug("Could not close a replaced bot session", exc_info=True)
 
 
@@ -184,7 +184,7 @@ async def refresh_webhook(bot_id: uuid.UUID) -> None:
             # out by exactly this call, that took the whole fleet off the air.
             token = decrypt_token(bot_row.bot_token_encrypted)
         await register_webhook(bot_id, token)
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.warning("Could not refresh the webhook for bot %s", bot_id, exc_info=True)
 
 
