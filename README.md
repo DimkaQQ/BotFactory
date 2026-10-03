@@ -437,3 +437,5 @@ bandit -q -r app meta_bot -ll          # статический анализ б�
 Порядок действий при спаме, запросах на удаление данных (GDPR), возвратах и
 аварии — в [`deploy/runbook.md`](deploy/runbook.md). Для блокировки аккаунта,
 выгрузки и удаления данных есть команды `python -m app.admin ban|unban|export|delete`.
+
+Масштабирование, плавное обновление и запасной план — в [`deploy/scaling.md`](deploy/scaling.md).

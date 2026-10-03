@@ -22,6 +22,9 @@ services:
     ports: !reset []
     mem_limit: 256m
 
+  worker:
+    mem_limit: 192m
+
   bot:
     mem_limit: 128m
 

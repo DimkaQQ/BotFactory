@@ -46,16 +46,45 @@ services:
     logging: *default-logging
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     env_file: .env
+    environment:
+      # Фоновые задачи ведёт сервис worker (ниже): api остаётся «чистым» и
+      # его можно запускать в нескольких экземплярах и обновлять по одному.
+      RUN_BACKGROUND: "false"
     # При остановке приложение дожидается до 25 с, чтобы не оборвать выдачу
     # товара на полпути (см. lifespan в app/main.py). Стандартные 10 с docker
     # убивали процесс раньше и на каждом обновлении резали такие выдачи.
     stop_grace_period: 40s
+    deploy:
+      replicas: ${API_REPLICAS:-1}
     ports:
-      - "127.0.0.1:8000:8000"  # loopback only: nginx/Caddy is the way in
+      # Только loopback: внутрь пускает nginx/Caddy. Диапазон портов — чтобы
+      # `--scale api=N` (до 10 экземпляров) не упирался в один занятый порт.
+      - "127.0.0.1:8000-8009:8000"
     volumes:
       # Directly-uploaded media (Settings.media_upload_dir, relative to the
       # image's /srv WORKDIR) — a named volume so uploads survive a
       # redeploy instead of vanishing with the container's writable layer.
+      - media_uploads:/srv/media_uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    logging: *default-logging
+    command: python -m app.worker
+    env_file: .env
+    environment:
+      RUN_BACKGROUND: "true"
+    stop_grace_period: 40s
+    healthcheck:
+      disable: true
+    volumes:
       - media_uploads:/srv/media_uploads
     depends_on:
       db:

@@ -57,6 +57,13 @@ def gdpr_section(settings) -> str:
     return f"""
 <h2>7. Your rights (GDPR and similar laws)</h2>
 <ul>
+  <li>Data minimisation. The service stores only what it cannot work without: your Telegram identifier and name,
+      the settings and scenarios of your bots, the log of orders and payments, and technical logs. We do not collect
+      addresses, phone numbers, documents, bank card data, advertising or behavioural profiles, and we do not sell
+      data.</li>
+  <li>The service is intended for users in the CIS and is not offered to consumers in the European Union. If you are
+      in the EU and use it anyway, your GDPR rights remain and the amount of data kept about you is the same:
+      minimal, as described above.</li>
   <li>The controller of your account data is {name}. For the data of a bot's buyers the controller is the
       bot owner, and {name} acts as processor (see
       <a href="/legal/data-processing?lang=en">Data Processing Terms</a>).</li>

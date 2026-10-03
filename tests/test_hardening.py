@@ -59,3 +59,31 @@ def test_xml_from_a_provider_cannot_expand_entities():
         with pytest.raises((DefusedXmlException, ProviderError)):
             parse(bomb)
 
+
+
+def test_background_tasks_can_be_moved_out_of_the_api(monkeypatch):
+    """api без фоновых задач (RUN_BACKGROUND=false) — основа плавного обновления: фоновую
+    работу ведёт отдельный worker, а api можно запускать в нескольких экземплярах."""
+    import asyncio
+
+    from fastapi import FastAPI
+
+    from app import main
+    from app.config import get_settings
+
+    started = []
+    monkeypatch.setattr(main, "start_background_tasks", lambda: started.append(1))
+
+    async def run(flag: str) -> None:
+        monkeypatch.setenv("RUN_BACKGROUND", flag)
+        get_settings.cache_clear()
+        try:
+            async with main.lifespan(FastAPI()):
+                pass
+        finally:
+            get_settings.cache_clear()
+
+    asyncio.run(run("false"))
+    assert started == []
+    asyncio.run(run("true"))
+    assert started == [1]

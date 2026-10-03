@@ -222,7 +222,45 @@ elif ! git diff --quiet "$RUNNING" HEAD -- migrations/versions 2>/dev/null; then
   warn "в этом обновлении есть миграции базы — автоматический откат кода будет невозможен"
 fi
 
-say "Перезапускаю (миграции применятся автоматически, пауза — секунды)"
+# Обновление api без перерыва: новые экземпляры поднимаются РЯДОМ со старыми,
+# и только когда они отвечают, старые останавливаются. Покупатели и платёжные
+# системы в это время получают ответы от тех, что живы (nginx раздаёт запросы
+# по всем экземплярам). Требует, чтобы миграции были совместимы со старым кодом
+# (правило — в deploy/ops.md); иначе вернёмся к обычному перезапуску ниже.
+roll_api() {
+  local want old new id status waited=0
+  want="$(env_get API_REPLICAS)"; want="${want:-1}"
+  old="$("${COMPOSE[@]}" ps -q api 2>/dev/null | sort)"
+  [ -n "$old" ] || return 1
+  [ "$MIGRATIONS_CHANGED" -eq 0 ] || return 1
+
+  say "Поднимаю новые экземпляры api рядом со старыми (без перерыва)"
+  API_REPLICAS=$((want * 2)) "${COMPOSE[@]}" up -d --no-deps --no-recreate api || return 1
+  new="$("${COMPOSE[@]}" ps -q api | sort | comm -13 <(printf '%s\n' "$old") -)"
+  [ -n "$new" ] || return 1
+
+  while :; do
+    local ok=1
+    for id in $new; do
+      status="$(docker inspect -f '{{.State.Health.Status}}' "$id" 2>/dev/null || echo none)"
+      [ "$status" = "healthy" ] || ok=0
+    done
+    [ "$ok" -eq 1 ] && break
+    waited=$((waited + 3)); [ "$waited" -le 180 ] || { warn "новые экземпляры api не стали healthy — оставляю старые"; docker rm -f $new >/dev/null; return 1; }
+    sleep 3
+  done
+
+  say "Новые экземпляры отвечают — останавливаю старые"
+  for id in $old; do docker stop -t 40 "$id" >/dev/null; docker rm "$id" >/dev/null; done
+  return 0
+}
+
+ROLLED=0
+if [ "$RESTART_ONLY" -ne 1 ] && [ "$MIGRATIONS_CHANGED" -eq 0 ]; then
+  roll_api && ROLLED=1 || warn "плавное обновление api не вышло — перезапускаю обычным способом"
+fi
+
+say "Перезапускаю остальное (миграции применятся автоматически)"
 "${COMPOSE[@]}" up -d
 
 say "Жду, пока API ответит на /health"
