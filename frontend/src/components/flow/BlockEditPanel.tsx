@@ -151,7 +151,7 @@ export function BlockEditPanel({
           {/* Any block that is just a message can also be sent to everyone —
               which is what «рассылка» on the landing page has always meant,
               and what the constructor had no way to do. */}
-          {canBroadcast && (
+          {canBroadcast && botPublished && (
             <div className="edit-panel__buttons">
               <p className="edit-panel__section-label">Разослать этот блок</p>
               <BroadcastButton botId={botId} blockId={block.id} published={Boolean(botPublished)} />

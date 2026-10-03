@@ -223,3 +223,17 @@ async def test_the_vat_number_appears_only_when_set(api, with_requisites, monkey
         assert "VAT: EE123456789" in (await api.get("/legal/offer?lang=en")).text
     finally:
         get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_governing_law_appears_only_when_the_country_is_set(api, with_requisites, monkeypatch):
+    ru = (await api.get("/legal/offer")).text
+    assert "Применимое право" not in ru
+
+    monkeypatch.setenv("LEGAL_COUNTRY", "Эстония")
+    get_settings.cache_clear()
+    ru = (await api.get("/legal/offer")).text
+    en = (await api.get("/legal/offer?lang=en")).text
+    assert "Применимое право и споры" in ru and "Эстония" in ru
+    assert "Governing law and disputes" in en and "Estonia" in en
+    assert "Автоматических списаний нет" in ru and "no automatic charges" in en

@@ -40,7 +40,10 @@ async def validate_bot_token(token: str) -> TelegramMe:
 
     token = token.strip()
     if not token or ":" not in token:
-        raise InvalidBotToken("Токен пустой или имеет неверный формат")
+        raise InvalidBotToken(
+            "Токен выглядит неверно. Он состоит из цифр, двоеточия и длинной строки, например 123456789:AAH… — "
+            "скопируй его целиком из сообщения @BotFather."
+        )
 
     api_base = get_settings().telegram_api_base_url or "https://api.telegram.org"
     url = f"{api_base.rstrip('/')}/bot{token}/getMe"
@@ -48,12 +51,19 @@ async def validate_bot_token(token: str) -> TelegramMe:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url)
     except httpx.HTTPError as exc:
-        raise InvalidBotToken(f"Не удалось связаться с Telegram API: {exc}") from exc
+        raise InvalidBotToken(
+            "Не получилось связаться с Telegram, чтобы проверить токен. Попробуй ещё раз через минуту."
+        ) from exc
 
     data = response.json()
     if not data.get("ok"):
-        description = data.get("description", "Неизвестная ошибка")
-        raise InvalidBotToken(f"Telegram отклонил токен: {description}")
+        description = str(data.get("description", ""))
+        if "unauthorized" in description.lower() or "not found" in description.lower():
+            raise InvalidBotToken(
+                "Telegram не узнал этот токен. Проверь, что скопировал его целиком, без пробелов. "
+                "Если ты пересоздавал токен в @BotFather, нужен новый — старый уже не работает."
+            )
+        raise InvalidBotToken(f"Telegram отклонил токен: {description or 'неизвестная ошибка'}")
 
     result = data["result"]
     if not result.get("is_bot"):

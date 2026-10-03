@@ -86,12 +86,21 @@ async def get_current_client(
 
     if authorization and authorization.lower().startswith("bearer "):
         token = authorization[len("bearer ") :].strip()
-        return await _client_from_session_token(token, db)
+        return _not_banned(await _client_from_session_token(token, db))
 
     if x_telegram_init_data:
-        return await _client_from_init_data(x_telegram_init_data, db)
+        return _not_banned(await _client_from_init_data(x_telegram_init_data, db))
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authentication")
+
+
+def _not_banned(client: Client) -> Client:
+    if client.banned_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Аккаунт заблокирован за нарушение правил сервиса. Если это ошибка — напишите в поддержку.",
+        )
+    return client
 
 
 async def get_owned_bot(

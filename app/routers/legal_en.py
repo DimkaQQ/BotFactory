@@ -73,6 +73,24 @@ def gdpr_section(settings) -> str:
 """
 
 
+_COUNTRIES_EN = {"Эстония": "Estonia", "Казахстан": "Kazakhstan", "Словакия": "Slovakia", "Кипр": "Cyprus"}
+
+
+def _law_section(s) -> str:
+    """Governing law and disputes — only when the provider's country is set."""
+    if not s.legal_country:
+        return ""
+    country = html.escape(_COUNTRIES_EN.get(s.legal_country, s.legal_country))
+    return (
+        "<h2>9. Governing law and disputes</h2>\n<ul>\n"
+        f"  <li>The contract is governed by the law of {country}.</li>\n"
+        "  <li>The parties first try to settle disputes by negotiation using the contacts below. If that fails, "
+        f"the dispute is heard by the competent court of {country}.</li>\n"
+        "  <li>This does not deprive a consumer User of the protection that mandatory rules of their country of "
+        "residence do not allow to be excluded by contract.</li>\n</ul>"
+    )
+
+
 def _offer(s) -> tuple[str, str]:
     launch, periodic = _prices_en()
     site = html.escape(s.public_base_url.rstrip("/"))
@@ -104,6 +122,9 @@ the use of the Telegram bot builder service available at {site}, on the terms be
       User's card data.</li>
   {agent}
   {agent_note}
+  <li>There are no automatic charges: the User's payment details are not stored, and renewal happens only on the
+      User's initiative. To stop renewing, simply do not pay for the next period; no separate notice is needed.</li>
+  <li>Confirmation of payment and documents for accounting can be requested from support.</li>
   <li>If a period of operation is not paid, the bot keeps running for {s.renewal_grace_days} more days and is then
       taken off the air. The scenario, settings and data are kept and remain available to the User.</li>
 </ul>
@@ -153,10 +174,12 @@ affiliated with Telegram Messenger Inc.</p>
 
 <h2>8. Acceptance and changes</h2>
 <ul>
-  <li>The contract is concluded when the User registers in the service.</li>
+  <li>The contract is concluded when the User accepts these terms: on logging in on the website, with the
+      "Accept terms" button in the @DragDropBot bot, or by starting to use the service.</li>
   <li>The Provider may change these terms by publishing a new revision at this address. Changes do not apply to a
       period already paid for.</li>
 </ul>
+{_law_section(s)}
 """
 
 
@@ -197,8 +220,10 @@ def _privacy(s) -> tuple[str, str]:
 <ul>
   <li>Data is stored on servers to which only the Provider has access.</li>
   <li>Payment keys and bot tokens are stored encrypted.</li>
-  <li>A copy of the database is made before service updates; copies are kept on the Provider's servers with
-      restricted access.</li>
+  <li>Copies of the database are made before service updates and on a schedule. The copies are encrypted; they
+      are kept on the Provider's servers and may be duplicated off the server, in a private Telegram chat accessible
+      only to the Provider. Copies are kept no longer than 90 days and are replaced by newer ones: deleted data
+      disappears from the copies as they are replaced.</li>
 </ul>
 
 <h2>5. Cookies and analytics</h2>

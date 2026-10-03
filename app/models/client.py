@@ -37,6 +37,10 @@ class Client(Base):
     #: это то, ради чего бот и ставят; выключают те, у кого заказов много.
     notify_sales: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
 
+    #: Аккаунт заблокирован за нарушение правил (см. deploy/runbook.md): вход в
+    #: конструктор закрыт, боты молчат, а снять паузу владелец сам не может.
+    banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     terms_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
     terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

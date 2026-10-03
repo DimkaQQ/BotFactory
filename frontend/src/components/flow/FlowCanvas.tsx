@@ -471,9 +471,12 @@ function Inner({
 
         {!disabled && bot.blocks.length === 0 && (
           <div className="flow-canvas__empty">
-            <p>
+            <p className="flow-canvas__empty-wide">
               Пока пусто. Добавь первый блок — кнопкой «+ Добавить блок» под холстом или из списка слева — и
               от него потянется стрелка «▶ Старт».
+            </p>
+            <p className="flow-canvas__empty-narrow">
+              Пока пусто. Нажми «+ Добавить блок» под холстом — и от него потянется стрелка «▶ Старт».
             </p>
           </div>
         )}

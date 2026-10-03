@@ -271,6 +271,18 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       found.push(`В блоке оплаты не заполнено: ${[...unfilled].join(", ")} — оплата не откроется.`);
     }
 
+    // Заглушки шаблонов вроде «[цена]» и «[название продукта]»: покупатель
+    // увидел бы их буквально, в квадратных скобках.
+    const placeholder = /\[[^\]\n]*[а-яё][^\]\n]*\]/i;
+    const withPlaceholder = bot.blocks.filter((b) =>
+      Object.values(b.content as Record<string, unknown>).some((v) => typeof v === "string" && placeholder.test(v)),
+    );
+    if (withPlaceholder.length > 0) {
+      found.push(
+        'В текстах остались заглушки в квадратных скобках, например «[цена]» — замени их своими словами, иначе покупатель увидит скобки.',
+      );
+    }
+
     const priceless = payBlocks.filter((b) => {
       const raw = String(b.content.price ?? "").replace(",", ".").trim();
       return !raw || Number(raw) <= 0;
@@ -775,8 +787,15 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           </div>
           <div>
             <p className="published-banner__title">
-              Бот работает: <strong>@{bot.telegram_bot_username}</strong>
+              {bot.paused ? "Бот на паузе: " : "Бот работает: "}
+              <strong>@{bot.telegram_bot_username}</strong>
             </p>
+            {bot.paused && (
+              <p className="published-banner__hint">
+                Новых диалогов нет, оплаты и выдача купленного продолжают работать. Включить обратно — в меню
+                @DragDropBot или в списке ботов.
+              </p>
+            )}
             <p className="published-banner__hint">
               Правки в сообщениях применяются сразу, без повторной публикации.
               {billing && paidUntilLabel(billing) && ` · ${paidUntilLabel(billing)}`}

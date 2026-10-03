@@ -2564,7 +2564,7 @@
        двенадцать блоков нельзя было прочитать. Страница на десктопе
        прокручивается, так что честнее дать редактору рабочий размер и
        прокрутить остальное, чем ужать редактор до нечитаемого. */
-    min-height: 440px;
+    min-height: max(440px, calc(100dvh - 280px));
     box-shadow: var(--shadow-elevated);
   }
 
@@ -2641,6 +2641,7 @@
 .landing-hero {
   position: relative;
   overflow: hidden;
+  border-radius: var(--radius-xl);
   padding: var(--sp-6) var(--sp-4) var(--sp-7);
   background: var(--tg-secondary-bg);
 }
@@ -5561,7 +5562,7 @@
 .landing-free__tag {
   padding: 2px 8px;
   border-radius: var(--radius-full);
-  background: var(--accent-success);
+  background: #047857;
   color: #fff;
   font-size: 11px;
   font-weight: 700;
@@ -5587,7 +5588,7 @@
 
 .landing-gateways {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: var(--sp-3);
 }
 
@@ -6497,17 +6498,94 @@ html {
   justify-content: center;
   gap: 2px var(--sp-3);
   margin-top: var(--sp-3);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.6;
-  opacity: 0.7;
 }
 
 .landing-footer__docs a {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   text-decoration: none;
 }
 
 .landing-footer__docs a:hover {
   color: var(--text-secondary);
   text-decoration: underline;
+}
+
+
+/* ---------- Правки по ревью дизайна ---------- */
+
+/* Подробная панель публикации на телефоне занимала три четверти экрана и
+   закрывала холст. Теперь она ограничена и прокручивается внутри себя. */
+@media (max-width: 959px) {
+  .screen--builder .app-footer {
+    max-height: 34dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .landing-features {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 720px) {
+  .landing-promise {
+    flex-wrap: nowrap;
+    font-size: 13px;
+  }
+}
+
+/* Подсказка пустого холста не должна лежать на узле «Старт». */
+.flow-canvas__empty {
+  align-items: flex-start;
+  padding-top: 18%;
+}
+
+.botfather-steps {
+  margin: var(--sp-2) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  background: var(--tg-secondary-bg);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.botfather-steps summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--tg-link);
+}
+
+.botfather-steps ol {
+  margin: var(--sp-2) 0 0;
+  padding-left: 1.2em;
+}
+
+.botfather-steps code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--tg-bg);
+  font-size: 12px;
+}
+
+.botfather-steps__note {
+  margin: var(--sp-2) 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.flow-canvas__empty-narrow {
+  display: none;
+}
+
+@media (max-width: 959px) {
+  .flow-canvas__empty-wide {
+    display: none;
+  }
+
+  .flow-canvas__empty-narrow {
+    display: block;
+  }
 }

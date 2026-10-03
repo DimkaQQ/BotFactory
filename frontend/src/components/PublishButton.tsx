@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { BotFatherSteps } from "./BotFatherSteps";
+
 interface Props {
   disabled?: boolean;
   /** Blocks nothing on the canvas leads to. Not an error — a half-wired
@@ -57,6 +59,7 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
       <p className="publish-form__hint">
         Вставь токен бота от <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather</a>
       </p>
+      <BotFatherSteps />
       {problems.length > 0 && (
         <div className="paywall__problems">
           <p className="paywall__problems-title">Перед публикацией стоит поправить:</p>

@@ -153,7 +153,7 @@ async def test_an_unreachable_owner_is_told_on_a_later_sweep(
     # Владелец открыл бота — следующий проход обязан достучаться.
     said = []
 
-    async def works(db_, bot_, text):
+    async def works(db_, bot_, text, **_):
         said.append(text)
 
     monkeypatch.setattr(platform_billing, "_tell_owner", works)

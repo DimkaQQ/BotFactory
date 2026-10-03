@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { type PublicationInfo, ApiError, builderApi, formatAmount } from "../api/builderApi";
 import { openExternal } from "../hooks/useTelegramWebApp";
+import { BotFatherSteps } from "./BotFatherSteps";
 
 interface Props {
   botId: string;
@@ -140,13 +141,9 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
       )}
 
       <p className="paywall__next">
-        Что дальше: после оплаты бот попросит токен. Получить его — минута: открой{" "}
-        <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">
-          @BotFather
-        </a>
-        , отправь ему <code>/newbot</code>, придумай имя — он пришлёт строку вида
-        <code> 123456789:AAH…</code>. Её и вставишь.
+        Что дальше: после оплаты бот попросит токен. Получить его — минута, если делать по шагам.
       </p>
+      <BotFatherSteps />
 
       {error && <p className="publish-form__error">{error}</p>}
 

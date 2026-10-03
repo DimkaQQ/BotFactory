@@ -167,6 +167,8 @@ async def set_paused(db: AsyncSession, client: Client, bot_id: uuid.UUID, paused
     bot = result.scalar_one_or_none()
     if bot is None:
         raise PauseError("Бот не найден.")
+    if client.banned_at is not None:
+        raise PauseError("Аккаунт заблокирован за нарушение правил. Напиши в поддержку.")
     if bot.status == BotStatus.draft:
         raise PauseError("Бот ещё не опубликован — ставить на паузу нечего.")
     if bot.status == BotStatus.disabled:
