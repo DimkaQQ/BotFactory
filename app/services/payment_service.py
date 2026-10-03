@@ -29,6 +29,7 @@ from app.config import get_settings
 from app.models.bot import Bot as BotModel
 from app.models.bot_block import BotBlock
 from app.models.payment import Payment, PaymentKind, PaymentStatus
+from app.models.subscription import SubscriptionStatus
 from app.services import dates
 from app.services import payments as payment_providers
 from app.services.payments import CheckoutRequest, ProviderError
@@ -1034,6 +1035,7 @@ async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: b
     a background task — see `deliver_later`.
     """
     await _remember(db, payment, result)
+    await _gateway_subscription_event(db, payment, result)
 
     if result.status == PaymentStatus.paid:
         if await mark_paid(db, payment, result.provider_payment_id):
@@ -1071,6 +1073,40 @@ async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: b
     return False
 
 
+async def _gateway_subscription_event(db: AsyncSession, payment: Payment, result) -> None:
+    """Событие подписки, которую ведёт сам шлюз (LiqPay): продление или отмена.
+
+    Продление приходит уведомлением по тому же заказу, который уже `paid`, — `mark_paid`
+    тут ничего бы не сделал, а период продлить надо. Адаптер помечает его
+    `gateway_renewal=<id платежа у шлюза>`; повтор того же id (шлюз повторяет уведомления)
+    период второй раз не двигает."""
+    notes = getattr(result, "meta", None) or {}
+    renewal = notes.get("gateway_renewal")
+    unsubscribed = notes.get("gateway_unsubscribed")
+    if not (renewal or unsubscribed) or payment.kind != PaymentKind.order:
+        return
+    from app.services import subscription_service
+
+    if renewal and result.status == PaymentStatus.paid and payment.status == PaymentStatus.paid:
+        await db.refresh(payment, with_for_update=True)  # два одинаковых уведомления подряд — одна запись
+        seen = list((payment.meta or {}).get("renewals_seen") or [])
+        if str(renewal) in seen:
+            await db.commit()  # только снять блокировку строки
+            return
+        payment.meta = {**(payment.meta or {}), "renewals_seen": (seen + [str(renewal)])[-50:]}
+        await db.commit()
+        try:
+            subscription = await subscription_service.start_or_extend(db, payment)
+            if subscription is not None:
+                await subscription_service._tell_them_it_renewed(db, subscription)
+        except Exception:
+            logger.exception("Payment %s: renewal %s settled but the subscription was not extended", payment.id, renewal)
+    elif unsubscribed:
+        subscription = await subscription_service.find_for_payment(db, payment)
+        if subscription is not None and subscription.status == SubscriptionStatus.active:
+            await subscription_service.cancel(db, subscription, why="отписка на стороне шлюза", keep_paid_period=True)
+
+
 async def _remember(db: AsyncSession, payment: Payment, result) -> None:
     """Write down what the adapter learned, before deciding what it means.
 
@@ -1093,6 +1129,8 @@ async def _remember(db: AsyncSession, payment: Payment, result) -> None:
     # checkout, and a shop that raised its price in the dashboard would see
     # the old one forever. Only an adapter that knows this applies sets it;
     # nothing infers it from an amount simply arriving smaller.
+    notes.pop("gateway_renewal", None)  # разовые сигналы адаптера, в платеже не хранятся
+    notes.pop("gateway_unsubscribed", None)
     charged = notes.pop("charged_amount_minor", None)
     if isinstance(charged, int) and charged > 0 and charged != payment.amount_minor:
         logger.info(

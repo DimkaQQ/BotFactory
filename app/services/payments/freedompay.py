@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import secrets
 import uuid
 
@@ -50,6 +51,8 @@ _BASE = "https://api.freedompay.kz"
 _BASE_KG = "https://api.freedompay.kg"
 #: The tail of our own callback address — what Freedom Pay signs its
 #: notification with. Must match the route in `payments.py`.
+logger = logging.getLogger(__name__)
+
 _CALLBACK_SCRIPT = "freedompay"
 #: Charging an existing profile. Without `.php`: that spelling belongs to
 #: Platron and the old Paybox, and the signature is built from the last URL
@@ -95,7 +98,7 @@ class FreedomPayProvider(ProviderDefaults):
     credential_fields = (
         CredentialField("merchant_id", "Merchant ID", "номер магазина из кабинета", secret=False),
         CredentialField("secret_key", "Секретный ключ", "секретный ключ мерчанта"),
-        CredentialField("country", "Страна магазина", "kz (по умолчанию) или kg — Кыргызстан", secret=False),
+        CredentialField("country", "Страна магазина", "kz (по умолчанию) или kg — Кыргызстан", secret=False, required=False),
     )
 
     @staticmethod
@@ -187,23 +190,58 @@ class FreedomPayProvider(ProviderDefaults):
 
         remote_id = (form.get("pg_payment_id") or "").strip() or None
         result = (form.get("pg_result") or "").strip()
-        if result != "1":
-            # 0 means the payment failed; anything else is not a settlement.
+
+        # Повтор уведомления (касса повторяет, пока не получит ответ) получает ТОТ ЖЕ
+        # ответ байт в байт: пересчитанный ответ с новой солью — уже не тот, что мы дали.
+        replies = dict((meta or {}).get("freedompay_replies") or {})
+        saved = replies.get(remote_id or "")
+        if saved:
             return WebhookResult(
-                status=PaymentStatus.failed if result == "0" else PaymentStatus.pending,
+                status=PaymentStatus(saved["status"]),
                 provider_payment_id=remote_id,
-                response_body=_ack(secret, "ok"),
+                response_body=saved["xml"],
                 response_content_type="application/xml",
             )
+
+        def answer(status: PaymentStatus, xml: str, **notes) -> WebhookResult:
+            if remote_id:
+                replies[remote_id] = {"status": status.value, "xml": xml}
+            return WebhookResult(
+                status=status,
+                provider_payment_id=remote_id,
+                response_body=xml,
+                response_content_type="application/xml",
+                meta={"freedompay_replies": replies, **notes},
+            )
+
+        if result != "1":
+            # 0 means the payment failed; anything else is not a settlement.
+            return answer(PaymentStatus.failed if result == "0" else PaymentStatus.pending, _ack(secret, "ok"))
 
         amount = (form.get("pg_amount") or "").strip()
         try:
             mismatch = abs(float(amount.replace(",", ".")) - amount_minor / 100) > 0.009
         except ValueError:
             mismatch = True
+        problem = ""
         if mismatch:
-            raise ProviderError(f"Freedom Pay: сумма не совпадает (пришло {amount})")
-        same_currency(self.title, form.get("pg_currency"), currency)
+            problem = f"сумма не совпадает (пришло {amount})"
+        elif (meta or {}).get("_status") == "paid":
+            problem = "заказ уже оплачен другим платежом"
+        else:
+            try:
+                same_currency(self.title, form.get("pg_currency"), currency)
+            except ProviderError as exc:
+                problem = str(exc)
+
+        if problem:
+            if (form.get("pg_can_reject") or "").strip() == "1":
+                # Платёж ещё можно отклонить: касса вернёт деньги покупателю сама.
+                logger.warning("Freedom Pay: платёж %s отклонён: %s", remote_id, problem)
+                return answer(PaymentStatus.pending, _ack(secret, "rejected", problem))
+            # Отклонить нельзя: принимаем ответом ok, но товар не выдаём — деньги вернуть вручную.
+            logger.error("Freedom Pay: безотзывный платёж %s не сошёлся (%s), нужен ручной возврат", remote_id, problem)
+            return answer(PaymentStatus.pending, _ack(secret, "ok"), freedompay_manual_refund=problem)
 
         notes = {}
         # The profile only ever arrives here. Both spellings are accepted:
@@ -213,15 +251,8 @@ class FreedomPayProvider(ProviderDefaults):
         profile = (form.get("pg_recurring_profile_id") or form.get("pg_recurring_profile") or "").strip()
         if profile:
             notes["freedompay_recurring_profile"] = profile
-
-        return WebhookResult(
-            status=PaymentStatus.paid,
-            provider_payment_id=remote_id,
-            # Freedom Pay retries until it gets a signed "ok" back.
-            response_body=_ack(secret, "ok"),
-            response_content_type="application/xml",
-            meta=notes,
-        )
+        # Freedom Pay retries until it gets a signed "ok" back.
+        return answer(PaymentStatus.paid, _ack(secret, "ok"), **notes)
 
     def recurring_setup(self, settled: dict) -> RecurringSetup | None:
         profile = (settled or {}).get("freedompay_recurring_profile")
@@ -286,10 +317,12 @@ class FreedomPayProvider(ProviderDefaults):
         return WebhookResult(status=PaymentStatus.pending, provider_payment_id=payload.get("pg_payment_id"))
 
 
-def _ack(secret: str, status: str) -> str:
+def _ack(secret: str, status: str, description: str = "") -> str:
     """The acknowledgement Freedom Pay wants: an XML response signed the same
     way, with our own script name."""
     params = {"pg_status": status, "pg_salt": secrets.token_hex(8)}
+    if description:
+        params["pg_description"] = description
     params["pg_sig"] = _sign(_CALLBACK_SCRIPT, params, secret)
     body = "".join(f"<{key}>{value}</{key}>" for key, value in params.items())
     return f"<?xml version='1.0' encoding='utf-8'?><response>{body}</response>"

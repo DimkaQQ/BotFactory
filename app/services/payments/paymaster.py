@@ -18,11 +18,16 @@ from app.services.payments.base import (
     CheckoutRequest,
     CredentialField,
     PaymentRef,
+    PayMethod,
+    PayObject,
     ProviderDefaults,
     ProviderError,
+    Receipt,
     RecurringMode,
     RecurringSetup,
+    Vat,
     WebhookResult,
+    receipt_from_credentials,
     same_currency,
 )
 
@@ -30,6 +35,36 @@ _BASE = "https://paymaster.ru/api/v2"
 _SETTLED = {"settled"}
 _REFUNDED = {"refunded", "partiallyrefunded", "partially_refunded"}
 _FAILED = {"cancelled", "rejected"}
+
+
+# Значения справочника PayMaster API v2 — CamelCase.
+PM_VAT = {
+    Vat.NONE: "None", Vat.VAT0: "Vat0", Vat.VAT5: "Vat5", Vat.VAT7: "Vat7", Vat.VAT10: "Vat10",
+    Vat.VAT22: "Vat22", Vat.VAT105: "Vat105", Vat.VAT107: "Vat107", Vat.VAT110: "Vat110", Vat.VAT122: "Vat122",
+}  # fmt: skip
+PM_METHOD = {
+    PayMethod.FULL_PREPAYMENT: "FullPrepayment", PayMethod.PREPAYMENT: "Prepayment",
+    PayMethod.ADVANCE: "Advance", PayMethod.FULL_PAYMENT: "FullPayment",
+}  # fmt: skip
+PM_OBJECT = {PayObject.SERVICE: "Service", PayObject.COMMODITY: "Commodity", PayObject.PAYMENT: "Payment"}
+
+
+def receipt_paymaster(r: Receipt) -> dict:
+    client = {k: (v.lstrip("+") if k == "phone" else v) for k, v in (("email", r.email), ("phone", r.phone)) if v}
+    return {
+        "client": client,
+        "items": [
+            {
+                "name": i.name,
+                "quantity": float(i.qty),
+                "price": float(i.price),
+                "vatType": PM_VAT[i.vat],
+                "paymentSubject": PM_OBJECT[i.obj],
+                "paymentMethod": PM_METHOD[i.method],
+            }
+            for i in r.items
+        ],
+    }
 
 
 class PayMasterProvider(ProviderDefaults):
@@ -50,6 +85,12 @@ class PayMasterProvider(ProviderDefaults):
     credential_fields = (
         CredentialField("merchant_id", "merchantId", "UUID сайта в PayMaster", secret=False),
         CredentialField("token", "Токен доступа", "из раздела «Токены доступа»"),
+        # Чек 54-ФЗ: передаётся, только если указана почта. Сумма чека всегда равна сумме платежа.
+        CredentialField("fiscal_email", "Почта для чеков (если нужна фискализация)", "email для чека 54-ФЗ", secret=False, required=False),
+        CredentialField(
+            "tax_system", "Система налогообложения", "osn, usn_income (по умолчанию), usn_income_outcome, esn, patent", secret=False, required=False),
+        CredentialField(
+            "default_vat", "Ставка НДС в чеке", "none (по умолчанию), vat0, vat5, vat7, vat10, vat22", secret=False, required=False),
     )
 
     @staticmethod
@@ -82,6 +123,9 @@ class PayMasterProvider(ProviderDefaults):
             },
             "testMode": request.is_test,
         }
+        receipt = receipt_from_credentials(request.credentials, request.description, request.amount_minor)
+        if receipt:
+            body["receipt"] = receipt_paymaster(receipt)
         if request.extra.get("subscription"):
             # PayMaster hosts the card form, so no PAN ever reaches us; what
             # comes back is a token id. `purpose` is the consent text the

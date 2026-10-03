@@ -156,8 +156,7 @@ class ProdamusProvider(ProviderDefaults):
         CredentialField(
             "webhook_secret",
             "Ключ уведомлений (если выдан отдельно)",
-            "необязательно: сервисный ключ, который выдают вместе с кодом sys",
-        ),
+            "необязательно: сервисный ключ, который выдают вместе с кодом sys", required=False),
     )
     block_fields = (
         CredentialField(

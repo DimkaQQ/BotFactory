@@ -49,6 +49,7 @@ _ERR_ORDER_NOT_FOUND = -31050
 _ERR_INVALID_AMOUNT = -31001
 _ERR_TRANSACTION_NOT_FOUND = -31003
 _ERR_CANNOT_PERFORM = -31008
+_ERR_ORDER_DELIVERED = -31007
 
 # Transaction states, likewise.
 _STATE_CREATED = 1
@@ -118,8 +119,7 @@ class PaymeProvider(ProviderDefaults):
         CredentialField("merchant_id", "ID кассы", "он же Merchant ID из кабинета", secret=False),
         CredentialField("key", "Ключ кассы", "тот, что для продакшена"),
         CredentialField(
-            "account_field", "Поле заказа", "по умолчанию order_id — как настроено в кассе", secret=False
-        ),
+            "account_field", "Поле заказа", "по умолчанию order_id — как настроено в кассе", secret=False, required=False),
     )
 
     @staticmethod
@@ -194,7 +194,7 @@ class PaymeProvider(ProviderDefaults):
             return self._perform(request_id, params, notes)
 
         if method == "CancelTransaction":
-            return self._cancel(request_id, params, notes)
+            return self._cancel(request_id, params, notes, delivered=bool((meta or {}).get("delivered_at")))
 
         if method == "CheckTransaction":
             if str(params.get("id") or "") != str(notes.get("id") or ""):
@@ -268,6 +268,10 @@ class PaymeProvider(ProviderDefaults):
             "transaction": remote_id,
             "create_time": created,
             "state": _STATE_CREATED,
+            # Для GetStatement: время создания у Payme, сумма и account как пришли в CreateTransaction.
+            "payme_time": int(params["time"]) if str(params.get("time") or "").isdigit() else created,
+            "amount": amount_minor,
+            "account": params.get("account") or {},
         }
         return _reply(
             _ok(request_id, {"create_time": created, "transaction": remote_id, "state": _STATE_CREATED}),
@@ -314,7 +318,7 @@ class PaymeProvider(ProviderDefaults):
             patch={**notes, "perform_time": performed, "state": _STATE_DONE},
         )
 
-    def _cancel(self, request_id, params: dict, notes: dict) -> WebhookResult:
+    def _cancel(self, request_id, params: dict, notes: dict, delivered: bool = False) -> WebhookResult:
         remote_id = str(params.get("id") or "")
         if not notes or str(notes.get("id") or "") != remote_id:
             raise PaymeRefusal(_fail(request_id, _ERR_TRANSACTION_NOT_FOUND), "Payme: транзакция не найдена")
@@ -326,6 +330,13 @@ class PaymeProvider(ProviderDefaults):
             return _reply(_ok(request_id, _state_of(notes)))
 
         was_done = current == _STATE_DONE
+        if was_done and delivered:
+            # Товар уже выдан и забрать его назад нельзя: по протоколу Payme это -31007,
+            # возврат деньгами тогда делается вручную в кабинете, а не отменой транзакции.
+            raise PaymeRefusal(
+                _fail(request_id, _ERR_ORDER_DELIVERED, "order is delivered"),
+                "Payme: заказ уже выдан, отмена невозможна",
+            )
         state = _STATE_CANCELLED_AFTER_DONE if was_done else _STATE_CANCELLED
         cancelled = int(notes.get("cancel_time") or 0) or _now_ms()
         patch = {**notes, "state": state, "cancel_time": cancelled, "reason": params.get("reason")}
@@ -350,6 +361,44 @@ class PaymeProvider(ProviderDefaults):
             return _fail(request_id, _ERR_TRANSACTION_NOT_FOUND), "application/json"
         code = _ERR_ORDER_NOT_FOUND if not found else _ERR_CANNOT_PERFORM
         return _fail(request_id, code), "application/json"
+
+
+def is_statement(raw_body: bytes) -> bool:
+    return _parse(raw_body).get("method") == "GetStatement"
+
+
+def statement_response(raw_body: bytes, rows: list[dict]) -> str:
+    """Ответ на GetStatement. `rows` — заметки Payme (`meta["payme"]`) платежей магазина,
+    чей ключ подошёл к запросу; отбор по времени создания у Payme и порядок — здесь."""
+    call = _parse(raw_body)
+    request_id = call.get("id")
+    params = call.get("params") or {}
+    try:
+        frm, to = int(params["from"]), int(params["to"])
+    except (KeyError, TypeError, ValueError):
+        return _fail(request_id, _ERR_CANNOT_PERFORM, "from/to required")
+    chosen = [r for r in rows if frm <= int(r.get("payme_time") or r.get("create_time") or 0) <= to]
+    chosen.sort(key=lambda r: int(r.get("payme_time") or r.get("create_time") or 0))
+    return _ok(
+        request_id,
+        {
+            "transactions": [
+                {
+                    "id": r["id"],
+                    "time": int(r.get("payme_time") or r.get("create_time") or 0),
+                    "amount": int(r.get("amount") or 0),  # тийины
+                    "account": r.get("account") or {},
+                    "create_time": int(r.get("create_time") or 0),
+                    "perform_time": int(r.get("perform_time") or 0),
+                    "cancel_time": int(r.get("cancel_time") or 0),
+                    "transaction": str(r.get("transaction") or ""),
+                    "state": int(r.get("state") or 0),
+                    "reason": r.get("reason"),
+                }
+                for r in chosen
+            ]
+        },
+    )
 
 
 # ---------------------------------------------------------------- helpers

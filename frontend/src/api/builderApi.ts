@@ -385,6 +385,7 @@ export interface PaymentField {
   label: string;
   hint: string;
   secret: boolean;
+  required?: boolean;
 }
 
 export interface PaymentSettings {

@@ -21,39 +21,56 @@ from app.services.payments.base import (
     PaymentRef,
     ProviderDefaults,
     ProviderError,
+    Receipt,
     RecurringMode,
     RecurringSetup,
+    Vat,
     WebhookResult,
     minor_to_major,
+    receipt_from_credentials,
     same_currency,
 )
 
 _BASE = "https://api.yookassa.ru/v3"
 
 
+# Код ставки НДС в ЮKassa — число. 11 = 22%, 12 = 22/122 (справочник 54-ФЗ).
+# Коды для 5%/7% (105/107) не сверены — не передаём, пока не проверим.
+YK_VAT = {Vat.NONE: 1, Vat.VAT0: 2, Vat.VAT10: 3, Vat.VAT110: 5, Vat.VAT22: 11, Vat.VAT122: 12}
+
+
+def receipt_yookassa(r: Receipt, currency: str = "RUB") -> dict:
+    customer = {k: v for k, v in (("email", r.email), ("phone", r.phone)) if v}
+    items = []
+    for i in r.items:
+        if i.vat not in YK_VAT:
+            raise ProviderError(f"ЮKassa: для ставки {i.vat.value} код НДС не сверен — выбери другую ставку")
+        items.append(
+            {
+                "description": i.name,
+                "quantity": str(i.qty),
+                "amount": {"value": f"{i.price:.2f}", "currency": currency.upper()},
+                "vat_code": YK_VAT[i.vat],
+                "payment_mode": i.method.value,
+                "payment_subject": i.obj.value,
+            }
+        )
+    return {"customer": customer, "items": items}
+
+
 def _receipt(credentials: dict[str, str], description: str, amount_minor: int, currency: str) -> dict | None:
     """Чек 54-ФЗ из одной позиции. Только если продавец указал почту для чеков:
     без неё не знаем, куда его слать, и платёж идёт без `receipt`, как раньше."""
-    email = (credentials.get("fiscal_email") or "").strip()
-    if not email:
+    receipt = receipt_from_credentials(credentials, description, amount_minor)
+    if receipt is None:
         return None
-    try:
-        vat_code = int((credentials.get("vat_code") or "1").strip())
-    except ValueError:
-        vat_code = 1
-    return {
-        "customer": {"email": email},
-        "items": [
-            {
-                "description": (description or "Оплата")[:128],
-                "quantity": "1.00",
-                "amount": {"value": minor_to_major(amount_minor), "currency": currency.upper()},
-                "vat_code": vat_code,
-                "payment_mode": "full_payment",
-                "payment_subject": "service",
-            }
-        ],
-    }
+    body = receipt_yookassa(receipt, currency)
+    legacy = (credentials.get("vat_code") or "").strip()
+    if legacy.isdigit() and not (credentials.get("default_vat") or "").strip():
+        # Прежнее поле: числовой код ставки из кабинета, отдаём как есть.
+        for item in body["items"]:
+            item["vat_code"] = int(legacy)
+    return body
 
 
 class YooKassaProvider(ProviderDefaults):
@@ -79,11 +96,11 @@ class YooKassaProvider(ProviderDefaults):
         # Чек 54-ФЗ. Если у магазина подключены чеки ЮKassa, без `receipt` платёж не создаётся.
         # Покупатель из Telegram почту не оставляет, поэтому чек уходит на этот адрес продавца.
         CredentialField(
-            "fiscal_email", "Почта для чеков (если включены чеки)", "email для чека 54-ФЗ", secret=False
-        ),
+            "fiscal_email", "Почта для чеков (если включены чеки)", "email для чека 54-ФЗ", secret=False, required=False),
         CredentialField(
-            "vat_code", "Код ставки НДС для чека", "1 — без НДС (по умолчанию); см. справочник ЮKassa", secret=False
-        ),
+            "default_vat", "Ставка НДС в чеке", "none (по умолчанию), vat0, vat10, vat110, vat22, vat122", secret=False, required=False),
+        CredentialField(
+            "vat_code", "Код ставки НДС для чека", "1 — без НДС (по умолчанию); см. справочник ЮKassa", secret=False, required=False),
     )
 
     @staticmethod

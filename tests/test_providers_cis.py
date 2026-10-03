@@ -196,21 +196,49 @@ async def test_freedompay_callback_is_signed_against_our_own_address():
     assert "<pg_status>ok</pg_status>" in result.response_body
 
 
-async def test_freedompay_refuses_a_callback_with_a_swapped_amount():
+async def test_freedompay_rejects_a_swapped_amount_when_it_can_and_replays_the_same_answer():
     form = {
         "pg_order_id": str(PAYMENT_ID),
         "pg_payment_id": "77123",
         "pg_result": "1",
         "pg_amount": "10.00",
+        "pg_can_reject": "1",
         "pg_salt": "abc123",
     }
     form["pg_sig"] = freedom_sign("freedompay", form)
+    kwargs = dict(
+        headers={}, raw_body=b"", form=form, credentials=FREEDOM_CREDS,
+        amount_minor=99000, invoice_no=4242, payment_id=PAYMENT_ID, provider_payment_id=None,
+    )
 
-    with pytest.raises(ProviderError, match="сумма"):
-        await get_provider("freedompay").verify_webhook(
-            headers={}, raw_body=b"", form=form, credentials=FREEDOM_CREDS,
-            amount_minor=99000, invoice_no=4242, payment_id=PAYMENT_ID, provider_payment_id=None,
-        )
+    first = await get_provider("freedompay").verify_webhook(**kwargs)
+    assert first.status is PaymentStatus.pending
+    assert "<pg_status>rejected</pg_status>" in first.response_body
+    assert "сумма" in first.response_body
+
+    # Повтор уведомления — тот же ответ байт в байт (из сохранённого, не пересчитанный).
+    again = await get_provider("freedompay").verify_webhook(**kwargs, meta=first.meta)
+    assert again.response_body == first.response_body
+
+
+async def test_freedompay_accepts_an_irrevocable_wrong_amount_but_flags_a_manual_refund():
+    form = {
+        "pg_order_id": str(PAYMENT_ID),
+        "pg_payment_id": "77124",
+        "pg_result": "1",
+        "pg_amount": "10.00",
+        "pg_can_reject": "0",
+        "pg_salt": "abc123",
+    }
+    form["pg_sig"] = freedom_sign("freedompay", form)
+    result = await get_provider("freedompay").verify_webhook(
+        headers={}, raw_body=b"", form=form, credentials=FREEDOM_CREDS,
+        amount_minor=99000, invoice_no=4242, payment_id=PAYMENT_ID, provider_payment_id=None,
+    )
+    # Касса получает ok, но товар не выдаётся: статус не paid, деньги вернуть вручную.
+    assert result.status is PaymentStatus.pending
+    assert "<pg_status>ok</pg_status>" in result.response_body
+    assert "сумма" in result.meta["freedompay_manual_refund"]
 
 
 async def test_freedompay_refuses_an_unsigned_callback():

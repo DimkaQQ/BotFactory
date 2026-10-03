@@ -203,6 +203,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                       <label key={field.key} className="buttons-editor__field">
                         <span className="buttons-editor__field-label">
                           {field.label}
+                          {field.required === false && <span className="payment-settings__filled"> · необязательно</span>}
                           {filled && <span className="payment-settings__filled"> · сохранено</span>}
                         </span>
                         <input

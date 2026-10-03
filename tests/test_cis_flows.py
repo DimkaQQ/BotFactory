@@ -515,3 +515,57 @@ async def test_the_test_payment_page_escapes_the_product_name(api, db, owner, ma
     assert page.status_code == 200
     assert "<img src=x" not in page.text
     assert "&lt;img src=x" in page.text
+
+
+async def _payme_paid(api, db, owner, make_bot, as_bot):
+    bot, _ = await shop(make_bot, owner, "payme", PAYME_CREDS, "UZS")
+    payment = await order(db, bot, as_bot)
+    created_at = payme_now()
+    await api.post(
+        "/webhook/pay/payme",
+        json=payme_body(
+            "CreateTransaction",
+            {"id": PAYME_TX, "time": created_at, "amount": 99000, "account": {"order_id": payment.invoice_no}},
+        ),
+        headers=PAYME_AUTH,
+    )
+    await api.post("/webhook/pay/payme", json=payme_body("PerformTransaction", {"id": PAYME_TX}), headers=PAYME_AUTH)
+    await background.wait_for_all()
+    await db.refresh(payment)
+    return payment, created_at
+
+
+async def test_payme_refuses_to_cancel_a_delivered_order_with_31007(api, db, owner, make_bot, as_bot):
+    payment, _ = await _payme_paid(api, db, owner, make_bot, as_bot)
+    assert payment.meta.get("delivered_at"), "товар выдан"
+
+    cancelled = await api.post(
+        "/webhook/pay/payme", json=payme_body("CancelTransaction", {"id": PAYME_TX, "reason": 5}), headers=PAYME_AUTH
+    )
+    assert cancelled.json()["error"]["code"] == -31007
+
+    await db.refresh(payment)
+    assert payment.status == PaymentStatus.paid, "отказ не должен трогать платёж"
+    assert payment.meta["payme"]["state"] == 2
+
+
+async def test_payme_get_statement_lists_only_this_shops_transactions_in_range(api, db, owner, make_bot, as_bot):
+    payment, created_at = await _payme_paid(api, db, owner, make_bot, as_bot)
+
+    def statement(headers, frm, to):
+        return api.post(
+            "/webhook/pay/payme", json=payme_body("GetStatement", {"from": frm, "to": to}), headers=headers
+        )
+
+    found = (await statement(PAYME_AUTH, created_at - 1000, created_at + 1000)).json()["result"]["transactions"]
+    assert [t["id"] for t in found] == [PAYME_TX]
+    assert found[0]["amount"] == 99000 and found[0]["state"] == 2
+    assert found[0]["account"] == {"order_id": payment.invoice_no}
+    assert found[0]["time"] == created_at
+
+    out_of_range = (await statement(PAYME_AUTH, created_at + 5000, created_at + 9000)).json()["result"]
+    assert out_of_range["transactions"] == []
+
+    stranger = {"Authorization": "Basic " + base64.b64encode(b"Paycom:guessed").decode()}
+    refused = (await statement(stranger, created_at - 1000, created_at + 1000)).json()
+    assert refused["error"]["code"] == -32504

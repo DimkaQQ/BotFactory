@@ -203,6 +203,59 @@ class CloudPaymentsProvider(ProviderDefaults):
     ) -> WebhookResult:
         return await self._find(credentials, payment_id, amount_minor, currency)
 
+    async def create_subscription(
+        self,
+        credentials: dict[str, str],
+        *,
+        token: str,
+        account_id: str,
+        amount_minor: int,
+        currency: str,
+        description: str,
+        email: str,
+        start_iso: str,
+        interval: str = "Month",
+        period: int = 1,
+    ) -> str:
+        """Подписка на стороне CloudPayments (вариант Б): после первого платежа создаём её по
+        токену из Pay-уведомления — токен используется один раз и у нас не хранится, а
+        дальше шлюз списывает сам и присылает обычные Pay с SubscriptionId. Возвращает id
+        подписки (sc_…).
+
+        НЕ подключено к потоку оплаты: `recurring` остаётся `token`. Прежде чем переключить
+        режим на `gateway`, нужен живой тест, с каким InvoiceId приходят плановые Pay
+        (по ним мы находим платёж) — в документации это не сказано."""
+        body = {
+            "Token": token,
+            "AccountId": account_id,
+            "Description": description[:250] or "Подписка",
+            "Email": email,
+            "Amount": round(amount_minor / 100, 2),
+            "Currency": currency.upper(),
+            "RequireConfirmation": False,
+            "StartDate": start_iso,
+            "Interval": interval,
+            "Period": period,
+        }
+        parsed = await self._call(
+            "/subscriptions/create", body, credentials, headers={"X-Request-ID": f"sub-{account_id}-{start_iso}"}
+        )
+        if not parsed.get("Success"):
+            raise ProviderError(f"CloudPayments: {parsed.get('Message') or 'подписку не создали'}")
+        return str((parsed.get("Model") or {}).get("Id") or "")
+
+    @staticmethod
+    def recurrent_state(notification: dict) -> str:
+        """Уведомление Recurrent (смена статуса подписки) → наше состояние. Ответ шлюзу —
+        {"code": 0}. Список статусов сверить в разделе «Подписки» документации."""
+        return {
+            "Active": "active",
+            "PastDue": "past_due",
+            "Cancelled": "cancelled",
+            "Rejected": "rejected",
+            "Expired": "expired",
+        }.get(str(notification.get("Status") or ""), "unknown")
+
     def recurring_setup(self, settled: dict) -> RecurringSetup | None:
         token = (settled or {}).get("cloudpayments_token")
         if not token:

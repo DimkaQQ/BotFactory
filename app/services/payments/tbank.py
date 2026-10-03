@@ -34,9 +34,12 @@ from app.services.payments.base import (
     PaymentRef,
     ProviderDefaults,
     ProviderError,
+    Receipt,
     RecurringMode,
     RecurringSetup,
     WebhookResult,
+    kop,
+    receipt_from_credentials,
 )
 
 _BASE = "https://securepay.tinkoff.ru/v2"
@@ -53,29 +56,36 @@ _FAILED = {"REJECTED", "CANCELED", "DEADLINE_EXPIRED", "AUTH_FAIL", "REVERSED", 
 _REFUNDED = {"REFUNDED", "PARTIAL_REFUNDED"}
 
 
-def _receipt(credentials: dict[str, str], description: str, amount_minor: int) -> dict:
-    """`Receipt` для Init (в подпись Token он не входит). Пусто, если продавец не указал
-    почту для чеков — тогда платёж идёт как раньше."""
-    email = (credentials.get("fiscal_email") or "").strip()
-    if not email:
-        return {}
-    return {
-        "Receipt": {
-            "Email": email,
-            "Taxation": (credentials.get("taxation") or "usn_income").strip(),
-            "Items": [
-                {
-                    "Name": (description or "Оплата")[:128],
-                    "Price": amount_minor,
-                    "Quantity": 1,
-                    "Amount": amount_minor,
-                    "Tax": (credentials.get("tax") or "none").strip(),
-                    "PaymentMethod": "full_payment",
-                    "PaymentObject": "service",
-                }
-            ],
-        }
+def receipt_tbank(r: Receipt) -> dict:
+    """Суммы в копейках, Amount = Price * Quantity. Ставки vat20/vat120 больше
+    не принимаются — только vat22/vat122."""
+    out: dict = {
+        "Taxation": r.tax_system.value,
+        "Items": [
+            {
+                "Name": i.name,
+                "Price": kop(i.price),
+                "Quantity": float(i.qty),
+                "Amount": kop(i.total),
+                "Tax": i.vat.value,
+                "PaymentMethod": i.method.value,
+                "PaymentObject": i.obj.value,
+            }
+            for i in r.items
+        ],
     }
+    if r.email:
+        out["Email"] = r.email
+    if r.phone:
+        out["Phone"] = r.phone
+    return out  # Receipt НЕ участвует в Token
+
+
+def _receipt(credentials: dict[str, str], description: str, amount_minor: int) -> dict:
+    """`Receipt` для Init. Пусто, если продавец не указал почту для чеков —
+    тогда платёж идёт как раньше."""
+    receipt = receipt_from_credentials(credentials, description, amount_minor, tax_key="taxation", vat_key="tax")
+    return {"Receipt": receipt_tbank(receipt)} if receipt else {}
 
 
 def _as_text(value) -> str:
@@ -117,12 +127,11 @@ class TBankProvider(ProviderDefaults):
         CredentialField("password", "Пароль терминала", "он же Secret Key"),
         # Чек 54-ФЗ: обязателен, если к терминалу подключена онлайн-касса. Покупатель из
         # Telegram почту не оставляет, поэтому чек уходит на адрес продавца.
-        CredentialField("fiscal_email", "Почта для чеков (если есть онлайн-касса)", "email для Receipt", secret=False),
+        CredentialField("fiscal_email", "Почта для чеков (если есть онлайн-касса)", "email для Receipt", secret=False, required=False),
         CredentialField(
-            "taxation", "Система налогообложения", "osn, usn_income, usn_income_outcome, envd, esn или patent",
-            secret=False,
-        ),
-        CredentialField("tax", "Ставка НДС в чеке", "none (по умолчанию), vat0, vat5, vat7, vat10, vat22", secret=False),
+            "taxation", "Система налогообложения", "osn, usn_income (по умолчанию), usn_income_outcome, esn или patent",
+            secret=False, required=False),
+        CredentialField("tax", "Ставка НДС в чеке", "none (по умолчанию), vat0, vat5, vat7, vat10, vat22; vat20 больше не принимается", secret=False, required=False),
     )
 
     @staticmethod

@@ -1373,3 +1373,72 @@ async def test_a_subscription_block_sells_as_a_one_off_while_the_switch_is_off(
         await db.execute(select(Subscription).where(Subscription.bot_id == bot.id))
     ).scalars().all()
     assert opened == [], "подписка не должна открыться при выключенной фиче"
+
+
+# ------------------------------------------ подписка, которую ведёт сам шлюз
+
+
+async def test_a_gateway_renewal_extends_once_even_if_the_notification_repeats(db, owner, make_bot, as_bot):
+    """LiqPay присылает регулярное списание по тому же заказу, что уже paid: период
+    двигаем один раз на каждый payment_id шлюза, повтор уведомления ничего не меняет."""
+    from app.services import payment_service
+    from app.services.payments.base import WebhookResult
+
+    bot, blocks = await club_bot(db, owner, make_bot, provider="liqpay")
+    payment = await paid_order(db, bot, blocks[1], provider="liqpay")
+    subscription = await subscription_service.start_or_extend(db, payment)
+    first_end = subscription.current_period_end
+
+    renewal = WebhookResult(status=PaymentStatus.paid, provider_payment_id="555", meta={"gateway_renewal": "555"})
+    await payment_service.apply_result(db, payment, renewal)
+    await db.refresh(subscription)
+    assert subscription.periods_paid == 2
+    assert subscription.current_period_end == first_end + timedelta(days=30)
+
+    await payment_service.apply_result(db, payment, renewal)  # повтор того же уведомления
+    await db.refresh(subscription)
+    assert subscription.periods_paid == 2
+
+    await payment_service.apply_result(
+        db, payment, WebhookResult(status=PaymentStatus.paid, provider_payment_id="556", meta={"gateway_renewal": "556"})
+    )
+    await db.refresh(subscription)
+    assert subscription.periods_paid == 3
+
+
+async def test_unsubscribing_at_the_gateway_cancels_ours_but_keeps_the_paid_period(db, owner, make_bot, as_bot):
+    from app.services import payment_service
+    from app.services.payments.base import WebhookResult
+
+    bot, blocks = await club_bot(db, owner, make_bot, provider="liqpay")
+    payment = await paid_order(db, bot, blocks[1], provider="liqpay")
+    subscription = await subscription_service.start_or_extend(db, payment)
+    end = subscription.current_period_end
+
+    await payment_service.apply_result(
+        db, payment, WebhookResult(status=PaymentStatus.pending, meta={"gateway_unsubscribed": True})
+    )
+    await db.refresh(subscription)
+    assert subscription.status == SubscriptionStatus.cancelled
+    assert subscription.current_period_end == end
+
+
+async def test_cancelling_a_lava_subscription_stops_it_at_the_gateway_too(db, owner, make_bot, as_bot, monkeypatch):
+    bot, blocks = await club_bot(db, owner, make_bot, provider="lavatop")
+    payment = await paid_order(db, bot, blocks[1], provider="lavatop")
+    payment.provider_payment_id = "contract-1"
+    await db.commit()
+    subscription = await subscription_service.start_or_extend(db, payment)
+
+    stopped = []
+
+    async def cancel(self, *, credentials, contract_id):
+        stopped.append(contract_id)
+        return True
+
+    monkeypatch.setattr(type(get_provider("lavatop")), "cancel_subscription", cancel)
+    await subscription_service.cancel(db, subscription, why="сам отменил", keep_paid_period=True)
+
+    assert stopped == ["contract-1"]
+    await db.refresh(subscription)
+    assert subscription.meta["gateway_cancel"] == "done"

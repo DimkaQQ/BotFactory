@@ -218,6 +218,20 @@ class LiqPayProvider(ProviderDefaults):
             return WebhookResult(status=PaymentStatus.pending, provider_payment_id=None)
         remote_id = payload.get("payment_id")
         remote_id = str(remote_id) if remote_id is not None else None
+        action = str(payload.get("action") or "").lower()
+
+        # Подписка (`action=subscribe` создаёт её, дальше LiqPay списывает сам, `regular`):
+        # «subscribed» — подписка заведена, «unsubscribed» — снята; ни то ни другое не оплата.
+        if status == "subscribed":
+            return WebhookResult(status=PaymentStatus.pending, provider_payment_id=remote_id)
+        if status == "unsubscribed":
+            return WebhookResult(
+                status=PaymentStatus.pending, provider_payment_id=remote_id, meta={"gateway_unsubscribed": True}
+            )
+        if action == "regular" and status in ("failure", "error"):
+            # Шлюз сам повторит списание; доступ до конца оплаченного периода остаётся.
+            logger.warning("LiqPay: регулярное списание не прошло (%s)", payload.get("err_description") or status)
+            return WebhookResult(status=PaymentStatus.pending, provider_payment_id=remote_id)
 
         if status in _PAID:
             amount = payload.get("amount")
@@ -228,7 +242,10 @@ class LiqPayProvider(ProviderDefaults):
             if mismatch:
                 raise ProviderError(f"LiqPay: сумма не совпадает (пришло {amount})")
             same_currency(self.title, payload.get("currency"), currency)
-            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
+            # Регулярное списание — это продление, а не новая покупка; id платежа у LiqPay
+            # нужен, чтобы повтор того же уведомления не продлил период дважды.
+            renewal = {"gateway_renewal": remote_id} if action == "regular" and remote_id else {}
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id, meta=renewal)
 
         if status in _REFUNDED:
             return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=remote_id)

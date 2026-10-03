@@ -16,6 +16,7 @@ from __future__ import annotations
 import enum
 import uuid
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol
 
 from app.models.payment import PaymentStatus
@@ -29,6 +30,8 @@ class CredentialField:
     #  Secret values are write-only in the API: never sent back to the
     #  browser, only replaced.
     secret: bool = True
+    #  Необязательные поля (чеки, тестовые пароли) не мешают кассе считаться настроенной.
+    required: bool = True
 
 
 @dataclass(frozen=True)
@@ -261,6 +264,13 @@ class PaymentProvider(Protocol):
         becomes paid, whatever prompted it."""
         ...
 
+    async def cancel_subscription(self, *, credentials: dict[str, str], contract_id: str) -> bool:
+        """Остановить подписку на стороне шлюза (только `RecurringMode.gateway`).
+
+        True — остановлена или её там уже нет; False — шлюз так не умеет. Ошибка
+        связи — исключение: вызывающий не должен считать подписку снятой."""
+        ...
+
 
 class ProviderDefaults:
     """What most providers don't have to think about.
@@ -320,6 +330,9 @@ class ProviderDefaults:
     def recurring_setup(self, settled: dict) -> RecurringSetup | None:
         return None
 
+    async def cancel_subscription(self, *, credentials: dict[str, str], contract_id: str) -> bool:
+        return False
+
     async def charge_recurring(
         self,
         *,
@@ -336,6 +349,130 @@ class ProviderDefaults:
     ) -> WebhookResult:
         raise ProviderError(f"{getattr(self, 'title', 'Провайдер')}: автосписание так не работает")
 
+
+# --- Общая модель чека 54-ФЗ -------------------------------------------------
+#
+# Одна модель на всех: адаптер переводит её в формат своей кассы, а не строит
+# чек с нуля. Чек отправляется только если продавец указал почту для чеков
+# (`fiscal_email`) — это и есть переключатель «передавать чек»: без неё платёж
+# уходит как раньше, ничего не ломая магазинам без онлайн-кассы.
+
+
+class Vat(str, enum.Enum):
+    NONE = "none"
+    VAT0 = "vat0"
+    VAT5 = "vat5"
+    VAT7 = "vat7"
+    VAT10 = "vat10"
+    VAT22 = "vat22"
+    VAT105 = "vat105"
+    VAT107 = "vat107"
+    VAT110 = "vat110"
+    VAT122 = "vat122"
+
+
+class PayMethod(str, enum.Enum):
+    """Признак способа расчёта (тег 1214)."""
+
+    FULL_PREPAYMENT = "full_prepayment"
+    PREPAYMENT = "prepayment"
+    ADVANCE = "advance"
+    FULL_PAYMENT = "full_payment"
+
+
+class PayObject(str, enum.Enum):
+    """Признак предмета расчёта (тег 1212)."""
+
+    SERVICE = "service"
+    COMMODITY = "commodity"
+    PAYMENT = "payment"
+
+
+class TaxSystem(str, enum.Enum):
+    OSN = "osn"
+    USN_INCOME = "usn_income"
+    USN_INCOME_OUTCOME = "usn_income_outcome"
+    ESN = "esn"
+    PATENT = "patent"
+
+
+@dataclass(frozen=True)
+class ReceiptItem:
+    name: str
+    qty: Decimal
+    price: Decimal  # рубли за единицу
+    vat: Vat
+    method: PayMethod = PayMethod.FULL_PREPAYMENT
+    obj: PayObject = PayObject.SERVICE
+
+    @property
+    def total(self) -> Decimal:
+        return (self.price * self.qty).quantize(Decimal("0.01"), ROUND_HALF_UP)
+
+
+@dataclass(frozen=True)
+class Receipt:
+    items: list[ReceiptItem]
+    tax_system: TaxSystem
+    email: str | None = None
+    phone: str | None = None  # +7XXXXXXXXXX
+
+    def total(self) -> Decimal:
+        return sum((i.total for i in self.items), Decimal("0"))
+
+    def check(self, payment_amount: Decimal) -> None:
+        """Касса отклонит платёж с чеком, не сходящимся с суммой, — лучше
+        сказать об этом заранее и по-русски."""
+        if not (self.email or self.phone):
+            raise ProviderError("Для чека нужен email или телефон покупателя")
+        if self.total() != payment_amount:
+            raise ProviderError(f"Сумма чека {self.total()} не совпадает с суммой платежа {payment_amount}")
+        for i in self.items:
+            if len(i.name) > 128:
+                raise ProviderError(f"Название позиции длиннее 128 символов: {i.name[:30]}…")
+
+
+def _enum_or_error(enum_cls, raw: str, default, what: str):
+    value = (raw or "").strip().lower() or default
+    try:
+        return enum_cls(value)
+    except ValueError:
+        allowed = ", ".join(m.value for m in enum_cls)
+        raise ProviderError(f"Чек: неизвестное значение «{raw}» для поля «{what}». Допустимо: {allowed}") from None
+
+
+def receipt_from_credentials(
+    credentials: dict[str, str],
+    description: str,
+    amount_minor: int,
+    *,
+    tax_key: str = "tax_system",
+    vat_key: str = "default_vat",
+) -> Receipt | None:
+    """Чек запуска/продления из настроек кассы: одна позиция-услуга, полная
+    предоплата. None — продавец чеки не включал (нет `fiscal_email`)."""
+    email = (credentials.get("fiscal_email") or "").strip()
+    if not email:
+        return None
+    amount = Decimal(int(amount_minor)) / 100
+    receipt = Receipt(
+        items=[
+            ReceiptItem(
+                name=((description or "Оплата").strip() or "Оплата")[:128],
+                qty=Decimal("1"),
+                price=amount,
+                vat=_enum_or_error(Vat, credentials.get(vat_key, ""), "none", "ставка НДС"),
+            )
+        ],
+        tax_system=_enum_or_error(TaxSystem, credentials.get(tax_key, ""), "usn_income", "система налогообложения"),
+        email=email,
+    )
+    receipt.check(amount)
+    return receipt
+
+
+def kop(x: Decimal) -> int:
+    return int((x * 100).quantize(Decimal("1"), ROUND_HALF_UP))
 
 
 def same_currency(provider_title: str, charged, ordered: str) -> None:

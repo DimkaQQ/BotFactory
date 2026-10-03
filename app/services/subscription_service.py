@@ -455,6 +455,32 @@ async def _tell_them_it_renewed(db: AsyncSession, subscription: Subscription) ->
             )
 
 
+async def _cancel_at_gateway(db: AsyncSession, subscription: Subscription) -> None:
+    """Подписку, которую ведёт сам шлюз (lava.top), остановить и у него: иначе он спишет
+    деньги с человека, у которого у нас уже «отменено». Не получилось — запоминаем и пишем
+    в лог, но отмену у нас не откатываем: рассылка и доступ от этого не зависят."""
+    try:
+        provider = get_provider(subscription.provider)
+        if provider.recurring is not RecurringMode.gateway or not subscription.provider_subscription_id:
+            return
+        from app.services import payment_service
+
+        first = (
+            await db.execute(select(Payment).where(Payment.id == uuid.UUID(subscription.provider_subscription_id)))
+        ).scalar_one_or_none()
+        if first is None or not first.provider_payment_id:
+            return
+        credentials, _ = await payment_service.credentials_for(db, first)
+        done = await provider.cancel_subscription(credentials=credentials, contract_id=first.provider_payment_id)
+        state = "done" if done else "unsupported"
+    except Exception:  # noqa: BLE001 — отмена у нас уже состоялась
+        logger.exception("Subscription %s: не удалось остановить подписку у шлюза", subscription.id)
+        state = "failed"
+    if state != "unsupported":
+        subscription.meta = {**(subscription.meta or {}), "gateway_cancel": state}
+        await db.commit()
+
+
 async def cancel(
     db: AsyncSession, subscription: Subscription, *, why: str = "", keep_paid_period: bool = False
 ) -> None:
@@ -472,6 +498,7 @@ async def cancel(
     if why:
         subscription.meta = {**(subscription.meta or {}), "cancel_reason": why}
     await db.commit()
+    await _cancel_at_gateway(db, subscription)
     await scheduler.cancel_for_subscription(
         db,
         subscription.id,

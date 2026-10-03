@@ -279,7 +279,7 @@ async def test_the_provider_catalogue_is_enough_to_render_the_settings_form(api,
             assert isinstance(entry[flag], bool), f"{entry['slug']}: {flag} должен быть булевым"
         for field in entry["fields"] + entry["block_fields"]:
             # A value here would be a stored secret on its way to a browser.
-            assert set(field) == {"key", "label", "hint", "secret"}
+            assert set(field) == {"key", "label", "hint", "secret", "required"}
 
     by_slug = {entry["slug"]: entry for entry in catalogue}
     # Two spot checks that would break if the flags were wired to each other

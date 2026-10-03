@@ -112,13 +112,13 @@ def describe_providers() -> list[dict]:
             # Разница решает, что владелец продаёт, поэтому едет в каталог.
             "recurring": provider.recurring.value,
             "fields": [
-                {"key": f.key, "label": f.label, "hint": f.hint, "secret": f.secret}
+                {"key": f.key, "label": f.label, "hint": f.hint, "secret": f.secret, "required": f.required}
                 for f in provider.credential_fields
             ],
             # Asked once per product, on the payment block itself, rather
             # than once per shop in the settings form.
             "block_fields": [
-                {"key": f.key, "label": f.label, "hint": f.hint, "secret": f.secret}
+                {"key": f.key, "label": f.label, "hint": f.hint, "secret": f.secret, "required": f.required}
                 for f in provider.block_fields
             ],
             # Whether the bot can answer "я оплатил" by asking the provider,

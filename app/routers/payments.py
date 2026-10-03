@@ -43,6 +43,7 @@ from app.schemas.payment import (
 from app.services import dates, payment_service, platform_billing
 from app.services import payments as payment_providers
 from app.services.payments import ProviderError
+from app.services.payments import payme as payme_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,43 @@ def _refusal(provider, *, form: dict, raw_body: bytes, found: bool, exc: Excepti
     return Response(content=content, media_type=media_type)
 
 
+async def _payme_statement(db: AsyncSession, headers: dict[str, str], raw_body: bytes) -> Response:
+    """GetStatement не называет заказ, поэтому собирается по всем платежам Payme, чей магазин
+    опознан ключом из заголовка авторизации: чужие транзакции в выписку не попадают."""
+    call = payme_adapter._parse(raw_body)
+    params = call.get("params") or {}
+    try:
+        frm, to = int(params["from"]), int(params["to"])
+    except (KeyError, TypeError, ValueError):
+        return Response(content=payme_adapter.statement_response(raw_body, []), media_type="application/json")
+    day = 24 * 3600
+    result = await db.execute(
+        select(Payment).where(
+            Payment.provider == "payme",
+            Payment.meta.has_key("payme"),  # noqa: W601 — JSONB ? operator
+            Payment.created_at >= datetime.fromtimestamp(frm / 1000 - day, timezone.utc),
+            Payment.created_at <= datetime.fromtimestamp(to / 1000 + day, timezone.utc),
+        )
+    )
+    rows: list[dict] = []
+    trusted: dict[object, bool] = {}
+    candidates = 0
+    for payment in result.scalars():
+        candidates += 1
+        owner = payment.bot_id or payment.id
+        if owner not in trusted:
+            credentials, _ = await payment_service.credentials_for(db, payment)
+            key = (credentials.get("key") or "").strip()
+            trusted[owner] = bool(key) and payme_adapter._authorised(headers, key)
+        if trusted[owner]:
+            rows.append((payment.meta or {})["payme"])
+    if candidates and not any(trusted.values()):
+        body = payme_adapter._fail(call.get("id"), payme_adapter._ERR_AUTH, "user does not exist")
+    else:
+        body = payme_adapter.statement_response(raw_body, rows)
+    return Response(content=body, media_type="application/json")
+
+
 @router.post("/webhook/pay/{provider_slug}")
 async def payment_callback(provider_slug: str, request: Request, db: AsyncSession = Depends(get_db)) -> Response:
     try:
@@ -99,6 +137,9 @@ async def payment_callback(provider_slug: str, request: Request, db: AsyncSessio
     except Exception:  # noqa: BLE001 — не форма: тело читает адаптер
         form = {}
     headers = {key.lower(): value for key, value in request.headers.items()}
+
+    if provider.slug == "payme" and payme_adapter.is_statement(raw_body):
+        return await _payme_statement(db, headers, raw_body)
 
     ref = provider.locate_payment(headers=headers, raw_body=raw_body, form=form)
     payment = await payment_service.find_payment(db, ref)
@@ -295,7 +336,7 @@ async def get_payment_settings(
     live = False
     if bot.payment_provider:
         provider = payment_providers.get_provider(bot.payment_provider)
-        missing = [f.label for f in provider.credential_fields if f.key not in filled]
+        missing = [f.label for f in provider.credential_fields if f.required and f.key not in filled]
         ready = not missing
         # «Готова» и «берёт настоящие деньги» — разные вещи, и вторую я
         # пропустил, когда чинил первую. Тестовый режим стоит по умолчанию,

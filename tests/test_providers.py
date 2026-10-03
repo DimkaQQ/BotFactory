@@ -60,7 +60,7 @@ def test_every_provider_satisfies_the_interface():
         for field in entry["fields"] + entry["block_fields"]:
             # The catalogue is what the settings form renders from; a value
             # appearing here would mean a stored secret going to the browser.
-            assert set(field) == {"key", "label", "hint", "secret"}
+            assert set(field) == {"key", "label", "hint", "secret", "required"}
 
 
 def test_every_provider_is_filed_under_a_real_region():

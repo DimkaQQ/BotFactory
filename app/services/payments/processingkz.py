@@ -28,6 +28,7 @@ comes from. Not from memory.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from xml.etree.ElementTree import Element
@@ -61,6 +62,8 @@ _NS_BEANS = "http://beans.common.cnp.processing.kz/xsd"
 #: the reference states outright; the rest follow the same standard. A wrong
 #: code here is refused by `startTransaction` before any money moves, so it
 #: fails loudly at checkout rather than quietly at settlement.
+logger = logging.getLogger(__name__)
+
 _NUMERIC = {"KZT": 398, "RUB": 643, "USD": 840, "EUR": 978}
 
 #: Status names as the reference's live runs against the gateway recorded
@@ -224,10 +227,25 @@ class ProcessingKzProvider(ProviderDefaults):
         status, amount, charged = await self._read(endpoint, merchant, provider_payment_id)
 
         if status == _AUTHORISED:
-            # Money held, not taken. Capture it, then believe only the second
-            # read — `completeTransaction` returning true is its own claim,
-            # and the ledger is what decides whether the shop gets paid.
-            await self._complete(endpoint, merchant, provider_payment_id)
+            # Money held, not taken. Сначала сверяем сумму и валюту с заказом, и только
+            # потом списываем: сошлось — completeTransaction(true), нет — (false), и холд
+            # снимается, а покупатель не платит за чужую сумму. Результату `complete` не
+            # верим: решает вторая сверка по журналу шлюза.
+            expected = _NUMERIC.get((currency or "").upper())
+            wrong_amount = amount is not None and amount != amount_minor
+            wrong_currency = bool(charged and expected is not None and str(charged).strip() != str(expected))
+            if wrong_amount or wrong_currency:
+                logger.warning(
+                    "Processing.kz %s: сверка не сошлась (сумма %s вместо %s, валюта %s) — отклоняем",
+                    provider_payment_id, amount, amount_minor, charged,
+                )
+                await self._complete(endpoint, merchant, provider_payment_id, success=False)
+                return WebhookResult(
+                    status=PaymentStatus.failed,
+                    provider_payment_id=provider_payment_id,
+                    meta={"decline": "сумма или валюта не совпали с заказом"},
+                )
+            await self._complete(endpoint, merchant, provider_payment_id, success=True)
             status, amount, charged = await self._read(endpoint, merchant, provider_payment_id)
 
         if status == _PAID:
@@ -262,14 +280,14 @@ class ProcessingKzProvider(ProviderDefaults):
         charged = _text(_find(returned, "transactionCurrencyCode"))
         return status, settled if settled else authorised, charged
 
-    async def _complete(self, endpoint: str, merchant: str, reference: str) -> None:
+    async def _complete(self, endpoint: str, merchant: str, reference: str, *, success: bool = True) -> None:
         await self._call(
             endpoint,
             "completeTransaction",
             "<ws:completeTransaction>"
             f"<ws:merchantId>{escape(merchant)}</ws:merchantId>"
             f"<ws:referenceNr>{escape(reference)}</ws:referenceNr>"
-            "<ws:transactionSuccess>true</ws:transactionSuccess>"
+            f"<ws:transactionSuccess>{str(success).lower()}</ws:transactionSuccess>"
             "</ws:completeTransaction>",
         )
 

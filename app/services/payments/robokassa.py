@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import uuid
-from urllib.parse import urlencode
+from urllib.parse import quote_plus, urlencode
 
 import httpx
 
@@ -23,14 +24,34 @@ from app.services.payments.base import (
     PaymentRef,
     ProviderDefaults,
     ProviderError,
+    Receipt,
     RecurringMode,
     RecurringSetup,
     WebhookResult,
     minor_to_major,
+    receipt_from_credentials,
 )
 
 _CHECKOUT_URL = "https://auth.robokassa.ru/Merchant/Index.aspx"
 _RECURRING_URL = "https://auth.robokassa.ru/Merchant/Recurring"
+
+
+def receipt_robokassa(r: Receipt) -> dict:
+    """sum позиции = итог по позиции в рублях."""
+    return {
+        "sno": r.tax_system.value,
+        "items": [
+            {
+                "name": i.name,
+                "quantity": float(i.qty),
+                "sum": float(i.total),
+                "tax": i.vat.value,
+                "payment_method": i.method.value,
+                "payment_object": i.obj.value,
+            }
+            for i in r.items
+        ],
+    }
 
 
 class RobokassaProvider(ProviderDefaults):
@@ -56,9 +77,14 @@ class RobokassaProvider(ProviderDefaults):
         CredentialField("password1", "Пароль #1", "Используется для подписи ссылки на оплату"),
         CredentialField("password2", "Пароль #2", "Используется для проверки уведомления об оплате"),
         CredentialField(
-            "test_password1", "Тестовый пароль #1", "нужен для тестового режима: отдельные тестовые пароли в кабинете"
-        ),
-        CredentialField("test_password2", "Тестовый пароль #2", "нужен для тестового режима"),
+            "test_password1", "Тестовый пароль #1", "нужен для тестового режима: отдельные тестовые пароли в кабинете", required=False),
+        CredentialField("test_password2", "Тестовый пароль #2", "нужен для тестового режима", required=False),
+        # Чек 54-ФЗ: передаётся, только если указана почта. Сумма чека всегда равна сумме платежа.
+        CredentialField("fiscal_email", "Почта для чеков (если нужна фискализация)", "email для чека 54-ФЗ", secret=False, required=False),
+        CredentialField(
+            "tax_system", "Система налогообложения", "osn, usn_income (по умолчанию), usn_income_outcome, esn, patent", secret=False, required=False),
+        CredentialField(
+            "default_vat", "Ставка НДС в чеке", "none (по умолчанию), vat0, vat5, vat7, vat10, vat22", secret=False, required=False),
     )
 
     async def create_checkout(self, request: CheckoutRequest) -> Checkout:
@@ -77,7 +103,19 @@ class RobokassaProvider(ProviderDefaults):
                 )
 
         out_sum = minor_to_major(request.amount_minor)
-        signature = hashlib.md5(f"{login}:{out_sum}:{request.invoice_no}:{password1}".encode(), usedforsecurity=False).hexdigest()
+        # Чек входит в подпись: MerchantLogin:OutSum:InvId:Receipt:Пароль1. В подпись и в
+        # ссылку идёт значение, один раз закодированное urlencode (как PHP urlencode); сама
+        # ссылка кодирует его ещё раз — так в GET-адресе и требует касса (один раз → ошибка
+        # 29, проверено в живую сторонней библиотекой).
+        receipt = receipt_from_credentials(request.credentials, request.description, request.amount_minor)
+        receipt_once = ""
+        parts = [login, out_sum, str(request.invoice_no)]
+        if receipt:
+            raw = json.dumps(receipt_robokassa(receipt), ensure_ascii=False, separators=(",", ":"))
+            receipt_once = quote_plus(raw)
+            parts.append(receipt_once)
+        parts.append(password1)
+        signature = hashlib.md5(":".join(parts).encode(), usedforsecurity=False).hexdigest()
 
         params = {
             "MerchantLogin": login,
@@ -102,6 +140,8 @@ class RobokassaProvider(ProviderDefaults):
         # account is in tenge is better served by Freedom Pay, ioka or
         # CloudPayments, all of which say outright which currency they are
         # charging. Guessing here is how a 990 ₸ product gets sold for 990 ₽.
+        if receipt_once:
+            params["Receipt"] = receipt_once
         if request.extra.get("subscription"):
             # Without this the card is not remembered and every later
             # /Merchant/Recurring call is refused.

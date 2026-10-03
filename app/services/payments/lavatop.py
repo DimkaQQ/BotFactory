@@ -61,6 +61,10 @@ def _periodicity(extra: dict) -> str:
     """Which lava.top cycle this block is selling, if any."""
     if not extra.get("subscription"):
         return "ONE_TIME"
+    chosen = str(extra.get("periodicity") or "").strip().upper()
+    if chosen and chosen != "ONE_TIME":
+        # Выбранный в конструкторе период из цен оффера — вернее вычисленного по дням.
+        return chosen
     days = int(extra.get("period_days") or 30)
     for threshold, value in _PERIODICITY:
         if days >= threshold:
@@ -69,6 +73,33 @@ def _periodicity(extra: dict) -> str:
 
 
 logger = logging.getLogger(__name__)
+
+
+async def offer_prices(api_key: str) -> list[dict]:
+    """Все цены офферов аккаунта — для выбора тарифа в конструкторе:
+    [{offer_id, product, currency, amount, periodicity}]. `periodicity` берём как есть,
+    а не вычисляем по числу дней: у оффера может быть только то, что завёл владелец."""
+    async with httpx.AsyncClient(
+        base_url=_BASE, headers={"X-Api-Key": api_key}, timeout=30
+    ) as client:
+        response = await client.get("/api/v2/products", params={"showAllSubscriptionPeriods": "true"})
+    response.raise_for_status()
+    out = []
+    for item in response.json().get("items", []):
+        data = item.get("data") or {}
+        for offer in data.get("offers") or []:
+            for price in offer.get("prices") or []:
+                out.append(
+                    {
+                        "offer_id": offer["id"],
+                        "product": data.get("title"),
+                        "currency": price["currency"],
+                        "amount": price.get("amount"),
+                        "periodicity": price.get("periodicity") or "ONE_TIME",
+                    }
+                )
+    return out
+
 
 class LavaTopProvider(ProviderDefaults):
     slug = "lavatop"
@@ -96,6 +127,13 @@ class LavaTopProvider(ProviderDefaults):
             "UUID оффера: ЛК lava.top → товар → нужный тариф",
             secret=False,
         ),
+        CredentialField(
+            "periodicity",
+            "Период оффера (для подписки)",
+            "ONE_TIME, MONTHLY, PERIOD_90_DAYS, PERIOD_180_DAYS или PERIOD_YEAR — как в оффере; пусто — по числу дней",
+            secret=False,
+            required=False,
+        ),
     )
 
     @staticmethod
@@ -114,11 +152,13 @@ class LavaTopProvider(ProviderDefaults):
         if not email:
             raise ProviderError("lava.top: не заполнена почта для чеков")
 
+        periodicity = _periodicity(request.extra)
+        await self._check_offer_price(request.credentials, offer_id, request.currency.upper(), periodicity)
         body = {
             "email": email,
             "offerId": offer_id,
             "currency": request.currency.upper(),
-            "periodicity": _periodicity(request.extra),
+            "periodicity": periodicity,
             "buyerLanguage": "RU",
             # Lava has no order id field; utm_content is the one value that
             # makes the round trip into the webhook untouched.
@@ -149,6 +189,34 @@ class LavaTopProvider(ProviderDefaults):
             )
 
         return Checkout(url=url, provider_payment_id=str(payload.get("id") or "") or None)
+
+    @staticmethod
+    async def _check_offer_price(credentials: dict[str, str], offer_id: str, currency: str, periodicity: str) -> None:
+        """У оффера должна быть цена именно в этой валюте и с этим периодом — иначе Lava
+        вернёт невнятную ошибку уже покупателю. Если каталог недоступен, проверку пропускаем:
+        счёт сам откажет внятно, а оплата из-за проверки не должна ломаться."""
+        try:
+            prices = await offer_prices((credentials.get("api_key") or "").strip())
+        except (httpx.HTTPError, ValueError, KeyError):
+            logger.warning("lava.top: каталог офферов недоступен, проверка периода пропущена")
+            return
+        mine = [p for p in prices if p["offer_id"] == offer_id]
+        if mine and not any(p["currency"] == currency and p["periodicity"] == periodicity for p in mine):
+            have = ", ".join(sorted({f"{p['currency']}/{p['periodicity']}" for p in mine}))
+            raise ProviderError(f"lava.top: у оффера нет цены {currency}/{periodicity}. Есть: {have}")
+
+    async def cancel_subscription(self, *, credentials: dict[str, str], contract_id: str) -> bool:
+        """DELETE /api/v1/subscriptions — contractId ПЕРВОГО платежа подписки. 404 — её уже нет."""
+        email = (credentials.get("buyer_email") or "").strip()
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.delete(
+                f"{_BASE}/api/v1/subscriptions",
+                params={"contractId": contract_id, "email": email},
+                headers=self._headers(credentials),
+            )
+        if response.status_code in (200, 204, 404):
+            return True
+        raise ProviderError(f"lava.top: {_error(response)}")
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
         try:
