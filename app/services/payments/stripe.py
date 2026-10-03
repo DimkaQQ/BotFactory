@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 class StripeProvider(ProviderDefaults):
     slug = "stripe"
     title = "Stripe"
-    hint = "Secret key (sk_live_… или sk_test_…) — в Stripe Dashboard → Developers → API keys. Webhook secret (whsec_…) появится, когда добавишь наш URL в Developers → Webhooks на событие checkout.session.completed."
+    hint = "Secret key (sk_live_… или sk_test_…) — в Stripe Dashboard → Developers → API keys. Webhook secret (whsec_…) появится, когда добавишь наш URL в Developers → Webhooks на события checkout.session.completed, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed и checkout.session.expired."
     currencies = ("USD", "EUR", "GBP", "KZT", "PLN", "TRY", "AED")
     region = "global"
     recurring = RecurringMode.gateway
@@ -85,6 +85,9 @@ class StripeProvider(ProviderDefaults):
             "client_reference_id": str(request.payment_id),
             "metadata[payment_id]": str(request.payment_id),
             "metadata[invoice_no]": str(request.invoice_no),
+            # Метаданные сессии сами не переходят в платёж; с этим полем событиям по
+            # платежу и возврату (charge.*, payment_intent.*) можно найти наш заказ.
+            "payment_intent_data[metadata][payment_id]": str(request.payment_id),
             "line_items[0][quantity]": "1",
             "line_items[0][price_data][currency]": currency,
             "line_items[0][price_data][unit_amount]": str(unit_amount),
@@ -104,6 +107,7 @@ class StripeProvider(ProviderDefaults):
             # ∈ day|week|month|year, plus interval_count).
             interval, count = _interval(int(request.extra.get("period_days") or 30))
             data["mode"] = "subscription"
+            data.pop("payment_intent_data[metadata][payment_id]", None)  # в режиме подписки поле недопустимо
             data["line_items[0][price_data][recurring][interval]"] = interval
             data["line_items[0][price_data][recurring][interval_count]"] = str(count)
             data["subscription_data[metadata][payment_id]"] = str(request.payment_id)
@@ -145,8 +149,11 @@ class StripeProvider(ProviderDefaults):
             kind = str(json.loads(raw_body or b"{}").get("type") or "")
         except (json.JSONDecodeError, AttributeError):
             return None
-        if kind and not kind.startswith("checkout.session."):
-            logger.error("Stripe event %s needs manual handling (no payment is attached to it)", kind)
+        if kind:
+            # Любое событие без нашего платежа (в т.ч. чужие сессии общего
+            # аккаунта) подтверждаем: иначе Stripe повторяет его трое суток и
+            # может отключить вебхук вместе с нашими платежами.
+            logger.warning("Stripe event %s has no payment of ours attached", kind)
             return '{"received": true, "handled": false}', "application/json"
         return None
 
@@ -199,7 +206,9 @@ class StripeProvider(ProviderDefaults):
         obj = (event.get("data") or {}).get("object") or {}
         event_type = event.get("type", "")
 
-        if event_type == "checkout.session.completed" and obj.get("payment_status") == "paid":
+        if event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"} and (
+            obj.get("payment_status") == "paid"
+        ):
             # Every other adapter here cross-checks the amount before letting
             # the goods go; Stripe gets the same treatment rather than being
             # trusted purely because the signature held.
@@ -211,8 +220,14 @@ class StripeProvider(ProviderDefaults):
             same_currency(self.title, charged_currency, currency)
             status = PaymentStatus.paid
         elif event_type in {"charge.refunded", "charge.refund.updated", "payment_intent.refunded"}:
-            status = PaymentStatus.refunded
-        elif event_type in {"checkout.session.expired", "payment_intent.payment_failed"}:
+            # Частичный возврат заказ не отменяет: у charge поле `refunded` истинно
+            # только когда возвращена вся сумма.
+            status = PaymentStatus.refunded if obj.get("refunded") is True else PaymentStatus.pending
+        elif event_type in {
+            "checkout.session.expired",
+            "checkout.session.async_payment_failed",
+            "payment_intent.payment_failed",
+        }:
             status = PaymentStatus.failed
         else:
             # An event we don't act on is still a delivery worth acknowledging,

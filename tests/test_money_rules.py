@@ -448,3 +448,34 @@ async def test_rewiring_the_delivery_arrow_starts_a_new_order(db, owner, make_bo
     orders = (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalars().all()
     assert len(orders) == 2, "после перевода стрелки это уже другой заказ"
     assert {str(other.id)} <= {(o.meta or {}).get("deliver_from") for o in orders}
+
+
+async def _stripe_event(event_type: str, obj: dict, amount_minor: int = 99000):
+    import hashlib
+    import hmac
+    import json
+    import time
+
+    secret = "whsec_test"
+    body = json.dumps({"type": event_type, "data": {"object": obj}}).encode()
+    ts = str(int(time.time()))
+    signature = hmac.new(secret.encode(), f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
+    return await get_provider("stripe").verify_webhook(
+        headers={"stripe-signature": f"t={ts},v1={signature}"},
+        raw_body=body, form={}, credentials={"webhook_secret": secret},
+        amount_minor=amount_minor, invoice_no=1, payment_id=uuid.uuid4(), provider_payment_id=None,
+    )
+
+
+async def test_stripe_delayed_payment_methods_are_settled_by_the_async_event():
+    paid = {"id": "cs_1", "payment_status": "paid", "amount_total": 99000, "currency": "usd"}
+    assert (await _stripe_event("checkout.session.async_payment_succeeded", paid)).status == PaymentStatus.paid
+    # «completed» с unpaid (SEPA и т.п.) ещё не деньги
+    unpaid = {**paid, "payment_status": "unpaid"}
+    assert (await _stripe_event("checkout.session.completed", unpaid)).status == PaymentStatus.pending
+    assert (await _stripe_event("checkout.session.async_payment_failed", unpaid)).status == PaymentStatus.failed
+
+
+async def test_a_partial_stripe_refund_does_not_cancel_the_order():
+    assert (await _stripe_event("charge.refunded", {"id": "ch_1", "refunded": False})).status == PaymentStatus.pending
+    assert (await _stripe_event("charge.refunded", {"id": "ch_1", "refunded": True})).status == PaymentStatus.refunded

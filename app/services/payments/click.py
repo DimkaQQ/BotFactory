@@ -52,6 +52,7 @@ _COMPLETE = "1"
 # Click's own vocabulary for what went wrong. Values are theirs, not ours.
 _ERR_OK = 0
 _ERR_SIGN = -1
+_ERR_AMOUNT = -2
 _ERR_ORDER_NOT_FOUND = -5
 
 
@@ -67,6 +68,14 @@ def _sign(form: dict[str, str], secret: str) -> str:
         form.get("sign_time", ""),
     ]
     return hashlib.md5("".join(str(part) for part in parts).encode(), usedforsecurity=False).hexdigest()
+
+
+class _ClickRefusal(ProviderError):
+    """Отказ со своим телом ответа: Click ждёт HTTP 200 и код ошибки в JSON."""
+
+    def __init__(self, message: str, body: str) -> None:
+        super().__init__(message)
+        self.body = body
 
 
 def _reply(form: dict[str, str], *, error: int, note: str, prepare_id: str | int | None = None) -> str:
@@ -155,7 +164,11 @@ class ClickProvider(ProviderDefaults):
         except ValueError:
             mismatch = True
         if mismatch:
-            raise ProviderError(f"Click: сумма не совпадает (пришло {amount})")
+            # Click называет несовпадение суммы отдельным кодом (-2), а не «подпись».
+            raise _ClickRefusal(
+                f"Click: сумма не совпадает (пришло {amount})",
+                _reply(form, error=_ERR_AMOUNT, note="Incorrect parameter amount"),
+            )
 
         action = (form.get("action") or "").strip()
         click_trans_id = (form.get("click_trans_id") or "").strip() or None

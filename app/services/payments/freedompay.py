@@ -53,10 +53,12 @@ _CALLBACK_SCRIPT = "freedompay"
 #: segment exactly as called, so the wrong one fails as a signature error
 #: rather than as a 404.
 _RECURRING_SCRIPT = "make_recurring_payment"
-#: How long a saved profile stays chargeable. Two years, capped by the card's
-#: own expiry on their side — a shorter value would end subscriptions early
-#: for no reason.
-_RECURRING_LIFETIME_DAYS = 730
+#: How long a saved profile stays chargeable — in MONTHS, not days: Freedom
+#: Pay's documentation gives `pg_recurring_lifetime` as 1..156 (months, up to
+#: 13 years). It used to be sent as 730 "days", which is outside the allowed
+#: range and risked a refusal of the very first subscription payment. Two years,
+#: capped by the card's own expiry on their side.
+_RECURRING_LIFETIME_MONTHS = 24
 #: Error codes that mean "this profile will never work again", as opposed to
 #: "the bank said no this time".
 _DEAD_PROFILE = {"9011", "11070"}
@@ -128,7 +130,7 @@ class FreedomPayProvider(ProviderDefaults):
             # good deal longer than one period so a subscription is not
             # silently cut off at the first renewal; Freedom Pay caps it at
             # the card's own expiry anyway.
-            params["pg_recurring_lifetime"] = str(_RECURRING_LIFETIME_DAYS)
+            params["pg_recurring_lifetime"] = str(_RECURRING_LIFETIME_MONTHS)
         if request.is_test:
             params["pg_testing_mode"] = "1"
         params["pg_sig"] = _sign("init_payment.php", params, secret)
