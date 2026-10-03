@@ -18,16 +18,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def build_dispatcher() -> Dispatcher:
+    """Порядок роутеров важен и потому собран в одном месте (его проверяет тест)."""
+    dp = Dispatcher()
+    dp.include_router(start_router)
+    # Последним: он ловит всё, что не команда, — команды должны достаться раньше.
+    dp.include_router(support_router)
+    return dp
+
+
 async def main() -> None:
     settings = get_settings()
     if not settings.meta_bot_token:
         raise RuntimeError("META_BOT_TOKEN is not set")
 
     bot = Bot(token=settings.meta_bot_token, session=build_bot_session())
-    dp = Dispatcher()
-    dp.include_router(start_router)
-    # Последним: он ловит всё, что не команда, — команды должны достаться раньше.
-    dp.include_router(support_router)
+    dp = build_dispatcher()
 
     # Make sure we're not stuck on a leftover webhook from a previous deploy.
     await bot.delete_webhook(drop_pending_updates=True)

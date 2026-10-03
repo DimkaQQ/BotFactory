@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from aiogram import Bot
+from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramForbiddenError
-from aiogram.methods import SendMessage
+from aiogram.methods import CopyMessage, SendMessage
+from aiogram.types import Chat, Message, MessageEntity, MessageId, Update, User
 from sqlalchemy import delete
 
 from app.config import get_settings
@@ -146,3 +150,69 @@ def test_commands_are_left_to_other_handlers():
     assert support._is_plain(_msg(USER, 1, "привет"))
     assert not support._is_plain(_msg(USER, 1, "/start"))
     assert support._is_plain(_msg(USER, 1, text=None))  # фото и файлы без подписи
+
+
+# ----------------------------------- сквозная проверка на настоящем диспетчере
+
+
+class _FakeSession(BaseSession):
+    """Сессия aiogram без сети: записывает вызовы Bot API и отвечает «успех»."""
+
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+
+    async def close(self):
+        return None
+
+    async def make_request(self, bot, method, timeout=None):
+        self.calls.append(method)
+        number = 900 + len(self.calls)
+        if isinstance(method, CopyMessage):
+            return MessageId(message_id=number)
+        return Message(message_id=number, date=datetime.now(), chat=Chat(id=method.chat_id, type="private"))
+
+    async def stream_content(self, *args, **kwargs):  # pragma: no cover
+        raise NotImplementedError
+
+
+def _update(update_id, chat_id, message_id, text=None, reply_to=None):
+    entities = [MessageEntity(type="bot_command", offset=0, length=len(text.split()[0]))] if text and text.startswith("/") else None
+    return Update(
+        update_id=update_id,
+        message=Message(
+            message_id=message_id,
+            date=datetime.now(),
+            chat=Chat(id=chat_id, type="private"),
+            from_user=User(id=chat_id, is_bot=False, first_name="Аня", username="anna"),
+            text=text,
+            entities=entities,
+            reply_to_message=reply_to,
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_meta_bot_still_opens_the_constructor_and_relays_everything_else():
+    """Главное, что нельзя сломать: /start по-прежнему даёт кнопку конструктора
+    (так клиент попадает с бота на сайт), а поддержка ловит только обычные
+    сообщения."""
+    from meta_bot.main import build_dispatcher
+
+    session = _FakeSession()
+    bot = Bot("123456:AAAA-testtoken", session=session)
+    dp = build_dispatcher()
+
+    await dp.feed_update(bot, _update(1, USER, 1, "/start"))
+    starts = [c for c in session.calls if isinstance(c, SendMessage) and c.chat_id == USER]
+    assert starts, "/start остался без ответа"
+    button = starts[0].reply_markup.inline_keyboard[0][0]
+    assert button.web_app is not None and "конструктор" in button.text.lower()
+    assert not [c for c in session.calls if isinstance(c, CopyMessage)], "команда /start ушла в поддержку"
+
+    session.calls.clear()
+    await dp.feed_update(bot, _update(2, USER, 2, "У меня не открывается конструктор"))
+    copies = [c for c in session.calls if isinstance(c, CopyMessage)]
+    assert copies and copies[0].chat_id == ADMIN and copies[0].from_chat_id == USER
+
+    await bot.session.close()
