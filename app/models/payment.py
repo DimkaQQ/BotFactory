@@ -65,10 +65,10 @@ class Payment(Base):
     description: Mapped[str] = mapped_column(String(255), nullable=False, default="")
 
     bot_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("bots.id", ondelete="CASCADE"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("bots.id", ondelete="SET NULL"), nullable=True, index=True
     )
     client_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # The payment block this order came from — its next_block_id is what the
     # buyer gets once the money lands.

@@ -24,7 +24,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 STATE_DIR="${WATCHDOG_STATE_DIR:-/var/tmp/bf-watchdog}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8000/health}"
+# В режиме shared-vps порт api наружу не публикуется — проверяем через
+# контейнер frontend на 8010, он проксирует /health в api вместе с проверкой базы.
+if [ -z "${HEALTH_URL:-}" ]; then
+  if [ -f .deploy-mode ] && grep -q shared "$ROOT/.deploy-mode"; then
+    HEALTH_URL="http://127.0.0.1:8010/health"
+  else
+    HEALTH_URL="http://127.0.0.1:8000/health"
+  fi
+fi
 DISK_LIMIT="${DISK_LIMIT_PERCENT:-85}"
 
 log() { printf '%s  %s\n' "$(date -u +'%Y-%m-%d %H:%M:%S')" "$*"; }

@@ -20,6 +20,9 @@ from app.services import (
 )
 
 logging.basicConfig(level=logging.INFO)
+# httpx на INFO пишет полный URL запроса, а в нём токен бота (.../bot<TOKEN>/getMe).
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

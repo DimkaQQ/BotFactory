@@ -115,7 +115,12 @@ if [ ! -f .env ]; then
   [ -n "$FERNET" ] || die "не удалось сгенерировать FERNET_KEY"
   env_set FERNET_KEY "$FERNET"
   env_set WEBHOOK_SECRET_KEY "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-  env_set POSTGRES_PASSWORD "$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  PGPASS="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  env_set POSTGRES_PASSWORD "$PGPASS"
+  # Пароль должен совпасть и в строках подключения приложения, иначе база
+  # создастся с одним паролем, а API будет стучаться с другим.
+  env_set DATABASE_URL "postgresql+asyncpg://botfactory:${PGPASS}@db:5432/botfactory"
+  env_set DATABASE_URL_SYNC "postgresql+psycopg2://botfactory:${PGPASS}@db:5432/botfactory"
   env_set BACKUP_PASSPHRASE "$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
   env_set CORS_ORIGINS ""
 else

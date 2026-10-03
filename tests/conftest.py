@@ -79,6 +79,24 @@ async def db() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+async def _purge_client(db: AsyncSession, client_id: uuid.UUID) -> None:
+    """Remove a test client and everything it left behind.
+
+    Payments are deliberately kept when a bot or account is deleted (they are
+    accounting records), so the cascade no longer cleans them up for us.
+    """
+    from sqlalchemy import select
+
+    from app.models.bot import Bot as BotModel
+    from app.models.payment import Payment
+
+    bot_ids = select(BotModel.id).where(BotModel.client_id == client_id)
+    await db.execute(
+        Payment.__table__.delete().where((Payment.client_id == client_id) | (Payment.bot_id.in_(bot_ids)))
+    )
+    await db.execute(Client.__table__.delete().where(Client.id == client_id))
+
+
 @pytest_asyncio.fixture
 async def owner(db: AsyncSession) -> AsyncIterator[Client]:
     """A client, removed afterwards along with everything they own.
@@ -102,7 +120,7 @@ async def owner(db: AsyncSession) -> AsyncIterator[Client]:
         yield client
     finally:
         await db.rollback()
-        await db.execute(Client.__table__.delete().where(Client.id == client_id))
+        await _purge_client(db, client_id)
         await db.commit()
 
 
@@ -121,7 +139,7 @@ async def stranger(db: AsyncSession) -> AsyncIterator[Client]:
         yield client
     finally:
         await db.rollback()
-        await db.execute(Client.__table__.delete().where(Client.id == client_id))
+        await _purge_client(db, client_id)
         await db.commit()
 
 

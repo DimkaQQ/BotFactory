@@ -1,7 +1,16 @@
+# Ротация логов: без неё json-логи docker растут без предела и на общем VPS
+# рано или поздно съедают диск.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-botfactory}
       # Пароль по умолчанию годится только для разработки: порт базы наружу не
@@ -34,6 +43,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     env_file: .env
     # При остановке приложение дожидается до 25 с, чтобы не оборвать выдачу
@@ -58,6 +68,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     command: python -m meta_bot.main
     env_file: .env
     healthcheck:
@@ -73,6 +84,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "80:80"
     depends_on:

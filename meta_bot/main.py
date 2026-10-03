@@ -15,6 +15,9 @@ from meta_bot.handlers.menu import router as menu_router
 from meta_bot.handlers.support import router as support_router
 
 logging.basicConfig(level=logging.INFO)
+# httpx на INFO пишет полный URL запроса, а в нём токен бота (.../bot<TOKEN>/getMe).
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -36,7 +39,7 @@ async def main() -> None:
     dp = build_dispatcher()
 
     # Make sure we're not stuck on a leftover webhook from a previous deploy.
-    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.delete_webhook(drop_pending_updates=False)
 
     logger.info("Meta-bot starting (polling)...")
     await dp.start_polling(bot)

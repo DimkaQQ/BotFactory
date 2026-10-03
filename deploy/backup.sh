@@ -127,18 +127,37 @@ SIZE_MB=$(( $(stat -c%s "$ARCHIVE") / 1024 / 1024 ))
 log "архив готов: $ARCHIVE (${SIZE_MB} МБ)"
 
 # --- 4. Унести с сервера ----------------------------------------------------
+SEND="$ARCHIVE"
+SEND_NOTE=""
 if [ "$SIZE_MB" -ge "$MAX_SEND_MB" ]; then
-  tell "⚠️ Бэкап на ${SIZE_MB} МБ — Telegram столько от бота не примет (потолок 50 МБ).
+  # Полный архив не влезает в Telegram. Не оставляем сервис вообще без копии
+  # вне сервера: база и .env — это то, без чего не восстановиться, и они
+  # маленькие. Файлы клиентов остаются только на сервере.
+  CORE="$BACKUP_DIR/botfactory-core-$STAMP.tar.gz.enc"
+  tar -C "$WORK" -czf - db.sql .env \
+    | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt \
+        -pass env:BACKUP_PASSPHRASE -out "$CORE"
+  CORE_MB=$(( $(stat -c%s "$CORE") / 1024 / 1024 ))
+  if [ "$CORE_MB" -ge "$MAX_SEND_MB" ]; then
+    tell "⚠️ Даже база без файлов — ${CORE_MB} МБ, Telegram такое от бота не примет (потолок 50 МБ).
 Архив лежит на сервере: $ARCHIVE
 Пора подключать внешнее хранилище — до тех пор копии вне сервера нет."
-  log "слишком большой для Telegram, не отправляю"
-else
+    log "слишком большой для Telegram, не отправляю"
+    SEND=""
+  else
+    SEND="$CORE"
+    SEND_NOTE=" (только база и .env: файлы клиентов в ${SIZE_MB} МБ не влезли в Telegram и остались на сервере)"
+    log "полный архив ${SIZE_MB} МБ не влезает в Telegram — отправляю только базу и .env"
+    tell "⚠️ Файлы клиентов выросли, полный бэкап (${SIZE_MB} МБ) не влезает в Telegram. Отправляю только базу и .env; файлы лежат на сервере: $ARCHIVE. Подключите внешнее хранилище для файлов."
+  fi
+fi
+if [ -n "$SEND" ]; then
   log "отправляю в Telegram"
   curl -sS --max-time 300 \
     "${TG_API}/bot${META_BOT_TOKEN}/sendDocument" \
     -F chat_id="${BACKUP_CHAT_ID}" \
-    -F document=@"$ARCHIVE" \
-    -F caption="🗄 Бэкап Bot Factory · $STAMP UTC · ${SIZE_MB} МБ
+    -F document=@"$SEND" \
+    -F caption="🗄 Бэкап Bot Factory · $STAMP UTC · ${SIZE_MB} МБ${SEND_NOTE}
 Расшифровать: openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in <файл> | tar xz" \
     >/dev/null || die "не смог отправить архив в Telegram"
   # Отпечаток пишется ТОЛЬКО здесь — после того, как архив реально уехал.
@@ -152,9 +171,11 @@ fi
 
 # --- 5. Убрать старое -------------------------------------------------------
 # Нумерованная сортировка по имени = по дате, потому что имя начинается с даты.
-ls -1 "$BACKUP_DIR"/botfactory-*.tar.gz.enc 2>/dev/null | sort | head -n -"$KEEP" | while read -r old; do
-  log "удаляю старый: $old"
-  rm -f "$old"
+for pattern in 'botfactory-2*.tar.gz.enc' 'botfactory-core-*.tar.gz.enc'; do
+  ls -1 "$BACKUP_DIR"/$pattern 2>/dev/null | sort | head -n -"$KEEP" | while read -r old; do
+    log "удаляю старый: $old"
+    rm -f "$old"
+  done
 done
 
 log "готово"
