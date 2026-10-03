@@ -33,10 +33,19 @@ function money(currency: string): string {
   return SYMBOLS[currency] ?? currency;
 }
 
+/** «$19», «€9» — знак впереди и без пробела; «990 ₽», «5 ⭐» — после. */
+function price(minor: number, currency: string): string {
+  const amount = formatAmount(minor);
+  return currency === "USD" || currency === "EUR" ? `${money(currency)}${amount}` : `${amount}\u00a0${money(currency)}`;
+}
+
 /** Building is free; putting the bot on the air is what's paid for. Opens
  * the provider's page in a new tab and polls the payment until the callback
  * settles it — the redirect back is never what we trust. */
 export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
+  // На телефоне панель занимала три четверти экрана и закрывала холст, поэтому
+  // она свёрнута в одну строку и раскрывается по нажатию.
+  const [open, setOpen] = useState(() => !window.matchMedia("(max-width: 959px)").matches);
   const [starting, setStarting] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +109,19 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
           renewal_price_minor: info.renewal_price_minor,
         },
       ];
+
+  if (!open && !waiting) {
+    const first = methods[0];
+    return (
+      <button type="button" className="paywall__collapsed" onClick={() => setOpen(true)}>
+        <span>🚀 Опубликовать бота</span>
+        <span className="paywall__collapsed-price">
+          {first.price_minor > 0 ? `от ${price(first.price_minor, first.currency)} ›` : "›"}
+          {problems.length > 0 && <span className="paywall__collapsed-badge">{problems.length}</span>}
+        </span>
+      </button>
+    );
+  }
 
   return (
     <div className="paywall">
@@ -168,7 +190,7 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
         >
           {starting
             ? "Готовим счёт…"
-            : `Оплатить публикацию · ${formatAmount(methods[0].price_minor)} ${money(methods[0].currency)}`}
+            : `Оплатить публикацию · ${price(methods[0].price_minor, methods[0].currency)}`}
         </button>
       ) : (
         <div className="paywall__methods">
@@ -187,13 +209,16 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
                 )}
               </span>
               <span className="paywall__method-price">
-                {formatAmount(method.price_minor)} {money(method.currency)}
+                {price(method.price_minor, method.currency)}
                 {method.renewal_price_minor > 0 && (
                   <span className="paywall__method-renewal">
-                    затем {formatAmount(method.renewal_price_minor)} {money(method.currency)}/
-                    {info.renewal_period_days} дн.
+                    затем {price(method.renewal_price_minor, method.currency)}/
+                    {info.renewal_period_days}&nbsp;дн.
                   </span>
                 )}
+                <span className="paywall__method-go" aria-hidden="true">
+                  Оплатить ›
+                </span>
               </span>
             </button>
           ))}

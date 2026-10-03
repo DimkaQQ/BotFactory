@@ -118,13 +118,21 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       // Clear of the "▶ Старт" pseudo-node, which sits at (40, 40).
       let x = 80;
       let y = 170;
+      let column = 0;
       for (const [index, block] of template.blocks.entries()) {
-        if (template.blocks[index - 1]?.block_type === "buttons") {
-          if (acrossTheWidth) y += 220;
-          else x += 280;
+        // Широкий ряд на десктопе открывался бы мелко: после четырёх блоков
+        // сценарий переходит на вторую строку, и холст вписывается крупнее.
+        if (acrossTheWidth && (column >= 4 || template.blocks[index - 1]?.block_type === "buttons")) {
+          column = 0;
+          x = 80;
+          y += 250;
         }
+        if (!acrossTheWidth && template.blocks[index - 1]?.block_type === "buttons") x += 280;
         created.push(await builderApi.createBlock(bot.id, block.block_type, block.content, { x, y }));
-        if (acrossTheWidth) x += 262;
+        if (acrossTheWidth) {
+          x += 262;
+          column += 1;
+        }
         else y += 190;
       }
 
