@@ -21,6 +21,7 @@ from app.services.payments.base import (
     ProviderDefaults,
     ProviderError,
     WebhookResult,
+    fiscalization_enabled,
     minor_to_major,
     money,
     same_currency,
@@ -136,6 +137,7 @@ def describe_providers() -> list[dict]:
 
 
 __all__ = [
+    "fiscalization_enabled",
     "Checkout",
     "CheckoutRequest",
     "ProviderDefaults",

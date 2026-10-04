@@ -86,6 +86,10 @@ class PayMasterProvider(ProviderDefaults):
         CredentialField("merchant_id", "merchantId", "UUID сайта в PayMaster", secret=False),
         CredentialField("token", "Токен доступа", "из раздела «Токены доступа»"),
         # Чек 54-ФЗ: передаётся, только если указана почта. Сумма чека всегда равна сумме платежа.
+        CredentialField(
+            "fiscalization_enabled", "Передавать чек (54-ФЗ)", "1 — да, 0 или пусто — нет. Включай, только если у кассы подключена онлайн-касса",
+            secret=False, required=False,
+        ),
         CredentialField("fiscal_email", "Почта для чеков (если нужна фискализация)", "email для чека 54-ФЗ", secret=False, required=False),
         CredentialField(
             "tax_system", "Система налогообложения", "osn, usn_income (по умолчанию), usn_income_outcome, esn, patent", secret=False, required=False),

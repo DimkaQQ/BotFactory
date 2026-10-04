@@ -337,6 +337,8 @@ async def get_payment_settings(
     if bot.payment_provider:
         provider = payment_providers.get_provider(bot.payment_provider)
         missing = [f.label for f in provider.credential_fields if f.required and f.key not in filled]
+        if payment_providers.fiscalization_enabled(credentials) and "fiscal_email" not in filled:
+            missing.append("Почта для чеков (включена передача чека)")
         ready = not missing
         # «Готова» и «берёт настоящие деньги» — разные вещи, и вторую я
         # пропустил, когда чинил первую. Тестовый режим стоит по умолчанию,

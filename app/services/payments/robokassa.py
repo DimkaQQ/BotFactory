@@ -80,6 +80,10 @@ class RobokassaProvider(ProviderDefaults):
             "test_password1", "Тестовый пароль #1", "нужен для тестового режима: отдельные тестовые пароли в кабинете", required=False),
         CredentialField("test_password2", "Тестовый пароль #2", "нужен для тестового режима", required=False),
         # Чек 54-ФЗ: передаётся, только если указана почта. Сумма чека всегда равна сумме платежа.
+        CredentialField(
+            "fiscalization_enabled", "Передавать чек (54-ФЗ)", "1 — да, 0 или пусто — нет. Включай, только если у кассы подключена онлайн-касса",
+            secret=False, required=False,
+        ),
         CredentialField("fiscal_email", "Почта для чеков (если нужна фискализация)", "email для чека 54-ФЗ", secret=False, required=False),
         CredentialField(
             "tax_system", "Система налогообложения", "osn, usn_income (по умолчанию), usn_income_outcome, esn, patent", secret=False, required=False),

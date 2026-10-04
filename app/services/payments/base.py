@@ -441,6 +441,25 @@ def _enum_or_error(enum_cls, raw: str, default, what: str):
         raise ProviderError(f"Чек: неизвестное значение «{raw}» для поля «{what}». Допустимо: {allowed}") from None
 
 
+_TRUE = {"1", "true", "yes", "on", "да"}
+_FALSE = {"0", "false", "no", "off", "нет"}
+
+
+def fiscalization_enabled(credentials: dict[str, str]) -> bool:
+    """Передавать ли чек 54-ФЗ — решает продавец явным переключателем `fiscalization_enabled`.
+
+    Не по «почта заполнена»: касса с подключённой онлайн-кассой отклоняет платёж без чека,
+    а касса без неё — с чеком, и угадать это по полю нельзя. Исключение только для настроек,
+    сохранённых до появления переключателя: там поля нет совсем, а почта для чеков уже
+    заполнена — такие магазины продолжают слать чек, как слали. Явное «0» выключает всегда."""
+    raw = str(credentials.get("fiscalization_enabled") or "").strip().lower()
+    if raw in _TRUE:
+        return True
+    if raw in _FALSE:
+        return False
+    return bool((credentials.get("fiscal_email") or "").strip())
+
+
 def receipt_from_credentials(
     credentials: dict[str, str],
     description: str,
@@ -450,10 +469,14 @@ def receipt_from_credentials(
     vat_key: str = "default_vat",
 ) -> Receipt | None:
     """Чек запуска/продления из настроек кассы: одна позиция-услуга, полная
-    предоплата. None — продавец чеки не включал (нет `fiscal_email`)."""
+    предоплата. None — продавец чеки не включал (см. `fiscalization_enabled`)."""
+    if not fiscalization_enabled(credentials):
+        return None
     email = (credentials.get("fiscal_email") or "").strip()
     if not email:
-        return None
+        raise ProviderError(
+            "Чек включён, но не указана почта для чеков: заполни её в настройках кассы или выключи передачу чека"
+        )
     amount = Decimal(int(amount_minor)) / 100
     receipt = Receipt(
         items=[

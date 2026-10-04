@@ -222,3 +222,36 @@ async def test_processingkz_rejects_a_wrong_amount_before_capturing(monkeypatch)
     )
     assert calls == [False], "холд надо снять, а не списать"
     assert result.status is PaymentStatus.failed
+
+
+# ------------------------------------------------- переключатель «передавать чек»
+
+
+def test_receipt_goes_out_only_when_the_seller_switched_it_on():
+    from app.services.payments.base import fiscalization_enabled
+
+    # Почта заполнена, но переключатель выключен явно — чека нет (касса без онлайн-кассы).
+    assert receipt_from_credentials({"fiscal_email": "a@b.c", "fiscalization_enabled": "0"}, "Гайд", 99000) is None
+    # Пусто и почты нет — тоже нет.
+    assert receipt_from_credentials({}, "Гайд", 99000) is None
+    # Включено — чек есть.
+    on = receipt_from_credentials({"fiscal_email": "a@b.c", "fiscalization_enabled": "1"}, "Гайд", 99000)
+    assert on is not None and on.email == "a@b.c"
+    # Включено без почты — внятная ошибка, а не платёж, который касса отклонит.
+    with pytest.raises(ProviderError, match="не указана почта"):
+        receipt_from_credentials({"fiscalization_enabled": "1"}, "Гайд", 99000)
+    # Настройки, сохранённые до появления переключателя (поля нет, почта есть), работают как работали.
+    assert fiscalization_enabled({"fiscal_email": "a@b.c"}) is True
+    assert fiscalization_enabled({"fiscal_email": "a@b.c", "fiscalization_enabled": "нет"}) is False
+
+
+async def test_a_seller_with_a_fiscal_kassa_and_no_email_is_told_what_is_missing(api, auth, owner, make_bot, db):
+
+    bot, _ = await make_bot(
+        owner, [], provider="yookassa", is_test=False,
+        credentials={"shop_id": "1", "secret_key": "live_x", "fiscalization_enabled": "1"},
+    )
+    response = await api.get(f"/api/bots/{bot.id}/payment-settings", headers=auth(owner))
+    body = response.json()
+    assert body["ready"] is False
+    assert any("Почта для чеков" in label for label in body["missing_fields"])

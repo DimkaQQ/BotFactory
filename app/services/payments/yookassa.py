@@ -96,6 +96,10 @@ class YooKassaProvider(ProviderDefaults):
         # Чек 54-ФЗ. Если у магазина подключены чеки ЮKassa, без `receipt` платёж не создаётся.
         # Покупатель из Telegram почту не оставляет, поэтому чек уходит на этот адрес продавца.
         CredentialField(
+            "fiscalization_enabled", "Передавать чек (54-ФЗ)", "1 — да, 0 или пусто — нет. Включай, только если у кассы подключена онлайн-касса",
+            secret=False, required=False,
+        ),
+        CredentialField(
             "fiscal_email", "Почта для чеков (если включены чеки)", "email для чека 54-ФЗ", secret=False, required=False),
         CredentialField(
             "default_vat", "Ставка НДС в чеке", "none (по умолчанию), vat0, vat10, vat110, vat22, vat122", secret=False, required=False),

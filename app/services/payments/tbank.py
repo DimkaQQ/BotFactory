@@ -127,6 +127,10 @@ class TBankProvider(ProviderDefaults):
         CredentialField("password", "Пароль терминала", "он же Secret Key"),
         # Чек 54-ФЗ: обязателен, если к терминалу подключена онлайн-касса. Покупатель из
         # Telegram почту не оставляет, поэтому чек уходит на адрес продавца.
+        CredentialField(
+            "fiscalization_enabled", "Передавать чек (54-ФЗ)", "1 — да, 0 или пусто — нет. Включай, только если у кассы подключена онлайн-касса",
+            secret=False, required=False,
+        ),
         CredentialField("fiscal_email", "Почта для чеков (если есть онлайн-касса)", "email для Receipt", secret=False, required=False),
         CredentialField(
             "taxation", "Система налогообложения", "osn, usn_income (по умолчанию), usn_income_outcome, esn или patent",
