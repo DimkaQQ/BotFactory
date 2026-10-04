@@ -111,7 +111,10 @@ class RobokassaProvider(ProviderDefaults):
         # ссылку идёт значение, один раз закодированное urlencode (как PHP urlencode); сама
         # ссылка кодирует его ещё раз — так в GET-адресе и требует касса (один раз → ошибка
         # 29, проверено в живую сторонней библиотекой).
-        receipt = receipt_from_credentials(request.credentials, request.description, request.amount_minor)
+        receipt = receipt_from_credentials(
+            request.credentials, request.description, request.amount_minor,
+            buyer_email=request.buyer_email, buyer_phone=request.buyer_phone,
+        )
         receipt_once = ""
         parts = [login, out_sum, str(request.invoice_no)]
         if receipt:

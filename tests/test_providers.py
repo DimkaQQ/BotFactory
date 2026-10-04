@@ -663,7 +663,7 @@ async def test_ioka_a_hold_is_not_a_sale_but_a_capture_is():
 def test_receipts_are_added_only_when_the_seller_gave_an_email_for_them():
     from app.services.payments import tbank, yookassa
 
-    creds = {"fiscal_email": "shop@example.com", "taxation": "usn_income", "tax": "none", "vat_code": "1"}
+    creds = {"fiscalization_enabled": "1", "fiscal_email": "shop@example.com", "taxation": "usn_income", "tax": "none", "vat_code": "1"}
     receipt = yookassa._receipt(creds, "Гайд", 99000, "RUB")
     assert receipt["customer"]["email"] == "shop@example.com"
     assert receipt["items"][0]["amount"]["value"] == "990.00" and receipt["items"][0]["vat_code"] == 1

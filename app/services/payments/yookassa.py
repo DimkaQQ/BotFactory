@@ -58,10 +58,14 @@ def receipt_yookassa(r: Receipt, currency: str = "RUB") -> dict:
     return {"customer": customer, "items": items}
 
 
-def _receipt(credentials: dict[str, str], description: str, amount_minor: int, currency: str) -> dict | None:
+def _receipt(
+    credentials: dict[str, str], description: str, amount_minor: int, currency: str, buyer: tuple | None = None
+) -> dict | None:
     """Чек 54-ФЗ из одной позиции. Только если продавец указал почту для чеков:
     без неё не знаем, куда его слать, и платёж идёт без `receipt`, как раньше."""
-    receipt = receipt_from_credentials(credentials, description, amount_minor)
+    receipt = receipt_from_credentials(
+        credentials, description, amount_minor, buyer_email=(buyer or (None, None))[0], buyer_phone=(buyer or (None, None))[1]
+    )
     if receipt is None:
         return None
     body = receipt_yookassa(receipt, currency)
@@ -124,7 +128,10 @@ class YooKassaProvider(ProviderDefaults):
             "description": request.description[:128] or "Оплата",
             "metadata": {"order_id": str(request.payment_id)},
         }
-        receipt = _receipt(request.credentials, request.description, request.amount_minor, request.currency)
+        receipt = _receipt(
+            request.credentials, request.description, request.amount_minor, request.currency,
+            (request.buyer_email, request.buyer_phone),
+        )
         if receipt:
             body["receipt"] = receipt
         if request.extra.get("subscription"):
@@ -273,7 +280,10 @@ class YooKassaProvider(ProviderDefaults):
             "description": description[:128] or "Продление подписки",
             "metadata": {"order_id": str(payment_id)},
         }
-        receipt = _receipt(credentials, description or "Продление подписки", amount_minor, currency)
+        receipt = _receipt(
+            credentials, description or "Продление подписки", amount_minor, currency,
+            (credentials.get("_buyer_email"), credentials.get("_buyer_phone")),  # кладёт subscription_service.charge_now
+        )
         if receipt:
             body["receipt"] = receipt
         async with httpx.AsyncClient(timeout=30) as client:

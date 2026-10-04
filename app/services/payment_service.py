@@ -33,6 +33,7 @@ from app.models.subscription import SubscriptionStatus
 from app.services import dates
 from app.services import payments as payment_providers
 from app.services.payments import CheckoutRequest, ProviderError
+from app.services.payments.base import check_receipt_contact
 from app.services.security import decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
@@ -357,6 +358,10 @@ async def _create(
     meta: dict | None = None,
 ) -> tuple[Payment, str]:
     provider = payment_providers.get_provider(provider_slug)
+    buyer_email = (meta or {}).get("buyer_email")
+    buyer_phone = (meta or {}).get("buyer_phone")
+    # Чек включён, а слать его некуда — отказ до того, как платёж записан и выставлен.
+    check_receipt_contact(credentials, buyer_email, buyer_phone)
 
     payment = Payment(
         kind=kind,
@@ -400,6 +405,8 @@ async def _create(
                 extra=_purchase_terms(extra or {}),
                 bot_token=bot_token,
                 telegram_user_id=telegram_user_id,
+                buyer_email=buyer_email,
+                buyer_phone=buyer_phone,
             )
         )
     except Exception:

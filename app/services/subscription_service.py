@@ -344,6 +344,16 @@ async def charge_now(db: AsyncSession, subscription: Subscription) -> bool:
 
     provider = get_provider(subscription.provider)
     credentials = payment_service.decrypt_credentials(bot_row.payment_credentials_encrypted)
+    # Контакт покупателя для чека — с первого платежа подписки; адаптеры читают его из служебных ключей.
+    first = None
+    if subscription.provider_subscription_id:
+        with contextlib.suppress(ValueError):
+            first = (
+                await db.execute(select(Payment).where(Payment.id == uuid.UUID(subscription.provider_subscription_id)))
+            ).scalar_one_or_none()
+    for key in ("buyer_email", "buyer_phone"):
+        if first is not None and (first.meta or {}).get(key):
+            credentials = {**credentials, f"_{key}": first.meta[key]}
 
     payment = Payment(
         kind=PaymentKind.order,

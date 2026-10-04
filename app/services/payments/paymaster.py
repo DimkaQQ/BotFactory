@@ -127,7 +127,10 @@ class PayMasterProvider(ProviderDefaults):
             },
             "testMode": request.is_test,
         }
-        receipt = receipt_from_credentials(request.credentials, request.description, request.amount_minor)
+        receipt = receipt_from_credentials(
+            request.credentials, request.description, request.amount_minor,
+            buyer_email=request.buyer_email, buyer_phone=request.buyer_phone,
+        )
         if receipt:
             body["receipt"] = receipt_paymaster(receipt)
         if request.extra.get("subscription"):

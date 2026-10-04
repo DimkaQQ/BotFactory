@@ -14,6 +14,7 @@ frontend work at all.
 from __future__ import annotations
 
 import enum
+import re
 import uuid
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
@@ -54,6 +55,10 @@ class CheckoutRequest:
     # the selling bot itself, so the adapter has to speak as that bot.
     bot_token: str | None = None
     telegram_user_id: int | None = None
+    # Контакт покупателя для чека 54-ФЗ — если он известен (см. `receipt_contact`). Сейчас ни один
+    # шаг диалога его не собирает, поэтому обычно пусто и чек уходит на почту продавца.
+    buyer_email: str | None = None
+    buyer_phone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -442,22 +447,57 @@ def _enum_or_error(enum_cls, raw: str, default, what: str):
 
 
 _TRUE = {"1", "true", "yes", "on", "да"}
-_FALSE = {"0", "false", "no", "off", "нет"}
 
 
 def fiscalization_enabled(credentials: dict[str, str]) -> bool:
-    """Передавать ли чек 54-ФЗ — решает продавец явным переключателем `fiscalization_enabled`.
+    """Передавать ли чек 54-ФЗ — только по явному переключателю `fiscalization_enabled`.
 
-    Не по «почта заполнена»: касса с подключённой онлайн-кассой отклоняет платёж без чека,
-    а касса без неё — с чеком, и угадать это по полю нельзя. Исключение только для настроек,
-    сохранённых до появления переключателя: там поля нет совсем, а почта для чеков уже
-    заполнена — такие магазины продолжают слать чек, как слали. Явное «0» выключает всегда."""
-    raw = str(credentials.get("fiscalization_enabled") or "").strip().lower()
-    if raw in _TRUE:
-        return True
-    if raw in _FALSE:
-        return False
-    return bool((credentials.get("fiscal_email") or "").strip())
+    Никаких догадок по заполненной почте: касса с подключённой онлайн-кассой отклоняет платёж
+    без чека, а касса без неё — с чеком. Магазинам, у которых чеки работали до появления
+    переключателя, флаг проставила миграция 0018."""
+    return str(credentials.get("fiscalization_enabled") or "").strip().lower() in _TRUE
+
+
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _clean_email(raw: str | None) -> str | None:
+    value = (raw or "").strip()
+    return value if _EMAIL.match(value) else None
+
+
+def _clean_phone(raw: str | None) -> str | None:
+    """+7XXXXXXXXXX: цифры и ведущий плюс, остальное (пробелы, скобки, дефисы) отбрасываем.
+    Не телефон — None, чтобы мусор не ломал чек, а уступал запасному контакту."""
+    digits = re.sub(r"[^\d+]", "", (raw or "").strip())
+    if digits.startswith("8") and len(digits) == 11:
+        digits = "+7" + digits[1:]
+    elif digits and not digits.startswith("+"):
+        digits = "+" + digits
+    return digits if re.fullmatch(r"\+\d{10,15}", digits) else None
+
+
+def receipt_contact(
+    credentials: dict[str, str], buyer_email: str | None = None, buyer_phone: str | None = None
+) -> tuple[str | None, str | None]:
+    """Кому уходит чек: по 54-ФЗ — покупателю, на контакт, который он указал. Контакт
+    покупателя (почта и/или телефон) берётся, если он есть и похож на настоящий; почта
+    продавца из настроек — только когда контакта покупателя нет."""
+    email, phone = _clean_email(buyer_email), _clean_phone(buyer_phone)
+    if email or phone:
+        return email, phone
+    return _clean_email(credentials.get("fiscal_email")), None
+
+
+def check_receipt_contact(
+    credentials: dict[str, str], buyer_email: str | None = None, buyer_phone: str | None = None
+) -> None:
+    """Ошибка ДО создания платежа: чек включён, а слать его некуда."""
+    if fiscalization_enabled(credentials) and not any(receipt_contact(credentials, buyer_email, buyer_phone)):
+        raise ProviderError(
+            "Чек включён, но чек некуда отправить: у покупателя нет контакта, а почта для чеков в "
+            "настройках кассы не заполнена. Заполни её или выключи передачу чека"
+        )
 
 
 def receipt_from_credentials(
@@ -467,16 +507,15 @@ def receipt_from_credentials(
     *,
     tax_key: str = "tax_system",
     vat_key: str = "default_vat",
+    buyer_email: str | None = None,
+    buyer_phone: str | None = None,
 ) -> Receipt | None:
-    """Чек запуска/продления из настроек кассы: одна позиция-услуга, полная
-    предоплата. None — продавец чеки не включал (см. `fiscalization_enabled`)."""
+    """Чек запуска/продления: одна позиция-услуга, полная предоплата. None — продавец чеки не
+    включал. Контакт — покупателя, если известен, иначе почта продавца (`receipt_contact`)."""
     if not fiscalization_enabled(credentials):
         return None
-    email = (credentials.get("fiscal_email") or "").strip()
-    if not email:
-        raise ProviderError(
-            "Чек включён, но не указана почта для чеков: заполни её в настройках кассы или выключи передачу чека"
-        )
+    check_receipt_contact(credentials, buyer_email, buyer_phone)
+    email, phone = receipt_contact(credentials, buyer_email, buyer_phone)
     amount = Decimal(int(amount_minor)) / 100
     receipt = Receipt(
         items=[
@@ -489,6 +528,7 @@ def receipt_from_credentials(
         ],
         tax_system=_enum_or_error(TaxSystem, credentials.get(tax_key, ""), "usn_income", "система налогообложения"),
         email=email,
+        phone=phone,
     )
     receipt.check(amount)
     return receipt

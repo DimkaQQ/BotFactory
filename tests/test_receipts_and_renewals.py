@@ -56,15 +56,15 @@ def test_receipt_needs_somewhere_to_send_it():
         bare.check(Decimal("990.00"))
 
 
-def test_no_fiscal_email_means_no_receipt_and_a_typo_in_vat_is_loud():
+def test_no_flag_means_no_receipt_and_a_typo_in_vat_is_loud():
     assert receipt_from_credentials({}, "Гайд", 99000) is None
     with pytest.raises(ProviderError, match="ставка НДС"):
-        receipt_from_credentials({"fiscal_email": "a@b.c", "default_vat": "vat20"}, "Гайд", 99000)
+        receipt_from_credentials({"fiscalization_enabled": "1", "fiscal_email": "a@b.c", "default_vat": "vat20"}, "Гайд", 99000)
 
 
 def test_receipt_is_built_from_the_shop_settings():
     receipt = receipt_from_credentials(
-        {"fiscal_email": "a@b.c", "tax_system": "osn", "default_vat": "vat22"}, "Гайд", 99050
+        {"fiscalization_enabled": "1", "fiscal_email": "a@b.c", "tax_system": "osn", "default_vat": "vat22"}, "Гайд", 99050
     )
     assert receipt.total() == Decimal("990.50")
     assert receipt.tax_system is TaxSystem.OSN
@@ -108,7 +108,7 @@ async def test_robokassa_signs_the_once_encoded_receipt_and_the_link_encodes_it_
     creds = {
         "merchant_login": "shop", "password1": "pass1", "password2": "pass2",
         "test_password1": "tp1", "test_password2": "tp2",
-        "fiscal_email": "shop@example.com", "tax_system": "usn_income", "default_vat": "vat22",
+        "fiscalization_enabled": "1", "fiscal_email": "shop@example.com", "tax_system": "usn_income", "default_vat": "vat22",
     }
     request = CheckoutRequest(
         payment_id=PAYMENT_ID, invoice_no=77, amount_minor=99000, currency="RUB", description="Запуск бота",
@@ -227,22 +227,67 @@ async def test_processingkz_rejects_a_wrong_amount_before_capturing(monkeypatch)
 # ------------------------------------------------- переключатель «передавать чек»
 
 
-def test_receipt_goes_out_only_when_the_seller_switched_it_on():
+def test_receipt_goes_out_strictly_by_the_flag():
     from app.services.payments.base import fiscalization_enabled
 
-    # Почта заполнена, но переключатель выключен явно — чека нет (касса без онлайн-кассы).
+    # Почта заполнена, флага нет — чека нет: никаких догадок (старым настройкам флаг ставит миграция 0018).
+    assert receipt_from_credentials({"fiscal_email": "a@b.c"}, "Гайд", 99000) is None
     assert receipt_from_credentials({"fiscal_email": "a@b.c", "fiscalization_enabled": "0"}, "Гайд", 99000) is None
-    # Пусто и почты нет — тоже нет.
-    assert receipt_from_credentials({}, "Гайд", 99000) is None
-    # Включено — чек есть.
+    assert fiscalization_enabled({"fiscal_email": "a@b.c"}) is False
     on = receipt_from_credentials({"fiscal_email": "a@b.c", "fiscalization_enabled": "1"}, "Гайд", 99000)
-    assert on is not None and on.email == "a@b.c"
-    # Включено без почты — внятная ошибка, а не платёж, который касса отклонит.
-    with pytest.raises(ProviderError, match="не указана почта"):
+    assert on is not None and on.email == "a@b.c" and on.phone is None
+
+
+def test_receipt_goes_to_the_buyer_and_falls_back_to_the_sellers_email():
+    creds = {"fiscal_email": "shop@example.com", "fiscalization_enabled": "1"}
+    both = receipt_from_credentials(creds, "Гайд", 99000, buyer_email="buyer@example.com", buyer_phone="8 (900) 123-45-67")
+    assert (both.email, both.phone) == ("buyer@example.com", "+79001234567")
+    only_phone = receipt_from_credentials(creds, "Гайд", 99000, buyer_phone="+7 900 123 45 67")
+    assert (only_phone.email, only_phone.phone) == (None, "+79001234567"), "почту продавца не подмешиваем"
+    # Мусорный контакт покупателя уступает запасному, а не ломает чек.
+    junk = receipt_from_credentials(creds, "Гайд", 99000, buyer_email="не почта", buyer_phone="123")
+    assert (junk.email, junk.phone) == ("shop@example.com", None)
+    assert receipt_from_credentials(creds, "Гайд", 99000).email == "shop@example.com"
+
+
+def test_flag_on_and_nobody_to_send_to_is_an_error_before_any_payment():
+    from app.services.payments.base import check_receipt_contact
+
+    with pytest.raises(ProviderError, match="некуда отправить"):
         receipt_from_credentials({"fiscalization_enabled": "1"}, "Гайд", 99000)
-    # Настройки, сохранённые до появления переключателя (поля нет, почта есть), работают как работали.
-    assert fiscalization_enabled({"fiscal_email": "a@b.c"}) is True
-    assert fiscalization_enabled({"fiscal_email": "a@b.c", "fiscalization_enabled": "нет"}) is False
+    check_receipt_contact({"fiscalization_enabled": "1"}, buyer_phone="+79001234567")  # контакт покупателя есть
+    check_receipt_contact({}, None, None)  # чек выключен — проверять нечего
+
+
+async def test_creating_an_order_without_anywhere_to_send_the_receipt_is_refused_up_front(db, owner, make_bot, monkeypatch):
+    from sqlalchemy import func, select
+
+    from app.models.payment import Payment
+    from app.services import payment_service
+
+    bot, _ = await make_bot(
+        owner, [], provider="yookassa", is_test=False,
+        credentials={"shop_id": "1", "secret_key": "live_x", "fiscalization_enabled": "1"},
+    )
+    before = (await db.execute(select(func.count()).select_from(Payment))).scalar_one()
+    with pytest.raises(ProviderError, match="некуда отправить"):
+        await payment_service._create(
+            db, kind=payment_service.PaymentKind.order, provider_slug="yookassa",
+            credentials={"shop_id": "1", "secret_key": "live_x", "fiscalization_enabled": "1"},
+            is_test=False, amount_minor=99000, currency="RUB", description="Гайд", return_url="https://t.me/x",
+            bot_id=bot.id,
+        )
+    after = (await db.execute(select(func.count()).select_from(Payment))).scalar_one()
+    assert after == before, "платёж не должен быть записан"
+
+
+def test_the_buyers_contact_reaches_the_yookassa_receipt():
+    from app.services.payments.yookassa import _receipt
+
+    creds = {"fiscal_email": "shop@example.com", "fiscalization_enabled": "1"}
+    body = _receipt(creds, "Гайд", 99000, "RUB", ("buyer@example.com", None))
+    assert body["customer"] == {"email": "buyer@example.com"}
+    assert _receipt(creds, "Гайд", 99000, "RUB")["customer"] == {"email": "shop@example.com"}
 
 
 async def test_a_seller_with_a_fiscal_kassa_and_no_email_is_told_what_is_missing(api, auth, owner, make_bot, db):
@@ -255,3 +300,63 @@ async def test_a_seller_with_a_fiscal_kassa_and_no_email_is_told_what_is_missing
     body = response.json()
     assert body["ready"] is False
     assert any("Почта для чеков" in label for label in body["missing_fields"])
+
+
+# ------------------------------------------ миграция 0018: флаг чека тем, у кого уже была почта
+
+
+def _run_0018(monkeypatch, rows):
+    import importlib.util
+    import pathlib
+
+    spec = importlib.util.spec_from_file_location(
+        "mig0018", pathlib.Path(__file__).parent.parent / "migrations" / "versions" / "0018_receipt_flag.py"
+    )
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    updates = {}
+
+    class Result:
+        def fetchall(self):
+            return rows
+
+    class Conn:
+        def execute(self, statement, params=None):
+            if params is None:
+                return Result()
+            updates[params["id"]] = params["blob"]
+
+    monkeypatch.setattr(migration.op, "get_bind", lambda: Conn())
+    migration.upgrade()
+    return updates
+
+
+def test_migration_0018_turns_the_flag_on_explicitly_for_shops_that_already_had_an_email(monkeypatch):
+    from app.services import payment_service
+
+    def blob(creds):
+        return payment_service.encrypt_credentials(creds)
+
+    rows = [
+        ("with-email", blob({"shop_id": "1", "fiscal_email": "a@b.c"})),
+        ("already-flagged", blob({"fiscal_email": "a@b.c", "fiscalization_enabled": "0"})),
+        ("no-email", blob({"shop_id": "2"})),
+        ("blank-email", blob({"fiscal_email": "  "})),
+        ("garbage", b"not-a-fernet-token"),
+    ]
+    updates = _run_0018(monkeypatch, rows)
+
+    assert set(updates) == {"with-email"}, "трогаем только тех, у кого почта есть, а флага нет"
+    assert payment_service.decrypt_credentials(updates["with-email"]) == {
+        "shop_id": "1", "fiscal_email": "a@b.c", "fiscalization_enabled": "1",
+    }
+    # Явный «0» продавца миграция не перезаписывает, а флаг теперь читается строго.
+    from app.services.payments.base import fiscalization_enabled
+
+    assert fiscalization_enabled(payment_service.decrypt_credentials(updates["with-email"])) is True
+
+
+def test_migration_0018_stops_when_nothing_can_be_decrypted(monkeypatch):
+    with pytest.raises(RuntimeError, match="FERNET_KEY"):
+        _run_0018(monkeypatch, [("a", b"junk"), ("b", b"junk")])

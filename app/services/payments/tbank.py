@@ -81,10 +81,13 @@ def receipt_tbank(r: Receipt) -> dict:
     return out  # Receipt НЕ участвует в Token
 
 
-def _receipt(credentials: dict[str, str], description: str, amount_minor: int) -> dict:
+def _receipt(credentials: dict[str, str], description: str, amount_minor: int, buyer: tuple = (None, None)) -> dict:
     """`Receipt` для Init. Пусто, если продавец не указал почту для чеков —
     тогда платёж идёт как раньше."""
-    receipt = receipt_from_credentials(credentials, description, amount_minor, tax_key="taxation", vat_key="tax")
+    receipt = receipt_from_credentials(
+        credentials, description, amount_minor, tax_key="taxation", vat_key="tax",
+        buyer_email=buyer[0], buyer_phone=buyer[1],
+    )
     return {"Receipt": receipt_tbank(receipt)} if receipt else {}
 
 
@@ -175,7 +178,10 @@ class TBankProvider(ProviderDefaults):
                 # Одностадийная оплата: без этого схему задаёт терминал, а на двухстадийном
                 # платёж навсегда остался бы AUTHORIZED (мы не вызываем Confirm).
                 "PayType": "O",
-                **_receipt(request.credentials, request.description, request.amount_minor),
+                **_receipt(
+                    request.credentials, request.description, request.amount_minor,
+                    (request.buyer_email, request.buyer_phone),
+                ),
                 "Description": (request.description or "Оплата")[:250],
                 "SuccessURL": request.return_url,
                 "FailURL": request.return_url,
