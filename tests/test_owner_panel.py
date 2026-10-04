@@ -339,7 +339,7 @@ async def test_support_button_opens_a_dialog_and_the_next_message_reaches_the_ow
         assert not [c for c in session.calls if getattr(c, "chat_id", None) == admin]
 
         await _feed(dp, tg, button_update(2, uid, "sup:start"))
-        assert "Напиши сообщение" in session.of(SendMessage)[-1].text
+        assert "Пишите сюда своё сообщение" in session.of(SendMessage)[-1].text
 
         await _feed(dp, tg, text_update(3, uid, 3, "не открывается конструктор"))
         to_admin = [c for c in session.calls if getattr(c, "chat_id", None) == admin]
