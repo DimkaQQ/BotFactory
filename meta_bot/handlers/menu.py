@@ -361,20 +361,23 @@ async def on_support(query: CallbackQuery, bot: Bot) -> None:
     chat_id = query.from_user.id
     admin = get_settings().support_chat
     if admin is None:
-        await bot.send_message(chat_id, "Поддержка через бота пока не подключена. Загляни позже 🙏")
+        await bot.send_message(chat_id, "Поддержка через бота пока не подключена. Загляните позже 🙏")
         return
     if chat_id == admin:
         await bot.send_message(
             chat_id,
-            "Это твой чат поддержки: обращения людей приходят сюда. Отвечай на них через Reply — "
-            "ответ уйдёт автору.",
+            "💬 <b>Это чат поддержки</b>\n\nСюда приходят сообщения пользователей. Чтобы ответить, "
+            "нажми Reply на нужное сообщение — человек получит одно сообщение: его вопросы и твой ответ.",
+            parse_mode="HTML",
         )
         return
     support.open_dialog(chat_id)
     await bot.send_message(
         chat_id,
-        "💬 <b>Поддержка</b>\n\nНапиши сообщение — вопрос, идею или что не работает. Можно приложить "
-        "фото или файл. Я передам, и мы ответим сюда же.",
+        "💬 <b>Поддержка</b>\n\nПишите сюда своё сообщение — оно уйдёт в техподдержку, "
+        "а ответ вы получите здесь же, в этом чате.\n\n"
+        "⏱ Мы отвечаем в течение 24 часов.\n"
+        "📎 Можно написать несколько сообщений и приложить фото или файл — мы увидим всё.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="🏠 В меню", callback_data="m:main")]]

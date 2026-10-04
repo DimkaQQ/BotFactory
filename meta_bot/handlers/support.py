@@ -15,11 +15,12 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timedelta, timezone
+from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.config import get_settings
 from app.database import AsyncSessionLocal
@@ -85,10 +86,108 @@ def _is_plain(message: Message) -> bool:
     return not (message.text or "").startswith("/")
 
 
-async def _remember(admin_message_id: int, user_chat_id: int) -> None:
+async def _remember(admin_message_id: int, user_chat_id: int, question: str | None = None) -> None:
     async with AsyncSessionLocal() as db:
-        await db.merge(SupportRelay(admin_message_id=admin_message_id, user_chat_id=user_chat_id))
+        await db.merge(
+            SupportRelay(admin_message_id=admin_message_id, user_chat_id=user_chat_id, question_text=question)
+        )
         await db.commit()
+
+
+#: Что писать вместо текста, когда человек прислал только вложение.
+_ATTACHMENTS = {
+    "photo": "📎 Фото",
+    "video": "📎 Видео",
+    "document": "📎 Файл",
+    "voice": "📎 Голосовое сообщение",
+    "video_note": "📎 Видеосообщение",
+    "audio": "📎 Аудио",
+    "sticker": "📎 Стикер",
+}
+
+MAX_QUESTIONS = 5
+MAX_QUESTION_CHARS = 500
+#: Telegram режет сообщение на 4096 знаках; запас под заголовки.
+MAX_MESSAGE_CHARS = 3900
+
+
+def _question_of(message: Message) -> str:
+    text = (getattr(message, "text", None) or getattr(message, "caption", None) or "").strip()
+    if text:
+        return text
+    kind = getattr(message, "content_type", None)
+    return _ATTACHMENTS.get(getattr(kind, "value", kind) or "", "📎 Вложение")
+
+
+async def _pending_questions(user_chat_id: int, replied_to: int) -> list[str]:
+    """Вопросы человека, на которые ещё не отвечали, по порядку. Если таких нет (владелец
+    отвечает на старое сообщение), — вопрос, на который он ответил Reply-ем."""
+    async with AsyncSessionLocal() as db:
+        rows = (
+            await db.execute(
+                select(SupportRelay.question_text)
+                .where(
+                    SupportRelay.user_chat_id == user_chat_id,
+                    SupportRelay.question_text.is_not(None),
+                    SupportRelay.answered_at.is_(None),
+                )
+                .order_by(SupportRelay.created_at.desc(), SupportRelay.admin_message_id.desc())
+                .limit(MAX_QUESTIONS)
+            )
+        ).scalars().all()
+        if not rows:
+            single = (
+                await db.execute(select(SupportRelay.question_text).where(SupportRelay.admin_message_id == replied_to))
+            ).scalar_one_or_none()
+            return [single] if single else []
+    return list(reversed(rows))
+
+
+async def _mark_answered(user_chat_id: int) -> None:
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            update(SupportRelay)
+            .where(
+                SupportRelay.user_chat_id == user_chat_id,
+                SupportRelay.question_text.is_not(None),
+                SupportRelay.answered_at.is_(None),
+            )
+            .values(answered_at=datetime.now(timezone.utc))
+        )
+        await db.commit()
+
+
+def _short(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def compose_answer(questions: list[str], answer: str | None) -> str:
+    """Одно сообщение: вопросы человека и ответ поддержки. `answer=None` — ответ придёт
+    следующим сообщением (вложение или слишком длинный текст)."""
+    parts = ["✅ <b>Пришёл ответ от поддержки!</b>"]
+    if questions:
+        title = "Ваш вопрос:" if len(questions) == 1 else "Ваши вопросы:"
+        quoted = "\n".join(f"<blockquote>{escape(_short(q, MAX_QUESTION_CHARS))}</blockquote>" for q in questions)
+        parts.append(f"<b>{title}</b>\n{quoted}")
+    if answer is None:
+        parts.append("<b>Ответ от поддержки:</b>\nсм. следующее сообщение 👇")
+    else:
+        parts.append(f"<b>Ответ от поддержки:</b>\n{escape(answer)}")
+    parts.append(
+        "Остались вопросы или нужно разобрать тему подробнее? Откройте «💬 Поддержка» в меню "
+        "и напишите новое сообщение."
+    )
+    return "\n\n".join(parts)
+
+
+_AFTER_ANSWER = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text="💬 Поддержка", callback_data="sup:start"),
+            InlineKeyboardButton(text="🏠 Меню", callback_data="m:main"),
+        ]
+    ]
+)
 
 
 async def _owner_of(admin_message_id: int) -> int | None:
@@ -119,12 +218,16 @@ async def _to_owner(message: Message, bot: Bot, admin: int) -> None:
     )
     copied = await bot.copy_message(admin, from_chat_id=user_id, message_id=message.message_id)
     await _remember(header.message_id, user_id)
-    await _remember(copied.message_id, user_id)
+    await _remember(copied.message_id, user_id, question=_question_of(message))
 
     now = time.monotonic()
     if now - _acknowledged.get(user_id, -ACK_EVERY_SECONDS) >= ACK_EVERY_SECONDS:
         _acknowledged[user_id] = now
-        await bot.send_message(user_id, "✅ Принято. Отвечу сюда же, как только смогу.")
+        await bot.send_message(
+            user_id,
+            "✅ Сообщение отправлено в поддержку. Ответ придёт сюда, в этот чат, в течение 24 часов. "
+            "Можно дописать ещё — я передам всё.",
+        )
 
 
 async def _from_owner(message: Message, bot: Bot, admin: int) -> None:
@@ -142,14 +245,27 @@ async def _from_owner(message: Message, bot: Bot, admin: int) -> None:
         )
         return
 
+    questions = await _pending_questions(user_chat, reply.message_id)
+    text = (getattr(message, "text", None) or "").strip()
+    composed = compose_answer(questions, text) if text else ""
+    # Вложение или слишком длинный текст — ответ уходит отдельным сообщением, как есть.
+    separate = not text or len(composed) > MAX_MESSAGE_CHARS
     try:
-        await bot.copy_message(user_chat, from_chat_id=admin, message_id=message.message_id)
+        await bot.send_message(
+            user_chat,
+            compose_answer(questions, None) if separate else composed,
+            parse_mode="HTML",
+            reply_markup=None if separate else _AFTER_ANSWER,
+        )
+        if separate:
+            await bot.copy_message(user_chat, from_chat_id=admin, message_id=message.message_id)
     except TelegramForbiddenError:
         await bot.send_message(admin, "Человек заблокировал бота — ответ не доставлен.")
     except TelegramAPIError as exc:
         logger.warning("Support reply to %s failed: %s", user_chat, exc)
         await bot.send_message(admin, f"Не доставлено: {exc.message}")
     else:
+        await _mark_answered(user_chat)
         # Ответ владельца открывает разговор: человек вправе ответить, а ответ на
         # ответ должен дойти (поэтому и сообщение владельца запоминается).
         await _remember(message.message_id, user_chat)
@@ -161,7 +277,7 @@ async def _from_owner(message: Message, bot: Bot, admin: int) -> None:
 async def relay(message: Message, bot: Bot) -> None:
     admin = get_settings().support_chat
     if admin is None:
-        await bot.send_message(message.chat.id, "Поддержка через бота пока не подключена. Напиши позже 🙏")
+        await bot.send_message(message.chat.id, "Поддержка через бота пока не подключена. Напишите позже 🙏")
         return
     if message.chat.id == admin:
         await _from_owner(message, bot, admin)

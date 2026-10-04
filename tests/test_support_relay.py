@@ -72,7 +72,7 @@ async def test_a_message_reaches_the_owner_and_the_person_is_told_it_was_receive
     assert sent_to_admin and "id 990700002" in sent_to_admin[0].args[1] and "@anna" in sent_to_admin[0].args[1]
     bot.copy_message.assert_awaited_with(ADMIN, from_chat_id=USER, message_id=11)
     acks = [c for c in bot.send_message.await_args_list if c.args[0] == USER]
-    assert acks and "Принято" in acks[0].args[1]
+    assert acks and "отправлено в поддержку" in acks[0].args[1] and "24 часов" in acks[0].args[1]
 
 
 @pytest.mark.asyncio
@@ -83,7 +83,8 @@ async def test_the_owners_reply_goes_to_the_person_who_wrote():
 
     await support.relay(_msg(ADMIN, 77, "Здравствуйте! Сейчас посмотрю.", reply_to=copy_id), bot)
 
-    bot.copy_message.assert_awaited_with(USER, from_chat_id=ADMIN, message_id=77)
+    answers = [c for c in bot.send_message.await_args_list if c.args[0] == USER and "Пришёл ответ" in c.args[1]]
+    assert answers and "Здравствуйте! Сейчас посмотрю." in answers[0].args[1]
     confirmations = [c for c in bot.send_message.await_args_list if c.args[0] == ADMIN and "Отправлено" in c.args[1]]
     assert confirmations
 
@@ -93,7 +94,7 @@ async def test_replying_to_the_header_works_too():
     bot = _bot()
     await support.relay(_msg(USER, 11), bot)
     await support.relay(_msg(ADMIN, 78, "ок", reply_to=501), bot)
-    bot.copy_message.assert_awaited_with(USER, from_chat_id=ADMIN, message_id=78)
+    assert any(c.args[0] == USER and "Пришёл ответ" in c.args[1] for c in bot.send_message.await_args_list)
 
 
 @pytest.mark.asyncio
@@ -117,10 +118,12 @@ async def test_a_person_who_blocked_the_bot_is_reported_to_the_owner():
     bot = _bot()
     await support.relay(_msg(USER, 11), bot)
 
-    async def refuse(chat_id, from_chat_id, message_id, **kwargs):
-        raise TelegramForbiddenError(method=SendMessage(chat_id=1, text="x"), message="Forbidden: bot was blocked by the user")
+    async def refuse(chat_id, text, **kwargs):
+        if chat_id == USER:
+            raise TelegramForbiddenError(method=SendMessage(chat_id=1, text="x"), message="Forbidden: bot was blocked by the user")
+        return SimpleNamespace(message_id=999)
 
-    bot.copy_message = AsyncMock(side_effect=refuse)
+    bot.send_message = AsyncMock(side_effect=refuse)
     await support.relay(_msg(ADMIN, 92, "ответ", reply_to=502), bot)
     assert "заблокировал" in bot.send_message.await_args_list[-1].args[1]
 
@@ -202,4 +205,69 @@ async def test_the_owners_reply_keeps_the_conversation_open_both_ways():
 
     # и ответ на ответ владельца тоже находит человека
     await support.relay(_msg(ADMIN, 79, "Конечно", reply_to=77), bot)
-    assert bot.copy_message.await_args_list[-1].args[0] == USER
+    assert bot.send_message.await_args_list[-3].args[0] == USER or any(
+        c.args[0] == USER and "Конечно" in c.args[1] for c in bot.send_message.await_args_list
+    )
+
+
+# ------------------------------------------- ответ одним сообщением: вопросы + ответ
+
+
+@pytest.mark.asyncio
+async def test_the_answer_comes_as_one_message_with_all_unanswered_questions():
+    bot = _bot()
+    await support.relay(_msg(USER, 11, "Не открывается конструктор"), bot)
+    await support.relay(_msg(USER, 12, "И ещё <b>не</b> приходит оплата"), bot)
+
+    await support.relay(_msg(ADMIN, 77, "Обновите страницу & попробуйте снова.", reply_to=502), bot)
+
+    to_user = [c for c in bot.send_message.await_args_list if c.args[0] == USER and "Пришёл ответ" in c.args[1]]
+    assert len(to_user) == 1, "ответ — одним сообщением"
+    text = to_user[0].args[1]
+    assert "Ваши вопросы:" in text
+    assert "Не открывается конструктор" in text and "И ещё &lt;b&gt;не&lt;/b&gt; приходит оплата" in text, "HTML человека экранируется"
+    assert text.index("Ваши вопросы:") < text.index("Ответ от поддержки:")
+    assert "Обновите страницу &amp; попробуйте снова." in text
+    assert "«💬 Поддержка»" in text
+    assert to_user[0].kwargs["parse_mode"] == "HTML"
+
+
+@pytest.mark.asyncio
+async def test_answered_questions_are_not_repeated_in_the_next_answer():
+    bot = _bot()
+    await support.relay(_msg(USER, 11, "Первый вопрос"), bot)
+    await support.relay(_msg(ADMIN, 77, "Ответ 1", reply_to=502), bot)
+    await support.relay(_msg(USER, 12, "Второй вопрос"), bot)
+    await support.relay(_msg(ADMIN, 78, "Ответ 2", reply_to=506), bot)
+
+    answers = [c.args[1] for c in bot.send_message.await_args_list if c.args[0] == USER and "Пришёл ответ" in c.args[1]]
+    assert len(answers) == 2
+    assert "Первый вопрос" in answers[0]
+    assert "Второй вопрос" in answers[1] and "Первый вопрос" not in answers[1]
+    assert "Ваш вопрос:" in answers[1], "один вопрос — единственное число"
+
+
+@pytest.mark.asyncio
+async def test_an_attachment_answer_goes_after_the_questions_not_instead_of_them():
+    bot = _bot()
+    await support.relay(_msg(USER, 11, "Вот скрин"), bot)
+    await support.relay(_msg(ADMIN, 77, None, reply_to=502), bot)  # владелец отвечает вложением
+
+    intro = [c for c in bot.send_message.await_args_list if c.args[0] == USER and "Пришёл ответ" in c.args[1]]
+    assert intro and "Вот скрин" in intro[0].args[1] and "следующее сообщение" in intro[0].args[1]
+    bot.copy_message.assert_awaited_with(USER, from_chat_id=ADMIN, message_id=77)
+
+
+@pytest.mark.asyncio
+async def test_a_very_long_answer_is_sent_whole_after_the_questions():
+    bot = _bot()
+    await support.relay(_msg(USER, 11, "Вопрос"), bot)
+    await support.relay(_msg(ADMIN, 77, "я" * 4500, reply_to=502), bot)
+    intro = [c for c in bot.send_message.await_args_list if c.args[0] == USER and "Пришёл ответ" in c.args[1]]
+    assert intro and len(intro[0].args[1]) < 4096 and "следующее сообщение" in intro[0].args[1]
+    bot.copy_message.assert_awaited_with(USER, from_chat_id=ADMIN, message_id=77)
+
+
+def test_the_message_is_short_and_legible_when_there_is_nothing_to_quote():
+    text = support.compose_answer([], "Готово")
+    assert "Ваш" not in text and "Готово" in text and "Пришёл ответ от поддержки!" in text
