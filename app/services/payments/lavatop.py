@@ -165,9 +165,17 @@ class LavaTopProvider(ProviderDefaults):
             # Lava has no order id field; utm_content is the one value that
             # makes the round trip into the webhook untouched.
             "clientUtm": {"utm_source": "telegram_bot", "utm_content": str(request.payment_id)},
-            "successful_return_url": request.return_url,
-            "failure_return_url": request.return_url,
-            "cancel_return_url": request.return_url,
+            # lava.top принимает только абсолютные https-адреса до 512 знаков и при любом другом ответит 400 на весь
+            # счёт — тогда адреса просто не передаём.
+            **(
+                {
+                    "successful_return_url": request.return_url,
+                    "failure_return_url": request.return_url,
+                    "cancel_return_url": request.return_url,
+                }
+                if request.return_url.startswith("https://") and len(request.return_url) <= 512
+                else {}
+            ),
         }
 
         async with httpx.AsyncClient(timeout=30) as client:

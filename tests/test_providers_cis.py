@@ -157,7 +157,8 @@ async def test_freedompay_signs_the_init_request_and_follows_the_redirect(mock_h
 
     assert checkout.url == "https://pay.freedompay.money/pay/77123"
     assert checkout.provider_payment_id == "77123"
-    assert seen["pg_order_id"] == str(PAYMENT_ID)
+    assert seen["pg_order_id"] == PAYMENT_ID.hex, "только буквы и цифры"
+    assert seen["pg_idempotency_key"] == PAYMENT_ID.hex
     assert seen["pg_amount"] == "990.00"
     # Recomputed from the scheme, not from the adapter's helper.
     assert seen["pg_sig"] == freedom_sign("init_payment.php", seen)

@@ -249,3 +249,180 @@ async def test_freedompay_has_a_host_per_country():
     assert base({}) == "https://api.freedompay.kz"
     assert base({"country": "uz"}) == "https://api.freedompay.uz"
     assert base({"country": "KG"}) == "https://api.freedompay.kg"
+
+
+# ===================================================== Freedom Pay: Gateway API
+
+FP = {"merchant_id": "548469", "secret_key": "fp_secret"}
+
+
+def fp_xml(**fields) -> str:
+    return "<?xml version='1.0' encoding='utf-8'?><response>" + "".join(f"<{k}>{v}</{k}>" for k, v in fields.items()) + "</response>"
+
+
+def fp_api(log, *, state="success", captured="1", amount="990", refunded="0", status_error=None):
+    def handler(req: httpx.Request) -> httpx.Response:
+        body = dict(x.split("=", 1) for x in req.content.decode().split("&")) if req.content else {}
+        log.append((req.url.path, body))
+        name = req.url.path.rsplit("/", 1)[-1]
+        if name == "status_v2":
+            if status_error:
+                return httpx.Response(200, text=fp_xml(pg_status="error", pg_error_code=status_error, pg_error_description="x"))
+            return httpx.Response(200, text=fp_xml(
+                pg_status="ok", pg_payment_status=state, pg_amount=amount, pg_currency="KZT", pg_captured=captured,
+                pg_refund_amount=refunded, pg_failure_description="Недостаточно средств" if state == "error" else "",
+            ))
+        if name == "clearing":
+            return httpx.Response(200, text=fp_xml(pg_status="ok"))
+        if name == "recurrent":
+            return httpx.Response(200, text=fp_xml(pg_status="ok", pg_payment_id="555", pg_recurring_profile="60144557"))
+        return httpx.Response(200, text=fp_xml(pg_status="ok", pg_payment_id="555", pg_redirect_url="https://pay"))
+
+    return handler
+
+
+async def fp_check(mock_http, handler, **kwargs):
+    with mock_http(handler):
+        return await get_provider("freedompay").check_status(
+            credentials=FP, amount_minor=99000, invoice_no=1, payment_id=PAYMENT_ID, provider_payment_id="555",
+            meta={"freedompay_order_id": PAYMENT_ID.hex}, currency="KZT", **kwargs,
+        )
+
+
+async def test_freedompay_reads_the_payment_status_with_a_signed_status_v2_call(mock_http):
+    log: list = []
+    result = await fp_check(mock_http, fp_api(log))
+    assert result.status is PaymentStatus.paid
+    path, body = log[0]
+    assert path == "/g2g/status_v2" and body["pg_order_id"] == PAYMENT_ID.hex and body["pg_payment_id"] == "555"
+    signed = {k: v for k, v in body.items() if k != "pg_sig"}
+    base = ";".join(["status_v2", *[signed[k] for k in sorted(signed)], "fp_secret"])
+    assert body["pg_sig"] == hashlib.md5(base.encode()).hexdigest()
+
+
+async def test_freedompay_statuses_map_to_ours(mock_http):
+    assert (await fp_check(mock_http, fp_api([], state="pending"))).status is PaymentStatus.pending
+    failed = await fp_check(mock_http, fp_api([], state="error"))
+    assert failed.status is PaymentStatus.failed and "Недостаточно" in failed.meta["decline"]
+    assert (await fp_check(mock_http, fp_api([], status_error="11068"))).status is PaymentStatus.pending, "платёж ещё не создан"
+    assert (await fp_check(mock_http, fp_api([], refunded="990"))).status is PaymentStatus.refunded
+    assert (await fp_check(mock_http, fp_api([], refunded="100"))).status is PaymentStatus.paid, "частичный возврат заказ не закрывает"
+    with pytest.raises(ProviderError, match="сумма"):
+        await fp_check(mock_http, fp_api([], amount="10"))
+
+
+async def test_freedompay_clears_a_held_two_step_payment(mock_http):
+    log: list = []
+    result = await fp_check(mock_http, fp_api(log, captured="0"))
+    assert result.status is PaymentStatus.paid
+    assert [p for p, _ in log] == ["/g2g/status_v2", "/g2g/clearing"]
+
+
+async def test_freedompay_renewal_reads_its_result_right_away(mock_http):
+    from app.services.payments.base import RecurringSetup
+
+    log: list = []
+    with mock_http(fp_api(log)):
+        verdict = await get_provider("freedompay").charge_recurring(
+            credentials=FP, setup=RecurringSetup(token="60144557"), amount_minor=99000, currency="KZT",
+            description="Клуб", payment_id=PAYMENT_ID, invoice_no=9,
+        )
+    assert [p for p, _ in log] == ["/g2g/recurrent", "/g2g/status_v2"]
+    assert verdict.status is PaymentStatus.paid and verdict.provider_payment_id == "555"
+
+    log2: list = []
+    with mock_http(fp_api(log2, state="error")):
+        declined = await get_provider("freedompay").charge_recurring(
+            credentials=FP, setup=RecurringSetup(token="60144557"), amount_minor=99000, currency="KZT",
+            description="Клуб", payment_id=PAYMENT_ID, invoice_no=9,
+        )
+    assert declined.status is PaymentStatus.failed
+
+
+# ============================================================ Robokassa: OpStateExt
+
+
+def robo_state(code="100", result="0", out_sum="990.000000"):
+    def handler(req: httpx.Request) -> httpx.Response:
+        handler.seen = req
+        return httpx.Response(200, text=(
+            '<OperationStateResponse xmlns="http://merchant.roboxchange.com/WebService/">'
+            f"<Result><Code>{result}</Code></Result><State><Code>{code}</Code></State>"
+            f"<Info><OutSum>{out_sum}</OutSum></Info></OperationStateResponse>"
+        ))
+
+    return handler
+
+
+async def robo_check(mock_http, handler, meta=None):
+    with mock_http(handler):
+        return await get_provider("robokassa").check_status(
+            credentials=ROBO, amount_minor=99000, invoice_no=77, payment_id=PAYMENT_ID,
+            provider_payment_id="77", meta=meta or {}, currency="RUB",
+        )
+
+
+async def test_robokassa_asks_opstateext_with_a_password2_signature(mock_http):
+    handler = robo_state()
+    result = await robo_check(mock_http, handler)
+    assert result.status is PaymentStatus.paid
+    query = parse_qs(urlsplit(str(handler.seen.url)).query)
+    assert query["Signature"][0] == hashlib.md5(b"shop:77:p2").hexdigest()
+    assert query["InvoiceID"] == ["77"] and "OpStateExt" in handler.seen.url.path
+
+
+async def test_robokassa_operation_states_map_to_ours(mock_http):
+    for code, expected in (("10", PaymentStatus.failed), ("60", PaymentStatus.refunded), ("5", PaymentStatus.pending),
+                           ("50", PaymentStatus.pending), ("20", PaymentStatus.pending), ("80", PaymentStatus.pending)):
+        assert (await robo_check(mock_http, robo_state(code))).status is expected, code
+    assert (await robo_check(mock_http, robo_state(result="3"))).status is PaymentStatus.pending, "операции ещё нет"
+    with pytest.raises(ProviderError, match="код 1"):
+        await robo_check(mock_http, robo_state(result="1"))
+    with pytest.raises(ProviderError, match="сумма"):
+        await robo_check(mock_http, robo_state(out_sum="10"))
+    with pytest.raises(ProviderError, match="тестового"):
+        await robo_check(mock_http, robo_state(), meta={"robokassa_test": True})
+
+
+async def test_robokassa_renewal_carries_the_receipt_inside_the_signature(mock_http):
+    from app.services.payments.base import RecurringSetup
+
+    seen = {}
+
+    def handler(req):
+        seen["body"] = parse_qs(req.content.decode())
+        return httpx.Response(200, text="OK156")
+
+    creds = {**ROBO, "fiscalization_enabled": "1", "fiscal_email": "shop@example.com", "default_vat": "vat22"}
+    with mock_http(handler):
+        await get_provider("robokassa").charge_recurring(
+            credentials=creds, setup=RecurringSetup(token="154"), amount_minor=99000, currency="RUB",
+            description="Клуб", payment_id=PAYMENT_ID, invoice_no=156,
+        )
+    body = seen["body"]
+    receipt_once = body["Receipt"][0]
+    assert body["SignatureValue"][0] == hashlib.md5(f"shop:990.00:156:{receipt_once}:p1".encode()).hexdigest()
+    assert body["PreviousInvoiceID"] == ["154"] and body["InvoiceID"] == ["156"]
+
+
+# ================================================================ lava.top: return URLs
+
+
+async def test_lava_leaves_out_return_urls_it_would_reject(mock_http):
+    seen = []
+
+    def handler(req):
+        if req.method == "POST":
+            seen.append(json.loads(req.content))
+        return httpx.Response(201, json={"id": FIRST, "paymentUrl": "https://pay", "amountTotal": {"amount": 990}})
+
+    provider = get_provider("lavatop")
+    with mock_http(handler):
+        await provider.create_checkout(request({**LAVA}, extra={"offer_id": "o1"}, amount=99000))
+        bad = CheckoutRequest(
+            payment_id=PAYMENT_ID, invoice_no=1, amount_minor=99000, currency="RUB", description="x",
+            return_url="http://insecure.example/x", is_test=False, credentials=LAVA, extra={"offer_id": "o1"},
+        )
+        await provider.create_checkout(bad)
+    assert seen[0]["successful_return_url"] == "https://t.me/x"
+    assert "successful_return_url" not in seen[1], "http-адрес lava.top отверг бы весь счёт"

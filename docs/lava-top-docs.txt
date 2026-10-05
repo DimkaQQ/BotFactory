@@ -1,0 +1,3474 @@
+openapi: 3.0.3
+info:
+  title: lava.top Public API
+  version: 1.22.0
+security:
+  - ApiKeyAuth: [ ]
+
+paths:
+  /api/v1/feed:
+    get:
+      tags:
+        - Products
+      summary: Лента продуктов и постов
+      deprecated: true
+      security:
+        - ApiKeyAuth: [ ]
+      parameters:
+        - in: query
+          required: false
+          name: contentCategories
+          description: фильтрация по типу контента
+          schema:
+            $ref: '#/components/schemas/FeedItemType'
+        - in: query
+          required: false
+          name: productTypes
+          description: фильтрация по типу продукта
+          schema:
+            $ref: '#/components/schemas/ProductType'
+        - in: query
+          required: false
+          name: page
+          description: Номер страницы
+          schema:
+            format: integer
+        - in: query
+          required: false
+          name: size
+          description: Количество элементов на странице
+          schema:
+            format: integer
+      responses:
+        200:
+          description: список постов и продуктов
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Страница элементов
+                properties:
+                  items:
+                    type: array
+                    description: Элементы страницы
+                    items:
+                      properties:
+                        type:
+                          $ref: "#/components/schemas/FeedItemType"
+                        data:
+                          $ref: "#/components/schemas/ProductItemDto"
+                  total:
+                    type: number
+                  page:
+                    type: number
+                  size:
+                    type: number
+
+  /api/v1/invoice:
+    post:
+      deprecated: true
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Invoices
+      summary: Создание контракта на покупку контента. Устарел. Новый метод - /api/v2/invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceRequestDto'
+      responses:
+        201:
+          description: Возвращает описание созданного контракта
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePaymentParamsResponse'
+        404:
+          description: Продукт с таким идентификатором оффера не существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Product with offer id = '3fa85f64-5717-4562-b3fc-2c963f66afa6' not found"
+                details: { }
+                timestamp: "2025-01-01T10:00:00.0000000+00:00"
+    get:
+      summary: Получение продажи партнёра. Устарел, используйте новый рут - GET /api/v1/invoices/{id}
+      deprecated: true
+      tags:
+        - Products
+      parameters:
+        - in: query
+          name: id
+          description: Идентификатор контракта
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Продажа партнёра
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePaymentParamsResponse'
+        404:
+          description: Продажа с таким id не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invoice with such id = '3fa85f64-5717-4562-b3fc-2c963f66afa6' not found"
+                details: { }
+                timestamp: "2025-01-01T10:00:00.0000000+00:00"
+        401:
+          description: Пользователь неавторизован
+
+  /api/v2/invoice:
+    post:
+      deprecated: true
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Invoices
+      summary: Создание контракта на покупку контента (аналогичен /api/v1/invoice).Устарел, используйте новый рут - POST /api/v3/invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceRequestDto'
+            examples:
+              product_rub_purchase_min_fields:
+                summary: Пример покупки продукта (не подписки) через RUB c минимальным набором полей
+                description: > 
+                  paymentMethod не передан, значит по умолчанию будет использован SMART_GLOCAL в качестве платежного метода. 
+                  Поле periodicity также не передано и т.к. продукт является не подпиской - по умолчанию будет использован ONE_TIME значение
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "RUB"
+              product_rub_smart_glocal_purchase_min_fields:
+                summary: Пример покупки продукта (не подписки) через RUB и провайдер SMART_GLOCAL
+                description: >
+                  paymentMethod не передан, значит по умолчанию будет использован SMART_GLOCAL в качестве платежного метода. 
+                  Поле periodicity также не передано и т.к. продукт является не подпиской - по умолчанию будет использован ONE_TIME значение
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "RUB"
+                  paymentMethod: "SMART_GLOCAL"
+
+              product_usd_purchase:
+                summary: Пример покупки продукта (не подписки) через USD c явной передачей периодичности
+                description: >
+                  paymentMethod не передан, значит по умолчанию будет использован UNLIMINT в качестве платежного метода
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "USD"
+                  periodicity: "ONE_TIME"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+
+              product_eur_purchase:
+                summary: Пример покупки продукта (не подписки) через EUR c явной передачей языка пользователя
+                description: >
+                  paymentMethod не передан, значит по умолчанию будет использован UNLIMINT в качестве платежного метода.
+                  Язык пользователя выставлен на английский. Он будет учитываться при отправки нотификаций и писем на почту.
+                  Если язык не передан, то по умолчанию используется английский
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  buyerLanguage: "EN"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+
+              product_eur_purchase_paypal:
+                summary: Пример покупки продукта (не подписки) через EUR (PAYPAL)
+                description: >
+                  Т.к. покупка осуществляется в валюте, то возможен вариант покупки продукта через PAYPAL
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentMethod: "PAYPAL"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+
+              product_purchase_with_utm:
+                summary: Пример покупки продукта с передачей UTM-меток
+                description: >
+                  При совершении покупки пользователем, есть возможность передать UTM-метки
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  clientUtm:
+                    utm_source: "google"
+                    utm_medium: "cpc"
+                    utm_campaign: "summer_sale"
+                    utm_term: "running_shoes"
+                    utm_content: "homepage_banner"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+
+              subscription_usd_purchase:
+                summary: Пример покупки подписки через USD (PAYPAL)
+                description: Оформление подписки осуществляется с ежемесячным списанием (см. параметр periodicity) через PayPal
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  periodicity: "MONTHLY"
+                  currency: "USD"
+                  paymentMethod: "PAYPAL"
+                  buyerLanguage: "EN"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              subscription_eur:
+                summary: Пример покупки подписки через EUR (UNLIMINT)
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  periodicity: "PERIOD_90_DAYS"
+                  currency: "EUR"
+                  buyerLanguage: "EN"
+                  paymentMethod: "UNLIMINT"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+
+              subscription_usd_purchase_with_utm:
+                summary: Пример покупки подписки c передачей UTM-меток
+                description: >
+                  Оформление подписки осуществляется со списанием каждые 180 дней (см. параметр periodicity) через PayPal.
+                  В примере показано, как можно передавать UTM-метки
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  periodicity: "PERIOD_180_DAYS"
+                  currency: "USD"
+                  buyerLanguage: "EN"
+                  paymentMethod: "PAYPAL"
+                  clientUtm:
+                    utm_source: "google"
+                    utm_medium: "cpc"
+                    utm_campaign: "summer_sale"
+                    utm_term: "running_shoes"
+                    utm_content: "homepage_banner"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_rub_зpay2me_sbp:
+                summary: Пример покупки продукта (не подписки) через Систему Быстрых Платежей и провайдер PAY2ME
+                description: >
+                  paymentMethod не передан, значит по умолчанию будет использован SMART_GLOCAL в качестве платежного метода. 
+                  Поле periodicity также не передано и т.к. продукт является не подпиской - по умолчанию будет использован ONE_TIME значение
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "RUB"
+                  paymentMethod: "PAY2ME"
+                  type: "SBP"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+
+      responses:
+        201:
+          description: Возвращает описание созданного контракта
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePaymentParamsResponse'
+        404:
+          description: Продукт с таким идентификатором оффера не существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Product with offer id = '3fa85f64-5717-4562-b3fc-2c963f66afa6' not found"
+                details: { }
+                timestamp: "2025-01-01T10:00:00.0000000+00:00"
+  /api/v3/invoice:
+    post:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Invoices
+      summary: Создание контракта на покупку контента
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvoiceV3Request'
+            examples:
+              product_RUB:
+                summary: Пример покупки продукта (не подписка) за RUB с минимальным набором полей
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "RUB"
+              product_USD:
+                summary: Пример покупки продукта (не подписка) за USD с минимальным набором полей
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "USD"
+              product_EUR:
+                summary: Пример покупки продукта (не подписка) за EUR с минимальным набором полей
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+              product_RUB_SMART_GLOCAL:
+                summary: Пример покупки продукта (не подписка) за RUB, через провайдер SMART_GLOCAL и способ оплаты карта
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  paymentProvider: "SMART_GLOCAL"
+                  currency: "RUB"
+                  paymentMethod: "CARD"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_RUB_PAY2ME:
+                summary: Пример покупки продукта (не подписка) за RUB, через провайдер PAY2ME и способ оплаты СБП
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  paymentProvider: "PAY2ME"
+                  currency: "RUB"
+                  paymentMethod: "SBP"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_USD_UNLIMIT_CARD:
+                summary: Пример покупки продукта (не подписка) за USD, через провайдер UNLIMIT и способ оплаты карта
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "USD"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "CARD"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_USD_UNLIMIT_PIX:
+                summary: Пример покупки продукта (не подписка) за USD, через провайдер UNLIMIT и способ оплаты PIX
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "USD"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "PIX"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_USD_UNLIMIT_APPLEPAY:
+                summary: Пример покупки продукта (не подписка) за USD, через провайдер UNLIMIT и способ оплаты APPLE_PAY
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "USD"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "APPLE_PAY"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_USD_PAYPAL:
+                summary: Пример покупки продукта (не подписка) за USD, через провайдер PAYPAL
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "USD"
+                  paymentProvider: "PAYPAL"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_EUR_UNLIMIT_CARD:
+                summary: Пример покупки продукта (не подписка) за EUR, через провайдер UNLIMIT и способ оплаты карта
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "CARD"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_EUR_UNLIMIT_PIX:
+                summary: Пример покупки продукта (не подписка) за EUR, через провайдер UNLIMIT и способ оплаты PIX
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "PIX"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_EUR_UNLIMIT_APPLE_PAY:
+                summary: Пример покупки продукта (не подписка) за EUR, через провайдер UNLIMIT и способ оплаты APPLE_PAY
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "APPLE_PAY"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+#              product_EUR_UNLIMIT_CHECKOUT_PAGE:
+#                summary: Пример покупки продукта (не подписка) за EUR, через провайдер UNLIMIT и способ оплаты CHECKOUT_PAGE
+#                value:
+#                  email: "client@gmail.com"
+#                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+#                  currency: "EUR"
+#                  paymentProvider: "UNLIMIT"
+#                  paymentMethod: "CHECKOUT_PAGE"
+              product_EUR_UNLIMIT_SEPATRANSFER:
+                summary: Пример покупки продукта (не подписка) за EUR, через провайдер UNLIMIT и способ оплаты SEPATRANSFER
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "SEPATRANSFER"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_EUR_UNLIMIT_IDEAL:
+                summary: Пример покупки продукта (не подписка) за EUR, через провайдер UNLIMIT и способ оплаты IDEAL
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "IDEAL"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_EUR_UNLIMIT_BIZUM:
+                summary: Пример покупки продукта (не подписка) за EUR, через провайдер UNLIMIT и способ оплаты BIZUM
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "BIZUM"
+                  fullName: "John Doe"
+                  walletId: "+34600111222"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_EUR_UNLIMIT_MBWAY:
+                summary: Пример покупки продукта (не подписка) за EUR, через провайдер UNLIMIT и способ оплаты MBWAY
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "MBWAY"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_EUR_UNLIMIT_BANCONTACT:
+                summary: Пример покупки продукта (не подписка) за EUR, через провайдер UNLIMIT и способ оплаты BANCONTACT
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "BANCONTACT"
+                  fullName: "John Doe"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_EUR_PAYPAL:
+                summary: Пример покупки продукта (не подписка) за EUR, через провайдер PAYPAL
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "PAYPAL"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_EUR_buyer_language:
+                summary: Пример покупки продукта, с явной передачей языка пользователя
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  buyerLanguage: "EN"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_utm:
+                summary: Пример покупки продукта с передачей UTM-меток
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  clientUtm:
+                    utm_source: "google"
+                    utm_medium: "cpc"
+                    utm_campaign: "summer_sale"
+                    utm_term: "running_shoes"
+                    utm_content: "homepage_banner"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              product_with_promo_code:
+                summary: Пример покупки продукта (не подписка) с применением промокода
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "RUB"
+                  promoCode: "SUMMER2026"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              subscription_with_promo_code:
+                summary: Пример покупки подписки с применением промокода
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "USD"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "CARD"
+                  periodicity: "MONTHLY"
+                  promoCode: "WELCOME10"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              subscription_USD_UNLIMIT_CARD:
+                summary: Пример покупки подписки за USD, через провайдер UNLIMIT и способ оплаты карта
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "USD"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "CARD"
+                  periodicity: "MONTHLY"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              subscription_USD_PAYPAL:
+                summary: Пример покупки подписки за USD, через провайдер PAYPAL
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "USD"
+                  paymentProvider: "PAYPAL"
+                  periodicity: "MONTHLY"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              subscription_EUR_UNLIMINT_CARD:
+                summary: Пример покупки подписки за EUR, через провайдер UNLIMIT и способ оплаты карта
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "UNLIMIT"
+                  paymentMethod: "CARD"
+                  periodicity: "MONTHLY"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              subscription_EUR_PAYPAL:
+                summary: Пример покупки подписки за EUR, через провайдер PAYPAL
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "EUR"
+                  paymentProvider: "PAYPAL"
+                  periodicity: "MONTHLY"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+              subscription_RUB_SMART_GLOCAL:
+                summary: Пример покупки подписки за RUB, через провайдер SMART_GLOCAL
+                value:
+                  email: "client@gmail.com"
+                  offerId: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                  currency: "RUB"
+                  paymentProvider: "SMART_GLOCAL"
+                  periodicity: "MONTHLY"
+                  successful_return_url: "https://author.example/success"
+                  failure_return_url: "https://author.example/failure"
+                  cancel_return_url: "https://author.example/cancel"
+
+      responses:
+        201:
+          description: Возвращает описание созданного контракта
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePaymentParamsResponse'
+        404:
+          description: Продукт с таким идентификатором оффера не существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Product with offer id = '3fa85f64-5717-4562-b3fc-2c963f66afa6' not found"
+                details: { }
+                timestamp: "2025-01-01T10:00:00.0000000+00:00"
+
+  /api/v1/invoices:
+    get:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Invoices
+      summary: Получение страницы контрактов API-ключа, использованного в запросе
+      parameters:
+        - in: query
+          name: beginDate
+          required: false
+          description: >
+            Параметр для поиска от переданной даты (UTC+0). Если контракт в состоянии in-progress,
+            то учитывается дата создания контракта вместо даты исполнения
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: endDate
+          required: false
+          description: >
+            Параметр для поиска до переданной даты (UTC+0). Если контракт в состоянии in-progress,
+            то учитывается дата создания контракта вместо даты исполнения
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: buyerEmail
+          required: false
+          description: >
+            Поиск по почте покупателя (на момент покупки). Работает поиск по шаблону
+            (в т.ч. по полному совпадению)
+          schema:
+            type: string
+        - in: query
+          name: currencies
+          required: false
+          description: Валюта, в которой был инициирован контракт
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/CurrencyDto'
+        - in: query
+          name: last4CardDigits
+          required: false
+          description: >
+            Последние 4 цифры карты покупателя. Работает поиск по шаблону, так и по полному совпадению
+          schema:
+            type: string
+        - in: query
+          name: productName
+          required: false
+          description: >
+            Поиск по названию продукта/уровню подписки. Работает поиск по шаблону,
+            так и по полному совпадению
+          schema:
+            type: string
+        - in: query
+          name: invoiceTypes
+          required: false
+          description: >
+            Поиск по типу контракта. Если не передано, то по умолчанию - продажи продуктов и подписок
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/InvoiceType'
+        - in: query
+          name: invoiceStatuses
+          required: false
+          description: >
+            Статус контрактов. Если не передано, то по умолчанию - только успешные (completed)
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/InvoiceStatus'
+        - in: query
+          name: page
+          required: false
+          description: Номер страницы
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: size
+          required: false
+          description: Размер страницы
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Страница контрактов переданного API-ключа
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Страница с контрактами
+                properties:
+                  items:
+                    type: array
+                    description: Элементы страницы
+                    items:
+                      $ref: "#/components/schemas/InvoiceResponseV2"
+                  page:
+                    type: integer
+                    description: Номер страницы
+                  size:
+                    type: integer
+                    description: Количество элементов страницы
+                  total:
+                    type: integer
+                    description: Общее количество элементов
+        '400':
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Действие запрещено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/invoices/{id}:
+    get:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Invoices
+      summary: Получение контракта по идентификатору
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Идентификатор контракта
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Контракт
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponseV2"
+        '400':
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Действие запрещено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Продажа с таким id не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invoice with such id  = '3fa85f64-5717-4562-b3fc-2c963f66afa6' not found"
+                details: { }
+                timestamp: "2025-01-01T10:00:00.0000000+00:00"
+
+  /api/v1/sales/:
+    get:
+      summary: Получение списка продаж партнёра
+      tags:
+        - Reports
+      parameters:
+        - in: query
+          required: false
+          name: page
+          description: номер страницы
+          schema:
+            type: integer
+        - in: query
+          required: false
+          name: size
+          description: количество возвращаемых элементов страницы
+          schema:
+            type: integer
+      responses:
+        200:
+          description: Страница с продажами партнёра получена
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Страница с продажами партнёра
+                properties:
+                  items:
+                    type: array
+                    description: Элементы страницы
+                    items:
+                      $ref: "#/components/schemas/PartnerProductDto"
+                  total:
+                    type: integer
+                    description: Общее количество элементов
+                  page:
+                    type: integer
+                    description: Номер текущей страницы
+                  size:
+                    type: integer
+                    description: Максимальное количество элементов на странице
+                  totalPages:
+                    type: integer
+                    description: Общее количество страниц
+        400:
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Пользователь неавторизован
+        403:
+          description: Пользователь не является партнёром
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/sales/{productId}:
+    get:
+      summary: Получение списка продаж партнёра по конкретному продукту
+      tags:
+        - Reports
+      parameters:
+        - in: path
+          name: productId
+          description: Идентификатор продукта
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          required: false
+          name: page
+          description: номер страницы
+          schema:
+            type: integer
+        - in: query
+          required: false
+          name: size
+          description: количество возвращаемых элементов страницы
+          schema:
+            type: integer
+        - in: query
+          required: false
+          name: fromDate
+          description: Начало периода продаж (YYYY-MM-DDTHH:MM:SS+XX:XX)
+          schema:
+            type: string
+            format: date
+        - in: query
+          required: false
+          name: toDate
+          description: Конец периода продаж (YYYY-MM-DDTHH:MM:SS+XX:XX)
+          schema:
+            type: string
+            format: date
+        - in: query
+          required: false
+          name: currency
+          description: Currency ISO 4217 alphabetic code
+          schema:
+            $ref: '#/components/schemas/CurrencyDto'
+        - in: query
+          required: false
+          name: status
+          description: Статус продажи
+          schema:
+            $ref: '#/components/schemas/ContractStatusDto'
+        - in: query
+          required: false
+          name: search
+          description: Строка для поиска
+          schema:
+            type: string
+      responses:
+        200:
+          description: Страница с продажами партнёра
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Страница истории отправок вебхуков
+                properties:
+                  items:
+                    type: array
+                    description: Элементы страницы
+                    items:
+                      $ref: "#/components/schemas/PartnerSaleDetailsDto"
+                  total:
+                    type: integer
+                    description: Общее количество элементов
+                  page:
+                    type: integer
+                    description: Номер текущей страницы
+                  size:
+                    type: integer
+                    description: Максимальное количество элементов на странице
+                  totalPages:
+                    type: integer
+                    description: Общее количество страниц
+        400:
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        401:
+          description: Пользователь неавторизован
+
+  /api/v1/subscriptions:
+    delete:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Subscriptions
+      summary: Отмена подписки на продукт
+      parameters:
+        - in: query
+          name: contractId
+          description: Идентификатор родительского контракта (parentContractId). Этот ID можно получить при первой покупке подписки (api/v2/invoice)
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: email
+          description: Почта пользователя, владеющего подпиской
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        204:
+          description: Подписка успешно отменена
+        400:
+          description: Ошибка отмены подписки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        404:
+          description: Подписки с таким contractId не существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Subscription with invoice id = '3fa85f64-5717-4562-b3fc-2c963f66afa6' not found"
+                details: { }
+                timestamp: "2025-01-01T10:00:00.0000000+00:00"
+    get:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Subscriptions
+      summary: Получение страницы подписок API-ключа, использованного в запросе
+      parameters:
+        - in: query
+          name: beginDate
+          required: false
+          description: >
+            Параметр для поиска от переданной даты (UTC+0). Если подписка в состоянии in-progress,
+            то учитывается дата создания подписки вместо даты исполнения
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: endDate
+          required: false
+          description: >
+            Параметр для поиска до переданной даты (UTC+0). Если подписка в состоянии in-progress,
+            то учитывается дата создания подписки вместо даты исполнения
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: buyerEmail
+          required: false
+          description: >
+            Поиск по почте покупателя (на момент покупки). Работает поиск по шаблону
+            (в т.ч. по полному совпадению)
+          schema:
+            type: string
+        - in: query
+          name: currencies
+          required: false
+          description: Валюта, в которой была инициирована подписка
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/CurrencyDto'
+        - in: query
+          name: last4CardDigits
+          required: false
+          description: >
+            Последние 4 цифры карты покупателя. Работает поиск по шаблону, так и по полному совпадению
+          schema:
+            type: string
+        - in: query
+          name: productName
+          required: false
+          description: >
+            Поиск по названию продукта/уровню подписки. Работает поиск по шаблону,
+            так и по полному совпадению
+          schema:
+            type: string
+        - in: query
+          name: invoiceStatuses
+          required: false
+          description: >
+            Статус контрактов. Если не передано, то по умолчанию - только успешные (COMPLETED)
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/InvoiceStatus'
+        - in: query
+          name: subscriptionStatuses
+          required: false
+          description: >
+            Статус подписок. Если не передано, то по умолчанию - все значения
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/SubscriptionStatus'
+        - in: query
+          name: page
+          required: false
+          description: Номер страницы
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: size
+          required: false
+          description: Размер страницы
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Страница подписок переданного API-ключа
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Страница с подписками
+                properties:
+                  items:
+                    type: array
+                    description: Элементы страницы
+                    items:
+                      $ref: "#/components/schemas/SubscriptionResponse"
+                  page:
+                    type: integer
+                    description: Номер страницы
+                  size:
+                    type: integer
+                    description: Количество элементов страницы
+                  pages:
+                    type: integer
+                    description: Общее количество страниц
+                  total:
+                    type: integer
+                    description: Общее количество элементов
+        '400':
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Действие запрещено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/subscriptions/{id}:
+    get:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Subscriptions
+      summary: Получение подписки по идентификатору контракта
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Идентификатор родительского контракта подписки
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Подписка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetailedSubscriptionResponse"
+        '400':
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Действие запрещено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Подписка не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v2/products:
+    get:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Products
+      summary: Получение списка продуктов. Обновленная версия /api/v1/feed
+      parameters:
+        - in: query
+          required: false
+          name: beforeCreatedAt
+          description: Дата создания до которой ищутся посты и продукты
+          schema:
+            type: string
+            format: 'date-time'
+        - in: query
+          required: false
+          name: contentCategories
+          description: Фильтрация по типу контента
+          schema:
+            $ref: '#/components/schemas/FeedItemType'
+        - in: query
+          required: false
+          name: productTypes
+          description: Фильтрация по типу продукта
+          schema:
+            $ref: '#/components/schemas/ProductType'
+        - in: query
+          required: false
+          name: feedVisibility
+          description: Фильтрация по видимости контента
+          schema:
+            $ref: '#/components/schemas/FeedVisibility'
+        - in: query
+          required: false
+          name: showAllSubscriptionPeriods
+          description: Показывать цены офферов с периодичностью больше месяца или нет (для подписок)
+          schema:
+            type: boolean
+            default: false
+      responses:
+        200:
+          description: Список продуктов
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Страница постов и продуктов
+                properties:
+                  items:
+                    type: array
+                    description: Список постов и продуктов
+                    items:
+                      properties:
+                        type:
+                          $ref: "#/components/schemas/FeedItemType"
+                        data:
+                          oneOf:
+                            - $ref: '#/components/schemas/ProductItemResponse'
+                            - $ref: '#/components/schemas/PostItemResponse'
+                  nextPage:
+                    type: string
+                    description: Ссылка на следующую страницу постов и продуктов
+                    nullable: true
+                    example: https://gate.lava.top/api/v2/products?beforeCreatedAt=2023-11-01T05:43:18.922Z
+
+  /api/v2/products/{productId}:
+    patch:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Products
+      summary: Обновление продукта
+      description: Для обновления офферов продукта нужно предоставить либо цену в 1 валюте (цены в остальных будут отображаться по курсу), либо в 3 валютах (поле prices)
+      parameters:
+        - in: path
+          name: productId
+          description: Идентификатор продукта
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateRequest'
+      responses:
+        200:
+          description: Продукт успешно обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductItemResponse'
+        404:
+          description: Продукт не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Product with id = '3fa85f64-5717-4562-b3fc-2c963f66afa6' not found"
+                details: { }
+                timestamp: "2025-01-01T10:00:00.0000000+00:00"
+
+  /api/v1/donate:
+    get:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Donate
+      summary: Получение ссылки на донат аккаунта
+      responses:
+        200:
+          description: Ссылка на донат успешно получена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DonateResponse'
+
+  /example-of-webhook-route-contract:
+    post:
+      tags:
+        - Webhooks
+      security:
+        - BasicWebhookAuth: [ ]
+        - ApiKeyWebhookAuth: [ ]
+      summary: Пример API-метода, которому должен следовать сервис автора для приёма вебхуков от lava.top
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseWebhookLog'
+            examples:
+              successful_purchase_webhook_payload:
+                summary: Успешно оплаченный продукт (не подписка)
+                value:
+                  eventType: "payment.success"
+                  product:
+                    id: "d31384b8-e412-4be5-a2ec-297ae6666c8f"
+                    title: "Тестовый продукт"
+                  buyer:
+                    email: "test@lava.top"
+                  contractId: "7ea82675-4ded-4133-95a7-a6efbaf165cc"
+                  amount: 40254.19
+                  currency: "RUB"
+                  timestamp: "2024-02-05T09:38:27.33277Z"
+                  status: "completed"
+                  errorMessage: ""
+
+              failed_purchase_webhook_payload:
+                summary: Неуспешно оплаченный продукт (не подписка)
+                value:
+                  eventType: "payment.failed"
+                  product:
+                    id: "d31384b8-e412-4be5-a2ec-297ae6666c8f"
+                    title: "Тестовый продукт"
+                  buyer:
+                    email: "emwbwj@lava.top"
+                  contractId: "7ea82675-4ded-4133-95a7-a6efbaf165cc"
+                  amount: 40254.19
+                  currency: "RUB"
+                  timestamp: "2024-02-05T09:38:27.33277Z"
+                  status: "failed"
+                  errorMessage: "Payment window is opened but not completed"
+
+              successful_subscription_webhook_payload:
+                summary: Успешная оплата подписки (первый платёж)
+                value:
+                  eventType: "payment.success"
+                  product:
+                    id: "72d53efb-3696-469f-b856-f0d815748dd6"
+                    title: "Тестовая подписка"
+                  buyer:
+                    email: "emwbwj@lava.top"
+                  contractId: "c5a0cacc-3453-44b0-9532-aa492f1ba191"
+                  amount: 2049.85
+                  currency: "RUB"
+                  timestamp: "2024-02-05T08:44:32.42176Z"
+                  status: "subscription-active"
+                  errorMessage: ""
+
+              failed_subscription_webhook_payload:
+                summary: Ошибка при оформлении подписки (первый платёж)
+                value:
+                  eventType: "payment.failed"
+                  product:
+                    id: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                    title: "Тестовая подписка"
+                  contractId: "f4b84df8-98f6-4bac-9341-5dea5a1c3692"
+                  buyer:
+                    email: "zkvgsd@lava.top"
+                  amount: 1340
+                  currency: "RUB"
+                  timestamp: "2024-10-31T13:33:32.871233Z"
+                  status: "subscription-failed"
+                  errorMessage: "Not sufficient funds"
+
+              successful_subscription_recurring_webhook_payload:
+                summary: Успешное продление подписки (второй, третий и т.д. платежи по подписке)
+                value:
+                  eventType: "subscription.recurring.payment.success"
+                  product:
+                    id: "72d53efb-3696-469f-b856-f0d815748dd6"
+                    title: "Тестовая подписка"
+                  buyer:
+                    email: "emwbwj@lava.top"
+                  contractId: "d41db415-ad71-4f2a-8d8c-27eefee91e66"
+                  parentContractId: "c5a0cacc-3453-44b0-9532-aa492f1ba191"
+                  amount: 2049.85
+                  currency: "RUB"
+                  timestamp: "2024-02-05T08:44:49.123932Z"
+                  status: "subscription-active"
+                  errorMessage: ""
+
+              failed_subscription_recurring_webhook_payload:
+                summary: Ошибка при продлении подписки (второй, третий и т.д. платежи)
+                value:
+                  eventType: "subscription.recurring.payment.failed"
+                  product:
+                    id: "72d53efb-3696-469f-b856-f0d815748dd6"
+                    title: "Тестовая подписка"
+                  buyer:
+                    email: "emwbwj@lava.top"
+                  contractId: "04f152b7-63ec-46ff-958e-8a6f5869acd6"
+                  parentContractId: "c5a0cacc-3453-44b0-9532-aa492f1ba191"
+                  amount: 2049.85
+                  currency: "RUB"
+                  timestamp: "2024-02-05T08:44:49.123932Z"
+                  status: "subscription-failed"
+                  errorMessage: "Payment window is opened but not completed"
+
+              subscription_cancelled_webhook_payload:
+                summary: Событие отмены подписки
+                value:
+                  eventType: "subscription.cancelled"
+                  contractId: "04f152b7-63ec-46ff-958e-8a6f5869acd6"
+                  product:
+                    id: "72d53efb-3696-469f-b856-f0d815748dd6"
+                    title: "Тестовая подписка"
+                  buyer:
+                    email: "emwbwj@lava.top"
+                  cancelledAt: "2024-02-05T08:44:49.123932Z"
+                  willExpireAt: "2024-03-06T08:44:49.123932Z"
+
+              refund_success_webhook_payload:
+                summary: Событие успешного возврата средств
+                value:
+                  event_id: "7ea82675-4ded-4133-95a7-a6efbaf165cc"
+                  event_type: "refund.success"
+                  created_at: "2024-02-05T09:38:27.33277Z"
+                  data:
+                    refund_id: "7ea82675-4ded-4133-95a7-a6efbaf165cc"
+                    refund_type: "full"
+                    initiator: "creator"
+                    amount: 40254.19
+                    currency: "RUB"
+                    product:
+                      product_name: "Тестовый продукт"
+                      product_id: "d31384b8-e412-4be5-a2ec-297ae6666c8f"
+                      product_type: "DIGITAL_PRODUCT"
+                      tier_id: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                    customer_email: "test@lava.top"
+                    balance_impact:
+                      debited_amount: 38000.00
+                      currency: "RUB"
+                    subscription_cancelled: false
+
+              chargeback_initiated_webhook_payload:
+                summary: Событие инициации чарджбека
+                value:
+                  event_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  event_type: "chargeback.initiated"
+                  created_at: "2024-02-05T09:38:27.33277Z"
+                  data:
+                    chargeback_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                    dispute_date: "2024-02-05"
+                    reason_category: "fraud"
+                    reason_description: "Fraudulent transaction"
+                    amount: 40254.19
+                    currency: "RUB"
+                    product:
+                      product_name: "Тестовый продукт"
+                      product_id: "d31384b8-e412-4be5-a2ec-297ae6666c8f"
+                      product_type: "DIGITAL_PRODUCT"
+                      tier_id: "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+                    customer_email: "test@lava.top"
+                    balance_impact:
+                      debited_amount: 40254.19
+                      provider_fee: 500.00
+                      currency: "RUB"
+                    subscription_cancelled: false
+
+      responses:
+        2XX:
+          description: Вебхук будет считаться доставленным (т.к. статус ответа 2ХХ)
+        3XX:
+          description: Вебхук будет считаться доставленным (т.к. статус ответа 3ХХ)
+        4XX:
+          description: >
+            Вебхук будет считаться недоставленным (т.к. статус ответа 4ХХ).
+            Сервис lava.top сделает ещё несколько попыток отправок (19) через следующие временные интервалы c момента отправки предыдущей попытки:
+              1) 1s 
+              2) 5s
+              3) 15s
+              4) 1m
+              5) 1m
+              6) 1m
+              7) 1m
+              8) 1m
+              9) 1m
+              10) 1m
+              11) 1m
+              12) 1m
+              13) 1m
+              14) 1m
+              15) 1h
+              16) 1h
+              17) 1h
+              18) 1h
+              19) 1h
+        5XX:
+          description: >
+            Вебхук будет считаться недоставленным (т.к. статус ответа 5ХХ).
+            Сервис lava.top сделает ещё несколько попыток отправок (19) через следующие временные интервалы c момента отправки предыдущей попытки:
+              1) 1s 
+              2) 5s
+              3) 15s
+              4) 1m
+              5) 1m
+              6) 1m
+              7) 1m
+              8) 1m
+              9) 1m
+              10) 1m
+              11) 1m
+              12) 1m
+              13) 1m
+              14) 1m
+              15) 1h
+              16) 1h
+              17) 1h
+              18) 1h
+              19) 1h
+
+  /api/v2/invoices:
+    get:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Invoices
+      summary: Получение страницы контрактов API-ключа, использованного в запросе
+      parameters:
+        - in: query
+          name: beginDate
+          required: false
+          description: >
+            Параметр для поиска от переданной даты (UTC+0). Если контракт в состоянии in-progress,
+            то учитывается дата создания контракта вместо даты исполнения
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: endDate
+          required: false
+          description: >
+            Параметр для поиска до переданной даты (UTC+0). Если контракт в состоянии in-progress,
+            то учитывается дата создания контракта вместо даты исполнения
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: buyerEmail
+          required: false
+          description: >
+            Поиск по почте покупателя (на момент покупки). Работает поиск по шаблону
+            (в т.ч. по полному совпадению)
+          schema:
+            type: string
+        - in: query
+          name: currencies
+          required: false
+          description: Валюта, в которой был инициирован контракт
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/CurrencyDto'
+        - in: query
+          name: last4CardDigits
+          required: false
+          description: >
+            Последние 4 цифры карты покупателя. Работает поиск по шаблону, так и по полному совпадению
+          schema:
+            type: string
+        - in: query
+          name: productName
+          required: false
+          description: >
+            Поиск по названию продукта/уровню подписки. Работает поиск по шаблону,
+            так и по полному совпадению
+          schema:
+            type: string
+        - in: query
+          name: invoiceTypes
+          required: false
+          description: >
+            Поиск по типу контракта. Если не передано, то по умолчанию - все значения
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/InvoiceTypeV2'
+        - in: query
+          name: invoiceStatuses
+          required: false
+          description: >
+            Статус контрактов. Если не передано, то по умолчанию - только успешные (completed)
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/InvoiceStatus'
+        - in: query
+          name: page
+          required: false
+          description: Номер страницы
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: size
+          required: false
+          description: Размер страницы
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Страница контрактов переданного API-ключа
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Страница с контрактами
+                properties:
+                  items:
+                    type: array
+                    description: Элементы страницы
+                    items:
+                      $ref: "#/components/schemas/InvoiceResponseV3"
+                  page:
+                    type: integer
+                    description: Номер страницы
+                  size:
+                    type: integer
+                    description: Количество элементов страницы
+                  total:
+                    type: integer
+                    description: Общее количество элементов
+        '400':
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Действие запрещено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v2/invoices/{id}:
+    get:
+      security:
+        - ApiKeyAuth: [ ]
+      tags:
+        - Invoices
+      summary: Получение контракта по идентификатору
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Идентификатор контракта
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Контракт
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceResponseV3"
+        '400':
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Пользователь не авторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Действие запрещено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Контракт не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    DonateResponse:
+      type: object
+      description: Тело доната
+      properties:
+        url:
+          type: string
+          format: url
+          description: Ссылка на окно доната автора
+          example: https://app.lava.top/alias?donate=open
+
+    ProductUpdateRequest:
+      type: object
+      description: Тело для обновления продукта
+      properties:
+        offers:
+          type: array
+          description: Список офферов
+          items:
+            $ref: '#/components/schemas/UpdateOfferRequest'
+
+    UpdateOfferRequest:
+      type: object
+      description: Тело для обновления оффера
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор оффера
+        prices:
+          type: array
+          description: Список цен оффера
+          items:
+            $ref: '#/components/schemas/UpdatePriceRequest'
+        name:
+          type: string
+          description: Название оффера
+          nullable: true
+        description:
+          type: string
+          description: Описание оффера
+          nullable: true
+
+    UpdatePriceRequest:
+      type: object
+      description: Тело для обновления цены оффера
+      properties:
+        amount:
+          type: number
+          format: double
+          description: Цена
+        currency:
+          $ref: '#/components/schemas/CurrencyDto'
+
+    ProductItemResponse:
+      type: object
+      description: Продукт
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор продукта
+        title:
+          type: string
+          description: Заголовок продукта
+          nullable: true
+        description:
+          type: string
+          description: Описание продукта
+          nullable: true
+        type:
+          $ref: '#/components/schemas/ProductType'
+        offers:
+          type: array
+          description: Ценники продукта
+          nullable: true
+          items:
+            $ref: '#/components/schemas/OfferResponse'
+
+    PostItemResponse:
+      type: object
+      description: Пост
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор поста
+        title:
+          type: string
+          description: Заголовок поста
+        description:
+          type: string
+          description: Описание поста
+          nullable: true
+        body:
+          type: string
+          description: Тело поста
+        type:
+          $ref: '#/components/schemas/PostType'
+        createdAt:
+          type: string
+          format: 'date-time'
+          description: Время создание поста
+        updatedAt:
+          type: string
+          format: 'date-time'
+          description: Время когда был обновлен пост
+        publishedAt:
+          type: string
+          format: 'date-time'
+          description: Время когда был или будет опубликован пост
+
+    OfferResponse:
+      type: object
+      description: Предложения для покупки продукта
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор ценового предложения
+        name:
+          type: string
+          description: Наименование цены
+          nullable: true
+        description:
+          type: string
+          description: Описание предложения
+          nullable: true
+        prices:
+          type: array
+          description: Список цен в разных валютах
+          items:
+            $ref: '#/components/schemas/PriceDto'
+        recurrent:
+          $ref: '#/components/schemas/RecurrentDto'
+
+    InvoiceRequestDto:
+      type: object
+      description: Описание покупки контента
+      properties:
+        email:
+          description: Почта покупателя
+          type: string
+        offerId:
+          description: Идентификатор цены
+          type: string
+          format: uuid
+        periodicity:
+          $ref: '#/components/schemas/Periodicity'
+        currency:
+          $ref: '#/components/schemas/CurrencyDto'
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        buyerLanguage:
+          nullable: true
+          oneOf:
+            - $ref: '#/components/schemas/LanguageDto'
+        clientUtm:
+          $ref: '#/components/schemas/ClientUtmDto'
+        type:
+          $ref: '#/components/schemas/PaymentMethodType'
+        successful_return_url:
+          description: URL перехода после успешного платежа
+          type: string
+          format: uri
+          nullable: true
+        failure_return_url:
+          description: URL перехода после неуспешного платежа
+          type: string
+          format: uri
+          nullable: true
+        cancel_return_url:
+          description: URL перехода после отмены платежа
+          type: string
+          format: uri
+          nullable: true
+
+    CreateInvoiceV3Request:
+      type: object
+      description: Описание покупки контента
+      properties:
+        email:
+          description: Почта покупателя
+          type: string
+        offerId:
+          description: Идентификатор цены
+          type: string
+          format: uuid
+        currency:
+          $ref: '#/components/schemas/CurrencyDto'
+        paymentProvider:
+          $ref: '#/components/schemas/PaymentProvider'
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethodType'
+        buyerLanguage:
+          nullable: true
+          oneOf:
+            - $ref: '#/components/schemas/LanguageDto'
+        periodicity:
+          nullable: true
+          oneOf:
+            - $ref: '#/components/schemas/Periodicity'
+        clientUtm:
+          $ref: '#/components/schemas/ClientUtmDto'
+        amount:
+          description: Сумма покупки. Если не указана, используется сумма из цены оффера. Можно использовать только для товаров с динамической ценой
+          type: number
+          format: double
+          nullable: true
+        promoCode:
+          description: Промокод для применения скидки. 3-36 символов, латиница (A-Z), цифры (0–9), "-" и "_"
+          type: string
+          nullable: true
+        fullName:
+          description: Полное имя покупателя. 1-256 символов. Обязательно для BANCONTACT и BIZUM
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 256
+        walletId:
+          description: Идентификатор кошелька. Телефон в формате E.164 (опциональный '+', 8–15 цифр). Обязательно для BIZUM
+          type: string
+          nullable: true
+          example: "+34600111222"
+        successful_return_url:
+          description: URL перехода после успешного платежа
+          type: string
+          format: uri
+          nullable: true
+        failure_return_url:
+          description: URL перехода после неуспешного платежа
+          type: string
+          format: uri
+          nullable: true
+        cancel_return_url:
+          description: URL перехода после отмены платежа
+          type: string
+          format: uri
+          nullable: true
+
+    InvoicePaymentParamsResponse:
+      type: object
+      description: Описание созданного контракта
+      properties:
+        id:
+          description: Идентификатор контракта на покупку
+          type: string
+          format: uuid
+        status:
+          allOf:
+            - $ref: '#/components/schemas/ContractStatusDto'
+        amountTotal:
+          $ref: '#/components/schemas/AmountTotalDto'
+        paymentUrl:
+          type: string
+          nullable: true
+          description: Ссылка на виджет оплаты продукта (пусто, если продукт бесплатный)
+          example: https://payment-widget-url
+
+    DeleteNotAllowedReason:
+      type: string
+      description: Причины мешающие удалить оффер
+      enum:
+        - HAS_SALES
+        - HAS_POSTS
+
+    RecurrentDto:
+      deprecated: true
+      type: string
+      description: Описание повторяемости платежа. Устарел. Используйте поле periodicity в ценах оффера
+      enum:
+        - monthly
+
+    PriceDto:
+      type: object
+      description: Сумма
+      properties:
+        amount:
+          type: number
+          format: double
+          description: Значение суммы
+          nullable: true
+        currency:
+          $ref: '#/components/schemas/CurrencyDto'
+        periodicity:
+          $ref: '#/components/schemas/Periodicity'
+
+    OfferDto:
+      type: object
+      description: Ценник
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор ценового предложения
+        prices:
+          type: array
+          description: Список цен в разных валютах
+          items:
+            $ref: '#/components/schemas/PriceDto'
+        name:
+          type: string
+          description: Наименование цены
+          nullable: true
+        description:
+          type: string
+          description: Описание предложения
+          nullable: true
+        recurrent:
+          $ref: '#/components/schemas/RecurrentDto'
+        availablePosts:
+          type: array
+          description: Список идентификаторов постов для покупки
+          items:
+            type: string
+            format: uuid
+        canBeDeleted:
+          type: boolean
+          description: Возможность удалить
+        reasons:
+          description: Причины не разрещающие удалить оффер
+          type: array
+          items:
+            $ref: '#/components/schemas/DeleteNotAllowedReason'
+
+    Status:
+      type: string
+      description: Статус продукта или поста
+      enum:
+        - PUBLISHED
+
+    PostType:
+      type: string
+      description: Тип поста
+      enum:
+        - LESSON
+        - POST
+
+    ModerationStatus:
+      type: string
+      description: Статус модерации
+      enum:
+        - NEW
+        - REJECTED
+        - APPROVED
+        - BLOCKED
+
+    ProductItemDto:
+      type: object
+      description: Элемент списка продуктов
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор продукта
+        accountId:
+          type: string
+          format: uuid
+          description: Идентификатор юзера, создавшего продукт
+        title:
+          type: string
+          description: Заголовок продукта
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/Status'
+        moderationStatus:
+          $ref: '#/components/schemas/ModerationStatus'
+        type:
+          $ref: '#/components/schemas/ProductType'
+        offers:
+          type: array
+          description: Ценники продукта
+          items:
+            $ref: '#/components/schemas/OfferDto'
+
+    FeedItemType:
+      type: string
+      description: Типы итемов для ленты
+      enum:
+        - POST
+        - PRODUCT
+      default: PRODUCT
+
+    ProductType:
+      type: string
+      description: Тип продукта
+      enum:
+        - COURSE
+        - DIGITAL_PRODUCT
+        - BOOK
+        - GUIDE
+        - SUBSCRIPTION
+        - AUDIO
+        - MODS
+        - CONSULTATION
+
+    PartnerSaleDto:
+      type: object
+      description: Продажа партнёра
+      properties:
+        currency:
+          allOf:
+            - $ref: '#/components/schemas/CurrencyDto'
+        count:
+          type: integer
+          description: Количество проданных экземпляров
+        amountTotal:
+          type: integer
+          description: Общие продажи
+
+    PartnerProductDto:
+      type: object
+      description: Продажа партнёра
+      properties:
+        productId:
+          type: string
+          format: uuid
+          description: Идентификатор продукта
+        title:
+          type: string
+          description: Название продукта
+        status:
+          type: string
+          description: Статус продукта
+        sales:
+          items:
+            $ref: '#/components/schemas/PartnerSaleDto'
+
+    AmountTotalDto:
+      type: object
+      description: Продажи в валюте
+      properties:
+        currency:
+          $ref: '#/components/schemas/CurrencyDto'
+        amount:
+          type: integer
+          description: Значение суммы
+
+    BuyerDto:
+      type: object
+      description: Покупатель продукта
+      properties:
+        email:
+          type: string
+          format: email
+          description: Почта покупателя
+
+    PartnerSaleDetailsDto:
+      type: object
+      description: Продажи по конкретному продукту
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор контракта
+        createdAt:
+          type: string
+          format: date-time
+          description: Дата создания
+        status:
+          $ref: '#/components/schemas/ContractStatusDto'
+        amountTotal:
+          $ref: '#/components/schemas/AmountTotalDto'
+        buyer:
+          $ref: '#/components/schemas/BuyerDto'
+
+    PurchaseWebhookLog:
+      type: object
+      description: Тело вебхука, отправляемого партнёру, см. примеры ниже.
+      properties:
+        eventType:
+          $ref: '#/components/schemas/WebhookEventType'
+        product:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Идентификатор продукта
+            title:
+              type: string
+              description: Название продукта
+        contractId:
+          type: string
+          format: uuid
+          description: Идентификатор контракта на покупку
+        parentContractId:
+          type: string
+          nullable: true
+          format: uuid
+          description: Идентификатор родительского контракта на покупку (не пусто только в случае рекуррентого платежа)
+        buyer:
+          $ref: '#/components/schemas/WebhookBuyer'
+        amount:
+          type: number
+          description: Значение суммы
+        currency:
+          $ref: '#/components/schemas/CurrencyDto'
+        status:
+          $ref: '#/components/schemas/ContractStatusDto'
+        timestamp:
+          type: string
+          format: date-time
+          description: Дата операции
+        clientUtm:
+          $ref: '#/components/schemas/ClientUtmDto'
+        errorMessage:
+          type: string
+          nullable: true
+          description: Описание причины ошибки оплаты
+
+    WebhookBuyer:
+      type: object
+      description: Информация о покупателе
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email покупателя
+
+    ClientUtmDto:
+      type: object
+      description: UTM покупки
+      properties:
+        utm_source:
+          type: string
+          nullable: true
+          description: Определяет источник трафика (например, Google, Facebook). Может быть пустым.
+        utm_medium:
+          type: string
+          nullable: true
+          description: Указывает средство маркетинговой кампании (например, электронная почта, CPC, баннер). Может быть пустым.
+        utm_campaign:
+          type: string
+          nullable: true
+          description: Указывает конкретное имя кампании или идентификатор (например, spring_sale, product_launch). Может быть пустым.
+        utm_term:
+          type: string
+          nullable: true
+          description: Отслеживает ключевые слова или поисковые термины для платных кампаний (например, "sneakers"). Может быть пустым.
+        utm_content:
+          type: string
+          nullable: true
+          description: Различает варианты одного и того же объявления или кампании (например, "banner_ad_A"). Может быть пустым.
+      required: [ ]
+      example:
+        utm_source: "google"
+        utm_medium: "cpc"
+        utm_campaign: "summer_sale"
+        utm_term: "running_shoes"
+        utm_content: "homepage_banner"
+
+    ErrorResponse:
+      type: object
+      description: Тело ошибки
+      properties:
+        error:
+          type: string
+          description: Описание ошибки
+          example: Input fields are invalid
+        details:
+          type: object
+          description: Детальное описание ошибки
+          additionalProperties:
+            type: string
+            description: Детальное описание ошибки поля
+          example:
+            email: should be well-formed email
+            password: should contain at least 8 symbols
+        timestamp:
+          type: string
+          format: date-time
+          description: Дата ошибки
+
+    InvoiceResponseV2:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор контракта
+        type:
+          $ref: '#/components/schemas/InvoiceType'
+        datetime:
+          type: string
+          format: date-time
+          description: Время исполнения контракта (если пусто, то время создания)
+        status:
+          $ref: '#/components/schemas/InvoiceStatus'
+        receipt:
+          $ref: '#/components/schemas/InvoiceResponseV2.ReceiptResponse'
+        buyer:
+          $ref: '#/components/schemas/InvoiceResponseV2.BuyerResponse'
+        product:
+          $ref: '#/components/schemas/InvoiceResponseV2.ProductResponse'
+        parentInvoice:
+          $ref: '#/components/schemas/InvoiceResponseV2.ParentInvoiceResponse'
+        subscriptionStatus:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        subscriptionDetails:
+          $ref: '#/components/schemas/InvoiceResponseV2.SubscriptionDetails'
+        clientUtm:
+          $ref: '#/components/schemas/InvoiceClientUtm'
+
+    InvoiceResponseV3:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор контракта
+        type:
+          $ref: '#/components/schemas/InvoiceTypeV2'
+        datetime:
+          type: string
+          format: date-time
+          description: Время исполнения контракта (если пусто, то время создания)
+        status:
+          $ref: '#/components/schemas/InvoiceStatus'
+        receipt:
+          $ref: '#/components/schemas/InvoiceResponseV2.ReceiptResponse'
+        buyer:
+          $ref: '#/components/schemas/InvoiceResponseV2.BuyerResponse'
+        product:
+          $ref: '#/components/schemas/InvoiceResponseV2.ProductResponse'
+        parentInvoice:
+          $ref: '#/components/schemas/InvoiceResponseV2.ParentInvoiceResponse'
+        subscriptionStatus:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        subscriptionDetails:
+          $ref: '#/components/schemas/InvoiceResponseV2.SubscriptionDetails'
+        clientUtm:
+          $ref: '#/components/schemas/InvoiceClientUtm'
+
+    InvoiceResponseV2.SubscriptionDetails:
+      type: object
+      properties:
+        expiredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Дата, когда истекает действие подписки"
+        terminatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Дата, когда доступ к подписке был закрыт"
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Дата, когда была отменена подписка"
+
+    InvoiceResponseV2.ReceiptResponse:
+      type: object
+      properties:
+        amount:
+          type: number
+          format: double
+          description: Сумма покупки. 0, если бесплатная
+        currency:
+          $ref: '#/components/schemas/CurrencyDto'
+        fee:
+          type: number
+          format: double
+          description: Комиссия
+
+    InvoiceResponseV2.BuyerResponse:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Почта покупателя на момент покупки
+          example: test@gmail.com
+        cardMask:
+          type: string
+          description: Последние 4 цифры карты покупателя
+          example: "**** **** **** 1234"
+
+    InvoiceResponseV2.ProductResponse:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Название продукта
+          example: Урок по психологии
+        offer:
+          type: string
+          description: Название оффера продукта
+          example: Подписка на 12 мес.
+
+    InvoiceResponseV2.ParentInvoiceResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: >
+            Идентификатор родительского контракта. В случае с рекуррентным
+            платежом - контракт оформления подписки
+
+    InvoiceClientUtm:
+      type: object
+      properties:
+        utm_source:
+          type: string
+          nullable: true
+          description: >
+            Определяет источник трафика (например, Google, Facebook). Может быть пустым.
+          example: google
+        utm_medium:
+          type: string
+          nullable: true
+          description: >
+            Указывает средство маркетинговой кампании (например, электронная почта, CPC, баннер). Может быть пустым.
+          example: cpc
+        utm_campaign:
+          type: string
+          nullable: true
+          description: >
+            Указывает конкретное имя кампании или идентификатор (например, spring_sale, product_launch). Может быть пустым.
+          example: summer_sale
+        utm_term:
+          type: string
+          nullable: true
+          description: >
+            Отслеживает ключевые слова или поисковые термины для платных кампаний (например, "sneakers"). Может быть пустым.
+          example: running_shoes
+        utm_content:
+          type: string
+          nullable: true
+          description: >
+            Различает варианты одного и того же объявления или кампании (например, "banner_ad_A"). Может быть пустым.
+          example: homepage_banner
+
+    CurrencyDto:
+      type: string
+      description: Валюта
+      enum:
+        - RUB
+        - USD
+        - EUR
+
+    ContractStatusDto:
+      type: string
+      description: Статус контракта
+      enum:
+        - new
+        - in-progress
+        - completed
+        - failed
+        - cancelled
+        - subscription-active
+        - subscription-expired
+        - subscription-cancelled
+        - subscription-failed
+
+    LanguageDto:
+      type: string
+      description: Язык (ISO 639-1)
+      enum:
+        - EN
+        - RU
+        - ES
+      default: EN
+
+    FeedVisibility:
+      type: string
+      description: Видимость контента
+      enum:
+        - ALL
+        - ONLY_VISIBLE
+        - ONLY_HIDDEN
+      default: ONLY_VISIBLE
+
+    PaymentMethod:
+      type: string
+
+      description: > 
+        Провайдер для платежа.
+        
+        Для платежей в российских рублях (RUB) доступен BANK131, SMART_GLOCAL и PAY2ME, для платежей в Евро (EUR) или Долларах (USD) - UNLIMINT и PAYPAL. 
+        
+        Если провайдер не указан при создании платежа, то для RUB будет по умолчанию использован SMART_GLOCAL, а для EUR и USD - UNLIMINT
+      enum:
+        - BANK131
+        - SMART_GLOCAL
+        - UNLIMINT
+        - PAYPAL
+        - PAY2ME
+
+    PaymentProvider:
+      type: string
+
+      description: >
+        Провайдер для платежа.
+
+        Для платежей в российских рублях (RUB) доступен SMART_GLOCAL и PAY2ME, для платежей в Евро (EUR) или Долларах (USD) - UNLIMINT и PAYPAL. 
+
+        Если провайдер не указан при создании платежа, то для RUB будет по умолчанию использован SMART_GLOCAL, а для EUR и USD - UNLIMINT
+      enum:
+        - SMART_GLOCAL
+        - UNLIMINT
+        - PAYPAL
+        - PAY2ME
+    PaymentMethodType:
+      type: string
+
+      description: >
+        Метод оплаты (для платежей через провайдер PAY2ME). Карта (CARD) или Система Быстрых Платежей (SBP)
+        
+        Если не указано - используется Карта.
+      enum:
+        - CARD
+        - SBP
+        - PAYPAL
+        - PIX
+
+    Periodicity:
+      type: string
+      description: Периодичность оплаты
+      enum:
+        - ONE_TIME
+        - MONTHLY
+        - PERIOD_90_DAYS
+        - PERIOD_180_DAYS
+        - PERIOD_YEAR
+
+    InvoiceType:
+      type: string
+      description: Тип контракта
+      enum:
+        - ONE_TIME
+        - RECURRING
+
+    InvoiceTypeV2:
+      type: string
+      description: Тип контракта
+      enum:
+        - INVOICE
+        - SUBSCRIPTION_FIRST_INVOICE
+        - SUBSCRIPTION_RENEWAL
+
+    InvoiceStatus:
+      type: string
+      description: Статус контракта
+      enum:
+        - NEW
+        - IN_PROGRESS
+        - COMPLETED
+        - FAILED
+
+    SubscriptionStatus:
+      type: string
+      description: Статус подписки
+      enum:
+        - ACTIVE
+        - CANCELLED
+        - FAILED
+
+    WebhookEventType:
+      type: string
+      description: Тип события вебхука
+      enum:
+        - payment.success
+        - payment.failed
+        - subscription.recurring.payment.success
+        - subscription.recurring.payment.failed
+        - subscription.cancelled
+        - refund.success
+        - chargeback.initiated
+
+    SubscriptionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор подписки
+        datetime:
+          type: string
+          format: date-time
+          description: Время создания подписки
+        status:
+          $ref: '#/components/schemas/InvoiceStatus'
+        receipt:
+          type: object
+          properties:
+            amount:
+              type: number
+              format: double
+              description: Сумма платежа
+            currency:
+              $ref: '#/components/schemas/CurrencyDto'
+            fee:
+              type: number
+              format: double
+              description: Комиссия
+        buyer:
+          type: object
+          properties:
+            email:
+              type: string
+              format: email
+              description: Email покупателя
+            cardMask:
+              type: string
+              description: Маска карты покупателя
+              nullable: true
+        product:
+          type: object
+          properties:
+            name:
+              type: string
+              description: Название продукта
+              nullable: true
+            offer:
+              type: string
+              description: Название оффера
+              nullable: true
+        periodicity:
+          $ref: '#/components/schemas/Periodicity'
+        subscriptionStatus:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        expiredAt:
+          type: string
+          format: date-time
+          description: Дата истечения подписки
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          description: Дата отмены подписки
+          nullable: true
+        terminatedAt:
+          type: string
+          format: date-time
+          description: Дата прекращения подписки
+          nullable: true
+        clientUtm:
+          $ref: '#/components/schemas/InvoiceClientUtm'
+
+    DetailedSubscriptionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор подписки
+        datetime:
+          type: string
+          format: date-time
+          description: Время создания подписки
+        status:
+          $ref: '#/components/schemas/InvoiceStatus'
+        receipt:
+          type: object
+          properties:
+            amount:
+              type: number
+              format: double
+              description: Сумма платежа
+            currency:
+              $ref: '#/components/schemas/CurrencyDto'
+            fee:
+              type: number
+              format: double
+              description: Комиссия
+        buyer:
+          type: object
+          properties:
+            email:
+              type: string
+              format: email
+              description: Email покупателя
+            cardMask:
+              type: string
+              description: Маска карты покупателя
+              nullable: true
+        product:
+          type: object
+          properties:
+            name:
+              type: string
+              description: Название продукта
+              nullable: true
+            offer:
+              type: string
+              description: Название оффера
+              nullable: true
+        periodicity:
+          $ref: '#/components/schemas/Periodicity'
+        subscriptionStatus:
+          $ref: '#/components/schemas/SubscriptionStatus'
+        expiredAt:
+          type: string
+          format: date-time
+          description: Дата истечения подписки
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          description: Дата отмены подписки
+          nullable: true
+        terminatedAt:
+          type: string
+          format: date-time
+          description: Дата прекращения подписки
+          nullable: true
+        clientUtm:
+          $ref: '#/components/schemas/InvoiceClientUtm'
+        recurrentPayments:
+          type: array
+          description: Список рекуррентных платежей
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+                description: Идентификатор платежа
+              datetime:
+                type: string
+                format: date-time
+                description: Время платежа
+              status:
+                $ref: '#/components/schemas/InvoiceStatus'
+              amount:
+                type: number
+                format: double
+                description: Сумма платежа
+              currency:
+                $ref: '#/components/schemas/CurrencyDto'
+              fee:
+                type: number
+                format: double
+                description: Комиссия
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+
+    BasicWebhookAuth:
+      type: http
+      scheme: basic
+
+    ApiKeyWebhookAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+
+Welcome to the lava.top API portal!
+With our API, you can easily set up integrations: manage products, access sales reports, work with subscriptions, accept donations, and configure webhook notifications.
+We've made the documentation as simple and clear as possible. Here you’ll find everything you need to quickly understand which parameters to use, what responses to expect, and how to best configure your integration.
+Support
+If anything is unclear, feel free to contact our support team: support@lava.top.
+
+General Information
+Integration is the process of connecting two or more services using an API. It allows systems to exchange data and events, enabling them to work together in an automated and coordinated way.
+
+With lava.top, you can set up integration with any external system, service, website, or Telegram bot — to accept and track payments, manage access, and control subscription statuses. This makes your workflows simpler and more convenient.
+
+Key Terms:
+Public API
+Public API — lava.top's public programming interface that allows external software and applications to interact with each other over the network.
+
+API Key
+API Key — a unique code used for the authorization and authentication of an API client. Think of it as a login and password, but for software — without it, you can't access the data or features provided by the API.
+
+Webhook
+Webhook — a mechanism that allows one service to automatically send data to another in response to certain events. In simple terms, it’s a notification your system receives when something happens. Instead of constantly asking the server “what’s new?”, you configure a URL once, and the server notifies you when needed.
+
+Refund
+Refund — a full or partial return of funds to the customer for a completed sale. Initiated by the creator, support, or the system. The refunded amount is debited from the creator's balance; the platform fee is not returned.
+
+Chargeback
+Chargeback — a payment dispute raised by the customer through their bank. Initiated outside the platform. By the time we receive the dispute, the amount and the provider fee have already been debited from the creator's balance.
+
+Typical scenarios for using our API:
+Product purchase and 1st subscription payment
+diagram1
+
+Subscription
+2nd and subsequent recurring payments
+diagram2
+
+Returning the customer to the creator's page after payment
+Refunds and chargebacks on a sale
+API Key and Webhook Setup
+Getting started
+To get started with integrating your service on the platform, you need to create an API key and set up a webhook.
+
+1
+How to Create an API Key
+Go to Integrations section, choose Public API.
+screenshot1.png
+
+Click Create API Key.
+screenshot1-1.png
+
+The platform will generate the key automatically — copy it and save it securely on your device.
+screenshot2.png
+
+2
+How to Set Up a Webhook
+Create an API key and confirm that you’ve saved it.
+Click the Add Webhook button.
+screenshot3.png
+
+Fill in the following fields:
+URL — the endpoint on your server where webhook data will be sent (this is the address that will receive and process requests).
+Event type:
+payment.success — Successful payment
+payment.failed — Failed payment
+subscription.recurring.payment.success — Successful subscription renewal
+subscription.recurring.payment.failed — Failed subscription renewal
+subscription.cancelled — Subscription cancelled
+refund.success — Successful refund
+chargeback.initiated — Chargeback request received
+screenshot13.png
+
+A single webhook receives any set of events — select the ones you need from the list. You do not need a separate webhook per event. If it suits your setup, you can split events across URLs: payments to one address, refunds and chargebacks to another.
+
+The "Successful refund" and "Chargeback request received" events are delivered only if selected. Before enabling them, make sure your handler returns 2xx for any event, including ones it does not recognise.
+
+Choose an authentication method:
+Basic - enter the login and password for your service that will receive webhook requests.
+screenshot5.png
+
+Your service’s API key - enter the API key of your service that will receive the webhook requests. Maximum key length: 80 characters.
+screenshot6.png
+
+Basic authentication: lava.top will send webhook requests to the specified URL using HTTP Basic Authentication. The request will be sent in the format: user:pass@example.com. Only HTTPS connections are allowed for this type of request to ensure security.
+
+API Key Authentication: lava.top will send webhook requests to the specified URL, authenticated using an API key.The receiving server must extract the key from the HTTP header: "X-Api-Key".
+
+How to add a webhook to an existing API key
+Click the three dots next to the desired key and select Add Webhook.
+
+screenshot7.png
+
+After completing these steps, you can proceed to the API documentation and continue your integration.
+API Documentation
+To get a detailed overview of available API methods, refer to our API documentation.
+
+The documentation follows the Open API v3.0.0 (Swagger) specification.
+
+API Documentation
+Swagger documentation with interactive examples
+
+You can find API methods grouped by the most common use cases:
+
+Products
+Products - work with digital products: fetch the product list and update their parameters (e.g., price).
+
+Invoices
+IInvoices — for creating purchase invoices (including invoices for custom amounts), checking their status, and setting up the customer's return to the creator's page after payment.
+The /api/v2/invoices and /api/v3/invoice methods are available.
+
+Custom Price Invoices
+Custom Price Invoices - allows creating a contract with a custom price for products published with the 'Price on request via API' flag. The amount and currency are set per request, without changing product settings.
+
+Reports
+Reports - access sales analytics data via the API.
+
+Subscriptions
+Subscriptions - manage user subscriptions.
+
+Donate
+Donate - generate donation links.
+
+Interactive documentation allows you to test each method and ensure it works correctly.
+
+To try out a method:
+provide your API key:
+Click Authorize in the top-right corner of the page:
+screenshot8.png
+
+fill in ApiKeyAuth (apiKey), (use the API key you received in the Author’s personal account interface at lava.top: Integrations → API → Create API Key (we explained this in more detail here)):
+screenshot9.png
+
+click Try it out, enter the required data, and select Execute:
+screenshot10.png
+
+Creating an Invoice for a Custom Amount via API
+If you use lava.top as your payment infrastructure — for landing pages, CRM systems, or custom services — you no longer need to manually update the product price each time. Instead, publish content with the “Price on request via API” option enabled and pass the amount directly in the invoice creation request.
+
+1
+Product Preparation
+In the lava.top interface, when publishing a Digital Product, Consultation, or Course, enable the “Price on request via API” option. The pricing block will be hidden. The product will only be available via direct link and through the API.
+
+Supported content types: Digital product, Consultation, Course.
+2
+Creating a Contract
+Use the POST /api/v3/invoice method. Pass the offerId of the product published with the “Price on request” option enabled, as well as amount and currency in the request body.
+
+Example
+1.
+curl --location 'https://gate.lava.top/api/v3/invoice' \
+2.
+  --header 'Accept: application/json' \
+3.
+  --header 'X-Api-Key: {api_key}' \
+4.
+  --header 'Content-Type: application/json' \
+5.
+  --data-raw '{
+6.
+	"email": "client@example.com",
+7.
+	"offerId": "836b9fc5-7ae9-4a27-9642-592bc44072b7",
+8.
+	"currency": "EUR",
+9.
+	"amount": 120
+10.
+  }'
+Specifying the provider
+
+Example
+1.
+curl --location 'https://gate.lava.top/api/v3/invoice' \
+2.
+  --header 'Accept: application/json' \
+3.
+  --header 'X-Api-Key: {api_key}' \
+4.
+  --header 'Content-Type: application/json' \
+5.
+  --data-raw '{
+6.
+	"email": "client@example.com",
+7.
+	"offerId": "836b9fc5-7ae9-4a27-9642-592bc44072b7",
+8.
+	"currency": "EUR",
+9.
+	"amount": 120,
+10.
+	"paymentProvider": "PAYPAL"
+11.
+  }'
+Returning the customer after payment
+If you sell through your own website, landing page, or bot, it makes sense for the customer to return to you after payment rather than stay on a lava.top page. Pass the addresses of your pages when creating an invoice, and we will send the customer there as soon as the payment result is known. You can set separate addresses for successful payment, failed payment, and cancellation.
+
+1
+Provide the addresses when creating the invoice
+Use the POST /api/v3/invoice method. Add the optional successful_return_url, failure_return_url, and cancel_return_url fields to the request body. You can pass any subset — one field, two, or all three.
+
+screenshot21.png
+
+All three query
+
+Example
+1.
+curl --location 'https://gate.lava.top/api/v3/invoice' \
+2.
+  --header 'Accept: application/json' \
+3.
+  --header 'X-Api-Key: {api_key}' \
+4.
+  --header 'Content-Type: application/json' \
+5.
+  --data-raw '{
+6.
+    "email": "client@example.com",
+7.
+    "offerId": "836b9fc5-7ae9-4a27-9642-592bc44072b7",
+8.
+    "currency": "EUR",
+9.
+    "successful_return_url": "https://school.example.com/thanks",
+10.
+    "failure_return_url": "https://school.example.com/payment-error",
+11.
+    "cancel_return_url": "https://school.example.com/checkout"
+12.
+  }'
+Successful payment page only
+
+Example
+1.
+curl --location 'https://gate.lava.top/api/v3/invoice' \
+2.
+  --header 'Accept: application/json' \
+3.
+  --header 'X-Api-Key: {api_key}' \
+4.
+  --header 'Content-Type: application/json' \
+5.
+  --data-raw '{
+6.
+    "email": "client@example.com",
+7.
+    "offerId": "836b9fc5-7ae9-4a27-9642-592bc44072b7",
+8.
+    "currency": "EUR",
+9.
+    "paymentProvider": "PAYPAL",
+10.
+    "successful_return_url": "https://school.example.com/thanks?utm_source=lava"
+11.
+  }'
+Query	Descriprion
+successful_return_url	The page the customer returns to after a successful payment
+failure_return_url	The page for a failed payment
+cancel_return_url	The page for a cancelled payment
+Requirements for values:
+
+https scheme only
+Absolute URL
+Up to 512 characters per field
+If at least one of the values does not meet these requirements, the invoice is not created and a 400 error is returned. Partial saving is not supported.
+2
+How a customer returns to your page
+After payment, the customer first returns to a lava.top page and is then redirected to your address.
+
+The intermediate page shows a loading indicator and does not repeat the payment status — the customer has already seen it in the payment form and will see it on your page.
+
+If no address was passed for that outcome, the customer stays on our page and sees the final status, as before.
+3
+Routing based on payment outcome
+Payment confirmed
+Target: successful_return_url
+
+If not passed: Final status on the lava.top page
+
+Payment failed
+Target: failure_return_url
+
+If not passed: Final status on the lava.top page
+
+Payment cancelled
+Target: cancel_return_url
+
+If not passed: failure_return_url, if passed, otherwise the final status
+
+We report a cancellation separately where the payment provider distinguishes it from a decline. Some providers do not — in those cases the customer is sent to failure_return_url. This is expected behaviour.
+4
+Queries in the return URL
+We add two parameters to your address:
+
+invoiceId — The invoice ID
+status — success / failed / cancelled
+Your own query parameters are preserved; ours are appended with &. If the address contains a fragment (#), the parameters are added before it.
+
+Example: https://school.example.com/thanks?utm_source=lava becomes https://school.example.com/thanks?utm_source=lava&invoiceId=3fa85f64-5717-4562-b3fc-2c963f66afa6&status=success.
+
+The status parameter is not a payment confirmation and must not be used to grant access to content.
+It is a value in the address bar and can be forged on the customer's side. The source of truth for the payment state is the payment.success webhook and the GET /api/v1/invoices/{id} method.
+
+No customer personal data is passed in the return URL. Email and other data are not added to the parameters: the address bar ends up in logs, browser history, and the referer header.
+
+Restrictions
+Applies only to invoices created via the API. Does not apply to direct sales on lava.top
+For subscriptions, applies only to the first payment. Renewals run without a browser session
+If the automatic redirect fails, the customer stays on our page and sees a link to continue manually
+API Libraries
+We’ve prepared several open-source libraries to help you use our platform more easily and efficiently.
+
+Our API follows the Open API (Swagger) specification, which can be complex to work with — these libraries are designed to simplify the process.
+
+The successful_return_url, failure_return_url and cancel_return_url fields are currently available only when calling the API directly. They are not supported in the libraries.
+Python
+Get the package PyPI, typically via pip:
+
+Install
+1.
+pip install lava-top-sdk
+Make sure that, however you install lava-top-sdk, you install its dependencies as well.
+
+TypeScript
+Available on npm
+
+Install
+1.
+npm install --save lava-top-sdk
+Kotlin
+Get the artifact from Maven
+
+Install
+1.
+<dependency>
+2.
+	<groupId>top.lava</groupId>
+3.
+	<artifactId>lava-top-kotlin-sdk</artifactId>
+4.
+	<version>1.0.0</version>
+5.
+</dependency>
+Clients and API Keys
+Lava.top uses two types of API keys, each serving a specific role in the integration process:
+
+API Key for signing requests to lava.top
+This key is used by your system to send API requests to lava.top. It allows us to identify and authorize your application.
+
+API Key for signing webhooks from lava.top
+This key is generated on your side and shared with lava.top. The platform uses it to sign webhook requests by adding it to the X-Api-Key HTTP header when sending data to your server.
+
+Both keys are essential to ensure a secure and reliable integration between your system and lava.top.
+Errors
+Lava.top uses standard HTTP response codes to indicate whether an API request was successful or if an error occurred.
+
+All outgoing connections originate from the IP address 158.160.60.174
+
+Important: Please make sure to whitelist this IP on your side!
+Retry Policy
+If the webhook is not delivered, the system will automatically try to resend it to the specified URL. The first attempt will be in one second, the second in five seconds, and the third in 15 seconds. The system will then make ten attempts with an interval of one minute. After that, if unsuccessful, the system will make five more attempts with an interval of one hour.
+
+Up to 20 attempts will be made in total.
+
+The most common errors:
+
+Code	Descriprion
+400	Bad Request: the request is malformed. Check the syntax, parameters, and size limits. When creating an invoice, this error is also returned if a return URL does not use https, is not an absolute URL, or exceeds 512 characters.
+401	Unauthorized: Authentication error. Verify your API key, OAuth token, token expiration, or required scopes.
+403	Forbidden: Access to the resource is denied. You may lack permissions or be trying to access a restricted resource.
+404	Not Found: The resource was not found. Check the URL, object ID, or whether the resource exists in your account.
+405	Method Not Allowed: The HTTP method is not supported for this endpoint. Refer to the API documentation.
+406	Not Acceptable: Unsupported request or response format. The API only supports application/json.
+408	Request Timeout: The server timed out waiting for the request to complete. Try resending with smaller data payloads.
+410	Gone: The resource has been permanently deleted and is no longer available.
+429	Too Many Requests: Rate limit exceeded. Reduce the frequency of requests.
+500	Internal Server Error: A server-side error occurred. Try again later.
+503	Service Unavailable: The service is temporarily unavailable due to maintenance or overload. Please try again later.
+Rate Limits
+Lava.top applies request rate limiting to protect against overload and ensure stable API performance.
+
+50
+Current limit: up to 50 requests per second per IP address.
+If this limit is exceeded, the server will respond with an error code 429. In this case, it's recommended to wait before retrying the request.
+For high-load services, feel free to contact our support team: support@lava.top
+Webhook
+As mentioned earlier, in the Integration section, you can create API keys and add webhooks.
+
+You can also view the sending attempt history, check the status of each webhook, and re-send any webhook that failed to be delivered or processed.
+
+Webhook History
+You can find the webhook history in your account card. To access it, go to Integrations → API → Webhook history (button in the upper right corner of the page).
+
+screenshot11.png
+
+This section logs all events linked to your configured webhooks. Events are categorized by type, status, and the API Key + webhook pair.
+
+In the payment details, you can view the full request body sent at the time of the event, along with the delivery attempt history (in case of a failed subscription charge, the webhook is sent only after the final attempt (i.e., if there were three charge attempts, the webhook will be triggered only after the third one)). To see these details, simply click on the corresponding webhook entry.
+
+screenshot19.png
+
+Advanced filters are available to help you quickly find the webhook you need — you can search by Buyer's email, Invoice ID, Product name, or Product ID.
+
+screenshot12.png
+
+Events Types
+Each event is associated with a payment type and a contract status.
+
+Payment Types:
+
+one-time payment (purchasing a digital product, course, consultation, or the first payment in a subscription);
+recurring payment (subscription renewal or cancellation).
+Contract Statuses:
+
+success (payment was successful);
+failed (payment was not completed, e.g. insufficient funds);
+cancelled (the subscription was cancelled).
+Based on this, you may encounter the following Event types:
+
+payment.success — successful purchase of a product (not a donation) or the first subscription payment;
+payment.failed — failed product purchase (not a donation) or failed first subscription payment;
+subscription.recurring.payment.success — successful renewal of a subscription (second, third, and later payments);
+subscription.recurring.payment.failed — failed subscription renewal;
+subscription.cancelled — cancellation of a previously active subscription;
+refund.success — a full or partial refund on a sale has been completed;
+chargeback.initiated — the customer has opened a dispute through their bank.
+To receive events, create a webhook and select the events you need in the "Event type" field. There are no restrictions on combinations: a single webhook can receive one event or all seven. See "Setting up the integration" for how the options map to event types:
+
+screenshot13.png
+
+Refund and chargeback events
+Refunds and chargebacks happen after a sale is completed and affect both your balance and the customer's access to content. These events let you revoke access in your system automatically and reconcile your records without manual exports.
+
+screenshot20.png
+
+Event	When it is sent	Balance state
+refund.success	When a refund is executed on the lava.top side, regardless of the initiator	The refunded amount is debited; the platform fee is not returned
+chargeback.initiated	When we receive the dispute from the acquirer	The disputed amount and the provider fee are debited. If the balance goes negative, payouts are blocked
+Both events arrive in a common envelope. The event body is in the data field; its contents depend on the event type.
+
+json
+1.
+{
+2.
+  "event_id": "7ea82675-4ded-4133-95a7-a6efbaf165cc",
+3.
+  "event_type": "refund.success",
+4.
+  "created_at": "2024-02-05T09:38:27.33277Z",
+5.
+  "data": { }
+6.
+}
+The refund.success and chargeback.initiated events use an envelope structure with snake_case field names. The payment.* and subscription.* events keep their existing format — a flat structure with camelCase field names (eventType, contractId, buyer).
+
+If your handler receives all event types on a single URL, take this into account when parsing.
+
+Payload eventrefund.success
+
+json
+1.
+{
+2.
+  "event_id": "7ea82675-4ded-4133-95a7-a6efbaf165cc",
+3.
+  "event_type": "refund.success",
+4.
+  "created_at": "2024-02-05T09:38:27.33277Z",
+5.
+  "data": {
+6.
+    "refund_id": "7ea82675-4ded-4133-95a7-a6efbaf165cc",
+7.
+    "refund_type": "full",
+8.
+    "initiator": "creator",
+9.
+    "amount": 400.00,
+10.
+    "currency": "EUR",
+11.
+    "product": {
+12.
+      "product_name": "Test product",
+13.
+      "product_id": "d31384b8-e412-4be5-a2ec-297ae6666c8f",
+14.
+      "product_type": "DIGITAL_PRODUCT",
+15.
+      "tier_id": "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+16.
+    },
+17.
+    "customer_email": "test@lava.top",
+18.
+    "balance_impact": {
+19.
+      "debited_amount": 368.00,
+20.
+      "currency": "EUR"
+21.
+    },
+22.
+    "subscription_cancelled": false
+23.
+  }
+24.
+}
+Field	Descriprion
+refund_id	The refund ID
+refund_type	full or partial
+initiator	creator, admin (support), or system
+amount, currency	The refunded amount and currency
+product	The product the refund applies to
+customer_email	The customer's email
+balance_impact.debited_amount	The amount debited from your balance
+subscription_cancelled	Whether this refund cancelled the subscription
+Payload event chargeback.initiated
+
+json
+1.
+{
+2.
+  "event_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+3.
+  "event_type": "chargeback.initiated",
+4.
+  "created_at": "2024-02-05T09:38:27.33277Z",
+5.
+  "data": {
+6.
+    "chargeback_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+7.
+    "dispute_date": "2024-02-05",
+8.
+    "reason_category": "fraud",
+9.
+    "reason_description": "Fraudulent transaction",
+10.
+    "amount": 400.00,
+11.
+    "currency": "EUR",
+12.
+    "product": {
+13.
+      "product_name": "Test product",
+14.
+      "product_id": "d31384b8-e412-4be5-a2ec-297ae6666c8f",
+15.
+      "product_type": "DIGITAL_PRODUCT",
+16.
+      "tier_id": "836b9fc5-7ae9-4a27-9642-592bc44072b7"
+17.
+    },
+18.
+    "customer_email": "test@lava.top",
+19.
+    "balance_impact": {
+20.
+      "debited_amount": 400.00,
+21.
+      "provider_fee": 40.00,
+22.
+      "currency": "EUR"
+23.
+    },
+24.
+    "subscription_cancelled": false
+25.
+  }
+26.
+}
+Field	Descriprion
+chargeback_id	The chargeback ID
+dispute_date	The date the dispute was opened
+reason_category	The dispute reason category, provided by the customer's bank
+reason_description	The bank's description, if provided
+amount, currency	The disputed amount and currency
+balance_impact.debited_amount	The disputed amount withheld
+balance_impact.provider_fee	The provider fee for handling the dispute
+subscription_cancelled	Whether this chargeback cancelled the subscription
+How to handle these events
+Use event_id to guard against duplicate processing. It does not change between retries.
+Delivery order is not guaranteed. Rely on event_id and created_at, not on the order in which events arrive.
+A refund and a subscription cancellation are independent. A refund does not necessarily cancel the subscription.
+Each partial refund produces a separate event with its own event_id and refund_id.
+Return 2xx for any event type, including unknown ones.
+If a refund or chargeback cancels the subscription, the subscription_cancelled field is set to true, and a separate subscription.cancelled event is also sent in the existing format.
+
+To receive it, select "Subscription cancelled" in your webhook settings.
+
+Do not process the same cancellation twice: use subscription_cancelled for an immediate reaction, and subscription.cancelled as the primary subscription lifecycle event, with its cancelledAt and willExpireAt dates.
+
+Restrictions
+We notify you when a dispute is opened. The chargeback outcome — won, lost, or withdrawn by the customer — is not reported via webhook.
+A chargeback on a donate is sent even though refunds on donates are not allowed by the platform policy: a chargeback is initiated by the bank, not by the platform.
+A refund is not possible on a transaction that has a chargeback. No refund.success event is sent for it.
+If a chargeback follows a partial refund, the amount field contains the disputed remainder, not the full sale amount.
+Webhook Status
+The status indicates whether the webhook was successfully received.
+
+screenshot14.png
+
+A webhook can have one of two statuses:
+
+DELIVERED — the webhook was successfully delivered.
+FAILED — the webhook delivery failed.
+The status is determined based on the HTTP response code returned by your server when the event is sent.
+
+An event is considered delivered if your service responds with a 2xx code within 10 seconds. If no response is received within that time, the attempt is treated as failed and the event is retried according to the general retry policy.
+Retry Policy
+Lava.top uses HTTP status codes to determine whether an API request was successfully processed or failed.
+
+If a webhook delivery fails (i.e., a non-successful HTTP status code is returned), lava.top will retry the delivery up to 19 additional times, for a total of 20 attempts.
+
+If webhooks were not delivered, the system will attempt to resend them to the specified URL. Repeated attempts are made according to the logic: first 1s, 5s, 15s, then 10 attempts with an interval of 1 min, then, if unsuccessful, another 5 attempts with an interval of 1 hour.
+
+In total, 20 delivery attempts will be made.
+
+Each attempt is logged in the webhook history with the corresponding HTTP status code. If a successful status code is received, no further retries will be made. In that case, you’ll see only one event logged (successful or failed payment).
+
+In case of an unsuccessful response, up to 20 attempts may be made (retries stop after a successful delivery or after 19 retry attempts).
+
+You can view all retry attempts in the "Sending attempt history" section of the webhook details.
+
+screenshot15.png
+
+Most common response codes:
+
+Code 401 / Code 403 — Invalid authentication data; access to the webhook handler is denied;
+Code 404 — The webhook contains an incorrect URL (the link to the author's server that receives and processes the webhook is invalid)
+Code 500 — An error occurred on the author's server that is responsible for handling the webhook.
+screenshot16.png
+
+Webhook Resend
+You can manually resend any webhook by clicking the arrow icon next to it.
+
+screenshot17.png
+
+Click the icon and confirm the resend action.
+
+screenshot18.png
+
+Changelog
+We regularly improve integration capabilities by adding new features, fixing bugs, and updating the documentation. Here you can keep track of all the changes.
+
+August 2026
+Latest
+Refund and chargeback webhooks added.
+
+New event types: refund.success — a full or partial refund on a sale; chargeback.initiated — a payment dispute raised by the customer's bank.
+Select the new events in your webhook settings: Integrations → API, the "Event type" field.
+The payload includes the balance impact: the debited amount and the provider fee.
+The subscription_cancelled field indicates whether the event cancelled the subscription. When it does, a separate subscription.cancelled event is also sent.
+You can now return the customer to your own page after payment.
+
+POST /api/v3/invoice accepts three optional fields: successful_return_url, failure_return_url, cancel_return_url.
+The return URL receives the invoiceId and status parameters.
+If no addresses are passed, the post-payment flow is unchanged.
+Before you update your integration.
+
+Make sure your handler returns 2xx for unknown event types before enabling the new events.
+The status parameter in the return URL is not a payment confirmation. Grant access based on the webhook.
+May 2026
+Added the ability to create an invoice for a custom amount via API.
+
+Implemented the POST /api/v3/invoice method with support for amount and currency parameters for products published with the “Price on request via API” option enabled.
+
+Supported content types: Digital product, Consultation, Course.
+
+Supported currencies: RUB, USD, EUR. Contract type: ONE_TIME.
+
+December 2025
+Updated navigation for the "Integrations" section.
+
+A standalone “Integrations” section has been added to the Creator Dashboard sidebar menu. API Key and Webhook management has been moved here from the Profile section. Navigation path: Integrations → API.
+
+July 2025
+Subscription payments via Stripe are now supported.
+
+Implemented /api/v2/invoices and /api/v2/invoices/{id} endpoints with updated contract typing:
+
+INVOICE - payment for products, consultations, or courses,
+SUBSCRIPTION_FIRST_INVOICE - first subscription charge,
+SUBSCRIPTION_RENEWAL - recurring subscription payment.
+April 2025
+Donation payments via Stripe are now supported.
+
+Improved GET /invoices request: now returns the parentInvoiceId field (ID of the parent transaction for subscriptions).
+
+February 2025
+PayPal support added:
+
+Subscription payments,
+Donation sending.
+Webhook improvements:
+
+Manual retry option,
+Webhook list retrieval,
+Event type now included in the webhook payload,
+Ability to search webhooks by Product ID in the Author Dashboard (Integrations → API → Webhook History).
+January 2025
+UTM tags added.
+
+December 2024
+Stripe payment support added for digital products.

@@ -15,6 +15,7 @@ import re
 import uuid
 from urllib.parse import quote_plus, urlencode
 
+import defusedxml.ElementTree as ET
 import httpx
 
 from app.models.payment import PaymentStatus
@@ -35,6 +36,7 @@ from app.services.payments.base import (
 
 _CHECKOUT_URL = "https://auth.robokassa.ru/Merchant/Index.aspx"
 _RECURRING_URL = "https://auth.robokassa.ru/Merchant/Recurring"
+_STATE_URL = "https://auth.robokassa.ru/Merchant/WebService/Service.asmx/OpStateExt"
 
 
 #: Алгоритм хэша выбирается в технических настройках магазина (по умолчанию MD5), и подпись надо считать
@@ -97,6 +99,7 @@ class RobokassaProvider(ProviderDefaults):
     # MerchantLogin / InvoiceID / PreviousInvoiceID / OutSum / Description)
     # и с описанием «Периодические платежи» в документации Robokassa.
     recurring = RecurringMode.token
+    supports_status_check = True
     credential_fields = (
         CredentialField("merchant_login", "Идентификатор магазина", "MerchantLogin из кабинета", secret=False),
         CredentialField("password1", "Пароль #1", "Используется для подписи ссылки на оплату"),
@@ -252,6 +255,70 @@ class RobokassaProvider(ProviderDefaults):
             meta={"robokassa_first_invoice": str(invoice_no)},
         )
 
+    async def check_status(
+        self,
+        *,
+        credentials: dict[str, str],
+        amount_minor: int,
+        invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
+        meta: dict,
+        currency: str = "",
+    ) -> WebhookResult:
+        """`OpStateExt`: состояние операции по номеру счёта (подпись `MerchantLogin:InvoiceID:Пароль#2`).
+
+        Работает только для боевых платежей — тестовые (`IsTest=1`) метод не отдаёт."""
+        if (meta or {}).get("robokassa_test"):
+            raise ProviderError("Robokassa: статус тестового платежа по API недоступен — дождись уведомления")
+        login = (credentials.get("merchant_login") or "").strip()
+        password2 = (credentials.get("password2") or "").strip()
+        if not login or not password2:
+            raise ProviderError("Robokassa: не заполнены идентификатор магазина или пароль #2")
+        signature = _digest(_algo(credentials), f"{login}:{invoice_no}:{password2}")
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                _STATE_URL, params={"MerchantLogin": login, "InvoiceID": str(invoice_no), "Signature": signature}
+            )
+        if response.status_code >= 400:
+            raise ProviderError(f"Robokassa: HTTP {response.status_code}")
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as exc:
+            raise ProviderError("Robokassa: непонятный ответ на запрос статуса") from exc
+
+        def find(path: str) -> str:
+            node = root.find(f".//{{*}}{path.replace('/', '/{*}')}")
+            return (node.text or "").strip() if node is not None and node.text else ""
+
+        result = find("Result/Code")
+        if result == "3":
+            # Операция создаётся, когда покупатель подтвердил реквизиты: до этого её просто нет.
+            return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(invoice_no))
+        if result != "0":
+            raise ProviderError(f"Robokassa: статус не получен (код {result or '?'}: {find('Result/Description')})")
+
+        state = find("State/Code")
+        if state == "100":
+            out_sum = find("Info/OutSum")
+            if out_sum:
+                try:
+                    if abs(float(out_sum.replace(",", ".")) - amount_minor / 100) > 0.009:
+                        raise ProviderError(f"Robokassa: сумма не совпадает (в операции {out_sum})")
+                except ValueError:
+                    pass
+            return WebhookResult(
+                status=PaymentStatus.paid,
+                provider_payment_id=str(invoice_no),
+                meta={"robokassa_first_invoice": str(invoice_no)},
+            )
+        if state == "10":
+            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=str(invoice_no))
+        if state == "60":
+            return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=str(invoice_no))
+        # 5 — не подтверждена, 20 — холд, 50 — зачисляется, 80 — приостановлена проверкой: ещё не деньги.
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(invoice_no))
+
     def recurring_setup(self, settled: dict) -> RecurringSetup | None:
         first = (settled or {}).get("robokassa_first_invoice")
         return RecurringSetup(token=str(first)) if first else None
@@ -287,7 +354,18 @@ class RobokassaProvider(ProviderDefaults):
         out_sum = minor_to_major(amount_minor)
         # Same composition as a first payment — the recurring call is signed
         # with its *own* invoice number, not the previous one.
-        signature = _digest(_algo(credentials), f"{login}:{out_sum}:{invoice_no}:{password1}")
+        # Чек продления — тот же формат, что у первого платежа; входит в подпись между номером счёта и паролем.
+        receipt = receipt_from_credentials(
+            credentials, description or "Продление подписки", amount_minor,
+            buyer_email=credentials.get("_buyer_email"), buyer_phone=credentials.get("_buyer_phone"),
+        )
+        parts = [login, out_sum, str(invoice_no)]
+        receipt_once = ""
+        if receipt:
+            receipt_once = quote_plus(json.dumps(receipt_robokassa(receipt), ensure_ascii=False, separators=(",", ":")))
+            parts.append(receipt_once)
+        parts.append(password1)
+        signature = _digest(_algo(credentials), ":".join(parts))
         body = {
             "MerchantLogin": login,
             "InvoiceID": str(invoice_no),
@@ -296,6 +374,8 @@ class RobokassaProvider(ProviderDefaults):
             "Description": _plain(description or "Продление подписки")[:100] or "Продление подписки",
             "SignatureValue": signature,
         }
+        if receipt_once:
+            body["Receipt"] = receipt_once
 
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(_RECURRING_URL, data=body)

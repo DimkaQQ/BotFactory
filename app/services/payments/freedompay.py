@@ -96,6 +96,7 @@ class FreedomPayProvider(ProviderDefaults):
     # Имя скрипта — без .php (легаси-форма с .php осталась у Platron и
     # старого Paybox), и оно же идёт в подпись как последний сегмент URL.
     recurring = RecurringMode.token
+    supports_status_check = True
     credential_fields = (
         CredentialField("merchant_id", "Merchant ID", "номер магазина из кабинета", secret=False),
         CredentialField("secret_key", "Секретный ключ", "секретный ключ мерчанта"),
@@ -122,7 +123,9 @@ class FreedomPayProvider(ProviderDefaults):
 
         params = {
             "pg_merchant_id": merchant,
-            "pg_order_id": str(request.payment_id),
+            # Только буквы и цифры: в ответе статуса pg_order_id описан шаблоном ^[a-zA-Z0-9]+$.
+            "pg_order_id": request.payment_id.hex,
+            "pg_idempotency_key": request.payment_id.hex,
             "pg_amount": minor_to_major(request.amount_minor),
             "pg_currency": request.currency.upper(),
             "pg_description": (request.description or "Оплата")[:255],
@@ -162,7 +165,12 @@ class FreedomPayProvider(ProviderDefaults):
         if not url:
             raise ProviderError("Freedom Pay: ответ без ссылки на оплату")
 
-        return Checkout(url=url, provider_payment_id=payload.get("pg_payment_id"))
+        return Checkout(
+            url=url,
+            provider_payment_id=payload.get("pg_payment_id"),
+            # Статус платежа запрашивается по тому же номеру заказа, с каким он создан.
+            meta={"freedompay_order_id": request.payment_id.hex},
+        )
 
     def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
         try:
@@ -288,7 +296,7 @@ class FreedomPayProvider(ProviderDefaults):
         params = {
             "pg_merchant_id": merchant,
             "pg_recurring_profile": str(setup.token),
-            "pg_order_id": str(payment_id),
+            "pg_order_id": payment_id.hex,
             "pg_amount": minor_to_major(amount_minor),
             "pg_currency": currency.upper(),
             "pg_description": (description or "Продление подписки")[:255],
@@ -314,7 +322,96 @@ class FreedomPayProvider(ProviderDefaults):
                 raise ProviderError(f"Freedom Pay: привязка карты больше не действует ({detail})")
             raise ProviderError(f"Freedom Pay: {detail}")
 
-        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=payload.get("pg_payment_id"))
+        remote_id = payload.get("pg_payment_id")
+        # Recurrent — синхронный метод (Gateway API → Sync API): платёж уже создан, а итог читается по
+        # статусу сразу, не дожидаясь уведомления. Не получилось прочитать — остаётся «ожидает», и итог
+        # придёт на pg_result_url, как раньше.
+        if remote_id:
+            try:
+                state = await self._status(credentials, str(remote_id), payment_id.hex)
+                return self._verdict(state, amount_minor, currency, remote_id)
+            except ProviderError as exc:
+                logger.warning("Freedom Pay: статус продления %s не прочитан: %s", remote_id, exc)
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=remote_id)
+
+    async def check_status(
+        self,
+        *,
+        credentials: dict[str, str],
+        amount_minor: int,
+        invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
+        meta: dict,
+        currency: str = "",
+    ) -> WebhookResult:
+        if not provider_payment_id:
+            raise ProviderError("Freedom Pay: платёж ещё не создан")
+        order_id = (meta or {}).get("freedompay_order_id") or str(payment_id)
+        state = await self._status(credentials, provider_payment_id, order_id)
+        return await self._settle(credentials, state, amount_minor, currency, provider_payment_id)
+
+    async def _post(self, credentials: dict[str, str], script: str, fields: dict[str, str]) -> dict[str, str]:
+        """Подписанный POST в Gateway API (`/g2g/<script>`); подпись — от последнего сегмента адреса."""
+        merchant, secret = self._keys(credentials)
+        params = {"pg_merchant_id": merchant, **fields, "pg_salt": secrets.token_hex(8)}
+        params["pg_sig"] = _sign(script, params, secret)
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(f"{self._base(credentials)}/g2g/{script}", data=params)
+        if response.status_code >= 400:
+            raise ProviderError(f"Freedom Pay: HTTP {response.status_code}")
+        return _parse_xml(response.text)
+
+    async def _status(self, credentials: dict[str, str], payment_id: str, order_id: str) -> dict[str, str]:
+        """`POST /g2g/status_v2`. Платёж не найден (11068) — ещё не создан: возвращаем пустой статус."""
+        state = await self._post(credentials, "status_v2", {"pg_payment_id": payment_id, "pg_order_id": order_id})
+        if (state.get("pg_status") or "").lower() != "ok":
+            code = (state.get("pg_error_code") or "").strip()
+            if code == "11068":
+                return {"pg_payment_status": "pending"}
+            raise ProviderError(f"Freedom Pay: {state.get('pg_error_description') or code or 'отказ'}")
+        return state
+
+    def _verdict(self, state: dict[str, str], amount_minor: int, currency: str, remote_id) -> WebhookResult:
+        """Статус платежа в наш: success / error / pending (документация), возврат — по сумме."""
+        remote = str(remote_id) if remote_id else None
+        status = (state.get("pg_payment_status") or "").strip().lower()
+        amount = _number(state.get("pg_amount"))
+        refunded = _number(state.get("pg_refund_amount"))
+        if status == "success":
+            if amount is not None and abs(amount - amount_minor / 100) > 0.009:
+                raise ProviderError(f"Freedom Pay: сумма не совпадает (в платеже {amount})")
+            same_currency(self.title, state.get("pg_currency"), currency)
+            if refunded and amount and refunded >= amount:
+                return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=remote)
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote)
+        if status == "error":
+            reason = state.get("pg_failure_description") or state.get("pg_failure_code") or "платёж отклонён"
+            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=remote, meta={"decline": str(reason)})
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=remote)
+
+    async def _settle(
+        self, credentials: dict[str, str], state: dict[str, str], amount_minor: int, currency: str, remote_id
+    ) -> WebhookResult:
+        """Как `_verdict`, но двухстадийный платёж сначала списываем: успешная авторизация без списания
+        (`pg_captured = 0`) — это блокировка денег, а не деньги; без `clearing` касса спишет их
+        сама только через 5 дней."""
+        if (
+            (state.get("pg_payment_status") or "").lower() == "success"
+            and (state.get("pg_captured") or "").strip() == "0"
+        ):
+            try:
+                await self._post(credentials, "clearing", {"pg_payment_id": str(remote_id)})
+            except ProviderError as exc:  # уже списан или списание недоступно — статус всё равно «успех»
+                logger.warning("Freedom Pay: clearing %s не выполнен: %s", remote_id, exc)
+        return self._verdict(state, amount_minor, currency, remote_id)
+
+
+def _number(raw: str | None) -> float | None:
+    try:
+        return float((raw or "").replace(",", ".")) if (raw or "").strip() else None
+    except ValueError:
+        return None
 
 
 def _ack(secret: str, status: str, description: str = "") -> str:
