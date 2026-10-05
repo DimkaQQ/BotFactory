@@ -34,7 +34,7 @@ PAYMENT_ID = uuid.UUID("11111111-2222-3333-4444-555555555555")
 
 def sample(vat: Vat = Vat.VAT22, price: str = "990.00") -> Receipt:
     return Receipt(
-        items=[ReceiptItem(name="Запуск бота", qty=Decimal("1"), price=Decimal(price), vat=vat)],
+        items=[ReceiptItem(name="Запуск бота", qty=Decimal("1"), price=Decimal(price), vat=vat, method=PayMethod.FULL_PAYMENT)],
         tax_system=TaxSystem.USN_INCOME,
         email="shop@example.com",
     )
@@ -69,7 +69,7 @@ def test_receipt_is_built_from_the_shop_settings():
     assert receipt.total() == Decimal("990.50")
     assert receipt.tax_system is TaxSystem.OSN
     assert receipt.items[0].vat is Vat.VAT22
-    assert receipt.items[0].method is PayMethod.FULL_PREPAYMENT and receipt.items[0].obj is PayObject.SERVICE
+    assert receipt.items[0].method is PayMethod.FULL_PAYMENT and receipt.items[0].obj is PayObject.SERVICE
 
 
 # ------------------------------------------------------------- мапперы касс
@@ -95,7 +95,7 @@ def test_paymaster_receipt_uses_camel_case_values():
     out = receipt_paymaster(sample(Vat.VAT22))
     assert out["client"] == {"email": "shop@example.com"}
     assert out["items"][0]["vatType"] == "Vat22"
-    assert out["items"][0]["paymentMethod"] == "FullPrepayment" and out["items"][0]["paymentSubject"] == "Service"
+    assert out["items"][0]["paymentMethod"] == "FullPayment" and out["items"][0]["paymentSubject"] == "Service"
 
 
 def test_robokassa_receipt_shape():

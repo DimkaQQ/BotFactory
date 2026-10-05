@@ -65,6 +65,8 @@ services:
       # image's /srv WORKDIR) — a named volume so uploads survive a
       # redeploy instead of vanishing with the container's writable layer.
       - media_uploads:/srv/media_uploads
+      # Сертификаты Минцифры для API Т-Банка (необязательно; см. TBANK_CA_BUNDLE).
+      - ./certs:/certs:ro
     depends_on:
       db:
         condition: service_healthy
@@ -86,6 +88,8 @@ services:
       disable: true
     volumes:
       - media_uploads:/srv/media_uploads
+      # Сертификаты Минцифры для API Т-Банка (необязательно; см. TBANK_CA_BUNDLE).
+      - ./certs:/certs:ro
     depends_on:
       db:
         condition: service_healthy

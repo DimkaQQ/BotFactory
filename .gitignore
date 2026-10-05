@@ -46,3 +46,6 @@ htmlcov/
 .deploy-branch
 .media_chown_done
 backups/
+
+# Сертификаты, скачанные deploy/install-russian-ca.sh
+certs/*.pem

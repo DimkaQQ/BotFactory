@@ -368,8 +368,7 @@ Allowlist IP в разделе Security приложения.
 ### Хосты
 
 - Боевой: `https://securepay.tinkoff.ru/v2/<Метод>`.
-- **Тест: терминал с приставкой `DEMO`, запросы идут на тот же боевой адрес** `https://securepay.tinkoff.ru/v2`.
-- ⚠ Сверить: если в адаптере `rest-api-test.tinkoff.ru` — это устаревший вариант (так делают сторонние модули).
+- **Тест:** тестовая среда `https://rest-api-test.tinkoff.ru/v2/<Метод>` с тем же боевым `TerminalKey` (без `DEMO`) и тем же паролем; боевая `https://securepay.tinkoff.ru/v2`. DEMO-терминал шлёт запросы на боевой хост (только для тест-кейсов из ЛК). Хост — настройка кассы, подробнее в tbank-docs.md, разделы 1 и 20.
 
 ### Основные методы
 
@@ -1269,7 +1268,7 @@ Merchant API, JSON-RPC 2.0. Payme Business сам вызывает ваш энд
 8. **Устаревшие поля и адреса**:
    - Crypto Bot `pay_url` → `bot_invoice_url`;
    - lava.top `/api/v1|v2/invoice` → `/api/v3/invoice`;
-   - Т-Банк тест — DEMO-терминал на боевом хосте, а не `rest-api-test`;
+   - Т-Банк: хост — настройка кассы (тест `rest-api-test.tinkoff.ru` с боевым терминалом, бой `securepay.tinkoff.ru`);
    - PayMaster — ставки Vat22/Vat122 вместо 20/120.
 9. **Регистр статусов**: lava.top (вебхук в нижнем, API в верхнем).
 10. **Двухстадийные платежи с автосписанием**: ioka APPROVED через 48 ч списывается сам; ЮKassa и CloudPayments отменяют холд по истечении срока.

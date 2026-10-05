@@ -288,12 +288,17 @@ async def test_tbank_signs_init_and_charges_in_kopecks(mock_http):
     assert checkout.url == "https://securepayments.tinkoff.ru/x8Kout"
     assert checkout.provider_payment_id == "3006574"
     assert seen[0]["Amount"] == 99000
-    assert seen[0]["OrderId"] == str(PAYMENT_ID)
+    assert seen[0]["OrderId"] == PAYMENT_ID.hex, "номер заказа — только буквы и цифры"
 
 
 async def test_tbank_asks_the_bank_rather_than_believing_the_notification(mock_http):
     """A notification body is not proof of anything; GetState is."""
-    forged = json.dumps({"OrderId": str(PAYMENT_ID), "PaymentId": "3006574", "Status": "CONFIRMED"}).encode()
+    from app.services.payments.tbank import _token
+
+    # Подпись верна (её ставит банк), но то, что он говорит о сумме и статусе, мы всё равно перечитываем.
+    body = {"OrderId": PAYMENT_ID.hex, "PaymentId": "3006574", "Status": "CONFIRMED", "Success": True}
+    body["Token"] = _token(body, TBANK_CREDS["password"])
+    forged = json.dumps(body).encode()
 
     with mock_http(tbank_api(status="REJECTED")):
         result = await get_provider("tbank").verify_webhook(

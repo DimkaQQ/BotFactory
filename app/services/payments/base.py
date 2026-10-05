@@ -524,6 +524,10 @@ def receipt_from_credentials(
                 qty=Decimal("1"),
                 price=amount,
                 vat=_enum_or_error(Vat, credentials.get(vat_key, ""), "none", "ставка НДС"),
+                # Бот выдаёт товар сразу после оплаты: полный расчёт. «Полная предоплата» требует от
+                # продавца закрывающего чека при передаче товара, которого мы не пробиваем, — налоговая
+                # недоработка (см. docs/tbank-docs.md, раздел 18).
+                method=PayMethod.FULL_PAYMENT,
             )
         ],
         tax_system=_enum_or_error(TaxSystem, credentials.get(tax_key, ""), "usn_income", "система налогообложения"),
