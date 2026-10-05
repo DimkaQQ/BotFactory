@@ -341,7 +341,7 @@ FROM subscriptions WHERE bot_id = '<BOT_ID>';
 - **Подписка.** Первый платёж просит сохранить карту (`pg_recurring_start=1`, `pg_recurring_lifetime` — месяцы, напр. 24),
   профиль приходит в `pg_recurring_profile_id`. Продление — `POST /g2g/recurrent` с `pg_recurring_profile`, подпись от
   имени `recurrent`; сразу после ответа адаптер читает статус (`status_v2`), чтобы `ok` («создан») не считать «списано».
-- **Не сделано:** возврат/отмена из конструктора (Merchant/Gateway API), фискальные позиции чека для KZ
+- **Не делаем (решение владельца):** возврат/отмена из конструктора — клиенты делают это в кабинете Freedom Pay. **Не сделано:** фискальные позиции чека для KZ
   (`pg_receipt_positions`) — возвраты и чеки пока в кабинете Freedom Pay.
 - Поддержка: `support@freedompay.kz`; документация: `https://docs.freedompay.kz/`.
 
