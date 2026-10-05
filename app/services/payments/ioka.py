@@ -20,6 +20,11 @@ Orders are created with `capture_method: AUTO`, so a paid order goes
 straight to `PAID` rather than sitting at `ON_HOLD` — a hold is money
 blocked on the card, not money taken, and goods must never go out for one.
 
+Сверено с официальной OpenAPI-схемой ioka v2.12.0 (docs/ioka-api.json): единственная валюта — тенге,
+`API-KEY` выдаётся по Client ID и Client Secret и ИСТЕКАЕТ (`POST /v2/auth/token` → `api_key`,
+`expiry_date`), вебхук регистрируется методом `POST /v2/webhooks`, у заказа нет статуса «возврат» —
+возврат виден только в платежах (`refunded_amount`).
+
 Written against the published clients github.com/RiON69/ioka_api (typed
 models: statuses, currencies, the order fields and the `amount >= 100`
 floor), github.com/aruaycodes/myiokalib and github.com/boomfly/meteor-ioka
@@ -30,10 +35,13 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
+from datetime import datetime
 
 import httpx
 
+from app.config import get_settings
 from app.models.payment import PaymentStatus
 from app.services.payments.base import (
     Checkout,
@@ -70,11 +78,12 @@ class IokaProvider(ProviderDefaults):
     slug = "ioka"
     title = "ioka"
     hint = (
-        "API-ключ — в кабинете ioka, «Настройки → API». Уведомления мы перепроверяем запросом в ioka, "
-        "поэтому подписывать их не нужно; вебхук в кабинете можно и не настраивать — бот всё равно "
-        "спросит статус сам. Принимает тенге, рубли и доллары."
+        "Client ID и Client Secret — в кабинете ioka, «Настройки → API»: по ним мы сами получаем рабочий "
+        "ключ и обновляем его, когда он истекает. Уведомления мы перепроверяем запросом в ioka, поэтому "
+        "подписывать их не нужно; при первой оплате мы сами добавляем в ioka вебхук на наш адрес, если "
+        "его там ещё нет. Принимает только тенге. Тестовая среда (stage) выдаётся менеджером ioka."
     )
-    currencies = ("KZT", "RUB", "USD")
+    currencies = ("KZT",)
     region = "ca"
     # Рекуррент по сохранённой карте. Карта сохраняется на стороне ioka —
     # PAN к нам не попадает: покупатель либо ставит галочку на странице
@@ -83,27 +92,72 @@ class IokaProvider(ProviderDefaults):
     # заказа; списание — POST /v2/orders/{id}/payments/card.
     recurring = RecurringMode.token
     supports_status_check = True
-    credential_fields = (CredentialField("api_key", "API-ключ", "секретный ключ магазина"),)
+    credential_fields = (
+        CredentialField("client_id", "Client ID", "идентификатор клиента из кабинета ioka", secret=False),
+        CredentialField("client_secret", "Client Secret", "секрет клиента из кабинета ioka"),
+        CredentialField(
+            "api_key", "API-ключ (устаревший способ)", "нужен, только если Client ID/Secret не заданы; ключ истекает",
+            required=False,
+        ),
+    )
 
-    @staticmethod
-    def _key(credentials: dict[str, str]) -> str:
-        api_key = (credentials.get("api_key") or "").strip()
-        if not api_key:
-            raise ProviderError("ioka: не заполнен API-ключ")
-        return api_key
+    #: Рабочий ключ по Client ID/Secret живёт ограниченное время; держим его в памяти процесса.
+    _tokens: dict[tuple[str, str], tuple[str, float]] = {}
+
+    async def _api_key(self, credentials: dict[str, str], is_test: bool, *, fresh: bool = False) -> str:
+        client_id = (credentials.get("client_id") or "").strip()
+        secret = (credentials.get("client_secret") or "").strip()
+        if client_id and secret:
+            slot = (self._base(is_test), client_id)
+            cached = self._tokens.get(slot)
+            if cached and not fresh and cached[1] - time.time() > 60:
+                return cached[0]
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(
+                    f"{self._base(is_test)}/auth/token", json={"client_id": client_id, "client_secret": secret}
+                )
+            if response.status_code >= 400:
+                raise ProviderError(f"ioka: не удалось получить ключ по Client ID/Secret ({_error(response)})")
+            data = response.json()
+            key = str(data.get("api_key") or "")
+            if not key:
+                raise ProviderError("ioka: в ответе нет api_key")
+            try:
+                expires = datetime.fromisoformat(str(data["expiry_date"]).replace("Z", "+00:00")).timestamp()
+            except (KeyError, ValueError):
+                expires = time.time() + 600  # срок неизвестен — обновим скоро
+            if len(self._tokens) > 500:
+                self._tokens.clear()
+            self._tokens[slot] = (key, expires)
+            return key
+        legacy = (credentials.get("api_key") or "").strip()
+        if not legacy:
+            raise ProviderError("ioka: не заполнены Client ID и Client Secret")
+        return legacy
 
     @staticmethod
     def _base(is_test: bool) -> str:
         return _TEST if is_test else _PROD
 
-    async def _call(self, method: str, url: str, api_key: str, body: dict | None = None):
+    async def _call(self, method: str, path: str, credentials: dict[str, str], is_test: bool, body: dict | None = None):
         """Returns whatever ioka answered — a list for a search, an object
         everywhere else. Kept as-is rather than coerced to a dict, because a
-        search flattened to `{}` would read as "no such order"."""
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.request(
-                method, url, json=body, headers={"API-KEY": api_key, "Content-Type": "application/json"}
-            )
+        search flattened to `{}` would read as "no such order".
+
+        401 с ключом, полученным по Client ID/Secret, — ключ мог истечь раньше срока: берём новый и
+        повторяем запрос один раз."""
+        for attempt in (0, 1):
+            api_key = await self._api_key(credentials, is_test, fresh=bool(attempt))
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.request(
+                    method,
+                    f"{self._base(is_test)}{path}",
+                    json=body,
+                    headers={"API-KEY": api_key, "Content-Type": "application/json"},
+                )
+            if response.status_code == 401 and attempt == 0 and credentials.get("client_id"):
+                continue
+            break
         if response.status_code >= 400:
             raise ProviderError(f"ioka: {_error(response)}")
         try:
@@ -111,21 +165,53 @@ class IokaProvider(ProviderDefaults):
         except ValueError as exc:
             raise ProviderError("ioka: непонятный ответ") from exc
 
+    #: События, о которых мы хотим знать (остальные — расщепление, рассрочки, выплаты — нам не нужны).
+    _WEBHOOK_EVENTS = [
+        "PAYMENT_CAPTURED", "PAYMENT_DECLINED", "PAYMENT_CANCELLED", "CAPTURE_DECLINED", "ORDER_EXPIRED",
+        "REFUND_APPROVED",
+    ]  # fmt: skip
+    _webhooks_ready: set[tuple[str, str]] = set()
+
+    async def _ensure_webhook(self, credentials: dict[str, str], is_test: bool) -> None:
+        """Вебхук ioka заводится запросом (`POST /v2/webhooks`), а не только в кабинете: если на наш адрес
+        его ещё нет — добавляем, чтобы оплата доходила без «Я оплатил». Чужие вебхуки магазина не
+        трогаем. Не получилось — не страшно: статус по кнопке «Я оплатил» читается всё равно."""
+        who = (credentials.get("client_id") or credentials.get("api_key") or "").strip()
+        slot = (self._base(is_test), who)
+        if slot in self._webhooks_ready:
+            return
+        url = f"{get_settings().public_base_url.rstrip('/')}/webhook/pay/ioka"
+        try:
+            existing = await self._call("GET", "/webhooks", credentials, is_test)
+            hooks = existing if isinstance(existing, list) else (existing or {}).get("items") or []
+            if not any(isinstance(h, dict) and h.get("url") == url for h in hooks):
+                await self._call("POST", "/webhooks", credentials, is_test, {"url": url, "events": self._WEBHOOK_EVENTS})
+                logger.info("ioka: вебхук %s зарегистрирован", url)
+            if len(self._webhooks_ready) > 1000:
+                self._webhooks_ready.clear()
+            self._webhooks_ready.add(slot)
+        except ProviderError as exc:
+            logger.warning("ioka: не удалось проверить/добавить вебхук: %s", exc)
+
     async def create_checkout(self, request: CheckoutRequest) -> Checkout:
-        api_key = self._key(request.credentials)
+        if request.currency.upper() != "KZT":
+            raise ProviderError("ioka принимает только тенге (KZT)")
         if request.amount_minor < _MIN_AMOUNT:
             raise ProviderError("ioka: минимальная сумма заказа — 1 единица валюты")
+        await self._api_key(request.credentials, request.is_test)  # ошибка ключей — сразу и понятно
+        await self._ensure_webhook(request.credentials, request.is_test)
 
         customer_id = ""
         if request.extra.get("subscription"):
             customer_id = await self._customer(
-                api_key, self._base(request.is_test), request.telegram_user_id, request.payment_id
+                request.credentials, request.is_test, request.telegram_user_id, request.payment_id
             )
 
         payload = await self._call(
             "POST",
-            f"{self._base(request.is_test)}/orders",
-            api_key,
+            "/orders",
+            request.credentials,
+            request.is_test,
             {
                 # Minor units — tiyn for the tenge, exactly as stored.
                 "amount": request.amount_minor,
@@ -204,9 +290,15 @@ class IokaProvider(ProviderDefaults):
         currency: str = "",
     ) -> WebhookResult:
         # Nothing in the request body is trusted — not the status, not the
-        # amount. The order is re-read and only that answer counts.
+        # amount. The order is re-read and only that answer counts. Из тела берём лишь название события:
+        # оно говорит, ЧТО перепроверить (возврат виден не в заказе, а в платежах).
+        try:
+            event = str((json.loads(raw_body or b"{}") or {}).get("event") or "")
+        except (json.JSONDecodeError, AttributeError):
+            event = ""
         return await self._read(
-            credentials, payment_id, provider_payment_id, amount_minor, (meta or {}).get("is_test"), currency
+            credentials, payment_id, provider_payment_id, amount_minor, (meta or {}).get("is_test"), currency,
+            refund_event=event == "REFUND_APPROVED",
         )
 
     async def check_status(
@@ -224,7 +316,7 @@ class IokaProvider(ProviderDefaults):
             credentials, payment_id, provider_payment_id, amount_minor, meta.get("is_test"), currency
         )
 
-    async def _customer(self, api_key: str, base: str, telegram_user_id: int | None, payment_id) -> str:
+    async def _customer(self, credentials: dict[str, str], is_test: bool, telegram_user_id: int | None, payment_id) -> str:
         """The ioka customer this buyer's saved card will belong to.
 
         Keyed on the Telegram user id, so the same person coming back gets
@@ -235,7 +327,7 @@ class IokaProvider(ProviderDefaults):
         """
         external_id = str(telegram_user_id or payment_id)
         try:
-            found = await self._call("POST", f"{base}/customers", api_key, {"external_id": external_id})
+            found = await self._call("POST", "/customers", credentials, is_test, {"external_id": external_id})
         except ProviderError as exc:
             # Already exists is the common case on a second subscription.
             logger.info("ioka: could not create customer %s (%s)", external_id, exc)
@@ -268,16 +360,16 @@ class IokaProvider(ProviderDefaults):
         moved, which for a renewal nobody is watching would mean handing over
         a month for a hold.
         """
-        api_key = self._key(credentials)
         if not setup.token:
             raise ProviderError("ioka: нет сохранённой карты")
-        base = self._base(bool(is_test))
+        is_test = bool(is_test)
 
         created = _unwrap(
             await self._call(
                 "POST",
-                f"{base}/orders",
-                api_key,
+                "/orders",
+                credentials,
+                is_test,
                 {
                     "amount": amount_minor,
                     "currency": currency.upper(),
@@ -293,7 +385,7 @@ class IokaProvider(ProviderDefaults):
             raise ProviderError("ioka: не удалось создать заказ на продление")
 
         paid = await self._call(
-            "POST", f"{base}/orders/{order_id}/payments/card", api_key, {"card_id": setup.token}
+            "POST", f"/orders/{order_id}/payments/card", credentials, is_test, {"card_id": setup.token}
         )
         payment = _unwrap(paid) or (paid if isinstance(paid, dict) else {})
         status = str(payment.get("status") or "").upper()
@@ -323,6 +415,24 @@ class IokaProvider(ProviderDefaults):
             )
         return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(order_id))
 
+    async def _fully_refunded(self, credentials: dict[str, str], is_test: bool, order_id: str, amount_minor: int) -> bool:
+        """У заказа нет статуса «возврат»: возвращённая сумма лежит в его платежах (`refunded_amount`).
+        Частичный возврат заказ не закрывает — вернули всё, тогда да."""
+        payments = await self._call("GET", f"/orders/{order_id}/payments", credentials, is_test)
+        if isinstance(payments, dict):
+            payments = payments.get("items") or payments.get("payments") or [payments]
+        refunded = sum(
+            int(p.get("refunded_amount") or 0) for p in payments if isinstance(p, dict)
+        )
+        return refunded >= amount_minor
+
+    def error_body(self, *, form: dict[str, str], raw_body: bytes, found: bool) -> tuple[str, str] | None:
+        """Уведомление про чужой заказ магазина (его создали не мы) подтверждаем кодом 200: вебхук ioka
+        приходит на ВСЕ заказы магазина, а ответ 4xx заставил бы ioka повторять его без конца."""
+        if found:
+            return None
+        return "{}", "application/json"
+
     async def _read(
         self,
         credentials: dict[str, str],
@@ -331,18 +441,19 @@ class IokaProvider(ProviderDefaults):
         amount_minor: int,
         is_test,
         currency: str = "",
+        *,
+        refund_event: bool = False,
     ) -> WebhookResult:
-        api_key = self._key(credentials)
         # Which ledger the order lives on is decided when it is created, so it
         # is read back from the payment rather than from the shop's current
         # setting — the switch can be flipped while a buyer is paying.
-        base = self._base(bool(is_test))
+        is_test = bool(is_test)
 
         if order_id:
-            order = _unwrap(await self._call("GET", f"{base}/orders/{order_id}", api_key))
+            order = _unwrap(await self._call("GET", f"/orders/{order_id}", credentials, is_test))
         else:
             # No id kept: find it by the id we gave ioka ourselves.
-            order = _unwrap(await self._call("GET", f"{base}/orders?external_id={payment_id}", api_key))
+            order = _unwrap(await self._call("GET", f"/orders?external_id={payment_id}", credentials, is_test))
         if order is None:
             # Nothing to read yet — an order the buyer never opened.
             return WebhookResult(status=PaymentStatus.pending)
@@ -355,6 +466,8 @@ class IokaProvider(ProviderDefaults):
             if not isinstance(amount, int) or amount != amount_minor:
                 raise ProviderError(f"ioka: сумма не совпадает (в заказе {amount})")
             same_currency(self.title, order.get("currency"), currency)
+            if refund_event and remote_id and await self._fully_refunded(credentials, is_test, remote_id, amount_minor):
+                return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=remote_id)
             payer = order.get("payer") or {}
             notes = {}
             if payer.get("card_id"):

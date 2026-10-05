@@ -153,7 +153,9 @@ class LavaTopProvider(ProviderDefaults):
             raise ProviderError("lava.top: не заполнена почта для чеков")
 
         periodicity = _periodicity(request.extra)
-        await self._check_offer_price(request.credentials, offer_id, request.currency.upper(), periodicity)
+        await self._check_offer_price(
+            request.credentials, offer_id, request.currency.upper(), periodicity, request.amount_minor
+        )
         body = {
             "email": email,
             "offerId": offer_id,
@@ -182,7 +184,9 @@ class LavaTopProvider(ProviderDefaults):
         # the block and the catalogue disagree — before a buyer is charged
         # the wrong amount for something the bot then hands over anyway.
         total = (payload.get("amountTotal") or {}).get("amount")
-        if total is not None and abs(float(total) - request.amount_minor / 100) > 0.009:
+        # В схеме `amountTotal.amount` — целое число, так что копейки в нём могут быть округлены: точную
+        # сверку цены делает `_check_offer_price` по каталогу, здесь ловим только явное расхождение.
+        if total is not None and abs(float(total) - request.amount_minor / 100) >= 1.0:
             raise ProviderError(
                 f"lava.top: оффер стоит {total} {request.currency.upper()}, а в блоке указано "
                 f"{request.amount_minor / 100:.2f} — поправь цену, чтобы совпадали"
@@ -191,19 +195,31 @@ class LavaTopProvider(ProviderDefaults):
         return Checkout(url=url, provider_payment_id=str(payload.get("id") or "") or None)
 
     @staticmethod
-    async def _check_offer_price(credentials: dict[str, str], offer_id: str, currency: str, periodicity: str) -> None:
-        """У оффера должна быть цена именно в этой валюте и с этим периодом — иначе Lava
-        вернёт невнятную ошибку уже покупателю. Если каталог недоступен, проверку пропускаем:
-        счёт сам откажет внятно, а оплата из-за проверки не должна ломаться."""
+    async def _check_offer_price(
+        credentials: dict[str, str], offer_id: str, currency: str, periodicity: str, amount_minor: int | None = None
+    ) -> None:
+        """У оффера должна быть цена именно в этой валюте и с этим периодом, и равная цене в блоке —
+        иначе Lava вернёт невнятную ошибку (или возьмёт другую сумму) уже у покупателя. Цену берём из
+        каталога (`amount` — число с копейками), а не из ответа на создание счёта, где сумма целая.
+        Если каталог недоступен, проверку пропускаем: оплата из-за проверки ломаться не должна."""
         try:
             prices = await offer_prices((credentials.get("api_key") or "").strip())
         except (httpx.HTTPError, ValueError, KeyError):
             logger.warning("lava.top: каталог офферов недоступен, проверка периода пропущена")
             return
         mine = [p for p in prices if p["offer_id"] == offer_id]
-        if mine and not any(p["currency"] == currency and p["periodicity"] == periodicity for p in mine):
+        if not mine:
+            return
+        match = [p for p in mine if p["currency"] == currency and p["periodicity"] == periodicity]
+        if not match:
             have = ", ".join(sorted({f"{p['currency']}/{p['periodicity']}" for p in mine}))
             raise ProviderError(f"lava.top: у оффера нет цены {currency}/{periodicity}. Есть: {have}")
+        price = match[0].get("amount")
+        if amount_minor is not None and price is not None and abs(float(price) - amount_minor / 100) > 0.009:
+            raise ProviderError(
+                f"lava.top: оффер стоит {price} {currency}, а в блоке указано {amount_minor / 100:.2f} — "
+                "поправь цену, чтобы совпадали"
+            )
 
     async def cancel_subscription(self, *, credentials: dict[str, str], contract_id: str) -> bool:
         """DELETE /api/v1/subscriptions — contractId ПЕРВОГО платежа подписки. 404 — её уже нет."""
@@ -229,9 +245,9 @@ class LavaTopProvider(ProviderDefaults):
             return PaymentRef(payment_id=uuid.UUID(tagged))
         except (ValueError, AttributeError):
             pass
-        # A renewal carries the original contract in parentContractId; the
-        # one-off case is contractId itself.
-        contract = event.get("contractId") or event.get("parentContractId")
+        # Продление несёт НОВЫЙ contractId и контракт первой покупки в parentContractId; а у нас
+        # сохранён именно первый. Поэтому родитель — первым, иначе продления не находят платёж.
+        contract = event.get("parentContractId") or event.get("contractId")
         return PaymentRef(provider_payment_id=str(contract) if contract else None)
 
     def error_body(self, *, form: dict[str, str], raw_body: bytes, found: bool) -> tuple[str, str] | None:
@@ -279,12 +295,52 @@ class LavaTopProvider(ProviderDefaults):
         contract = str(event.get("contractId") or "") or provider_payment_id
         if not contract:
             raise ProviderError("lava.top: в уведомлении нет contractId")
+        kind = str(event.get("eventType") or "")
+        parent = str(event.get("parentContractId") or "")
+
+        if kind == "subscription.cancelled":
+            # Подписчик отменил подписку на стороне lava.top: оплаченный период он дослушивает, дальше
+            # списаний не будет. Телу уведомления не верим — спрашиваем у lava.top, отменена ли она.
+            first = parent or provider_payment_id or contract
+            if await self._subscription_cancelled(credentials, first):
+                return WebhookResult(
+                    status=PaymentStatus.pending,
+                    provider_payment_id=provider_payment_id,
+                    meta={"gateway_unsubscribed": True},
+                )
+            return WebhookResult(status=PaymentStatus.pending, provider_payment_id=provider_payment_id)
+
+        if parent and kind.startswith("subscription.recurring.payment"):
+            # Продление: новый контракт (contractId) под родительским. Читаем ЕГО, а платёж у нас
+            # остаётся первым — `provider_payment_id` не трогаем, иначе потеряем контракт для отмены.
+            renewal = await self._read(credentials, contract, amount_minor, currency)
+            if renewal.status is PaymentStatus.paid:
+                return WebhookResult(
+                    status=PaymentStatus.paid,
+                    provider_payment_id=provider_payment_id or parent,
+                    meta={"gateway_renewal": contract},
+                )
+            # Неудачное продление — повод для лога, а не для отмены уже оплаченного заказа.
+            logger.warning("lava.top: продление %s подписки %s не прошло (%s)", contract, parent, renewal.status.value)
+            return WebhookResult(status=PaymentStatus.pending, provider_payment_id=provider_payment_id or parent)
 
         # Webhook authentication on lava.top is whatever the shop configured
         # in their dashboard, which we cannot see — so the notification only
         # tells us *which* invoice to look at, and the answer comes from
         # reading that invoice back with our own API key.
         return await self._read(credentials, contract, amount_minor, currency)
+
+    async def _subscription_cancelled(self, credentials: dict[str, str], contract_id: str) -> bool:
+        """GET /api/v1/subscriptions/{id}: `subscriptionStatus == CANCELLED`."""
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                f"{_BASE}/api/v1/subscriptions/{contract_id}", headers=self._headers(credentials)
+            )
+        if response.status_code == 404:
+            return False
+        if response.status_code >= 400:
+            raise ProviderError(f"lava.top: {_error(response)}")
+        return str((response.json() or {}).get("subscriptionStatus") or "").upper() == "CANCELLED"
 
     async def check_status(
         self,

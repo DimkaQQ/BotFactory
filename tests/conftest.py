@@ -283,3 +283,14 @@ def meta_dp():
     from meta_bot.main import build_dispatcher
 
     return build_dispatcher()
+
+
+@pytest.fixture(autouse=True)
+def _clear_provider_caches():
+    """Кэши адаптеров в памяти процесса (ключи ioka, уже зарегистрированные вебхуки) не должны течь
+    между тестами."""
+    from app.services.payments.ioka import IokaProvider
+
+    IokaProvider._tokens.clear()
+    IokaProvider._webhooks_ready.clear()
+    yield

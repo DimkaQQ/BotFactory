@@ -905,7 +905,7 @@ async def test_ioka_creates_an_order_in_minor_units_and_captures_automatically(m
     seen: list = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen.append((str(request.url), json.loads(request.content), dict(request.headers)))
+        seen.append((str(request.url), json.loads(request.content or b"{}"), dict(request.headers)))
         return ioka_api()(request)
 
     with mock_http(handler):
@@ -913,7 +913,7 @@ async def test_ioka_creates_an_order_in_minor_units_and_captures_automatically(m
             checkout_request(IOKA_CREDS, currency="KZT")
         )
 
-    url, body, headers = seen[0]
+    url, body, headers = next(x for x in seen if x[0].endswith("/orders"))  # до заказа — регистрация вебхука
     assert checkout.url == f"https://checkout.ioka.kz/{IOKA_ORDER_ID}"
     assert checkout.provider_payment_id == IOKA_ORDER_ID
     # Test mode has its own ledger; production must not be touched by it.
@@ -1037,7 +1037,8 @@ async def test_ioka_uses_the_live_host_when_the_shop_is_not_in_test_mode(mock_ht
             )
         )
 
-    assert seen[0] == "https://api.ioka.kz/v2/orders"
+    assert "https://api.ioka.kz/v2/orders" in seen
+    assert all(u.startswith("https://api.ioka.kz/v2/") for u in seen), "боевой режим не трогает stage"
 
 
 async def test_ioka_refuses_an_amount_below_the_gateways_floor():

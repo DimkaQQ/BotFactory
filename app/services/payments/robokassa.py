@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import uuid
 from urllib.parse import quote_plus, urlencode
 
@@ -34,6 +35,30 @@ from app.services.payments.base import (
 
 _CHECKOUT_URL = "https://auth.robokassa.ru/Merchant/Index.aspx"
 _RECURRING_URL = "https://auth.robokassa.ru/Merchant/Recurring"
+
+
+#: Алгоритм хэша выбирается в технических настройках магазина (по умолчанию MD5), и подпись надо считать
+#: тем же: иначе касса ответит ошибкой 29 на КАЖДЫЙ платёж.
+_ALGOS = {"md5", "sha1", "sha256", "sha384", "sha512", "ripemd160"}
+
+
+def _algo(credentials: dict[str, str]) -> str:
+    name = (credentials.get("hash_algo") or "md5").strip().lower().replace("-", "")
+    if name not in _ALGOS:
+        raise ProviderError(f"Robokassa: неизвестный алгоритм хэша «{name}». Допустимо: {', '.join(sorted(_ALGOS))}")
+    return name
+
+
+def _digest(algo: str, text: str) -> str:
+    try:
+        return hashlib.new(algo, text.encode()).hexdigest()
+    except ValueError as exc:  # ripemd160 есть не в каждой сборке OpenSSL
+        raise ProviderError(f"Robokassa: алгоритм {algo} не поддерживается на этом сервере") from exc
+
+
+def _plain(text: str) -> str:
+    """Описание заказа — до 100 знаков и «без спецсимволов» (документация)."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s.,\-—!?()№#:/+]", " ", text or "")).strip()
 
 
 def receipt_robokassa(r: Receipt) -> dict:
@@ -79,6 +104,11 @@ class RobokassaProvider(ProviderDefaults):
         CredentialField(
             "test_password1", "Тестовый пароль #1", "нужен для тестового режима: отдельные тестовые пароли в кабинете", required=False),
         CredentialField("test_password2", "Тестовый пароль #2", "нужен для тестового режима", required=False),
+        CredentialField(
+            "hash_algo", "Алгоритм хэша",
+            "как в технических настройках магазина: md5 (по умолчанию), sha1, sha256, sha384, sha512, ripemd160",
+            secret=False, required=False,
+        ),
         # Чек 54-ФЗ: передаётся, только если указана почта. Сумма чека всегда равна сумме платежа.
         CredentialField(
             "fiscalization_enabled", "Передавать чек (54-ФЗ)", "1 — да, 0 или пусто — нет. Включай, только если у кассы подключена онлайн-касса",
@@ -122,13 +152,13 @@ class RobokassaProvider(ProviderDefaults):
             receipt_once = quote_plus(raw)
             parts.append(receipt_once)
         parts.append(password1)
-        signature = hashlib.md5(":".join(parts).encode(), usedforsecurity=False).hexdigest()
+        signature = _digest(_algo(request.credentials), ":".join(parts))
 
         params = {
             "MerchantLogin": login,
             "OutSum": out_sum,
             "InvId": str(request.invoice_no),
-            "Description": request.description[:100] or "Оплата",
+            "Description": _plain(request.description)[:100] or "Оплата",
             "SignatureValue": signature,
             "Culture": "ru",
             "Encoding": "utf-8",
@@ -195,7 +225,9 @@ class RobokassaProvider(ProviderDefaults):
 
         out_sum = (form.get("OutSum") or "").strip()
         received = (form.get("SignatureValue") or "").strip().lower()
-        expected = hashlib.md5(f"{out_sum}:{invoice_no}:{password2}".encode(), usedforsecurity=False).hexdigest()
+        # Пользовательские параметры Shp_* (если они пришли) входят в подпись после пароля, по алфавиту.
+        shp = "".join(f":{key}={form[key]}" for key in sorted(k for k in form if k.startswith("Shp_")))
+        expected = _digest(_algo(credentials), f"{out_sum}:{invoice_no}:{password2}{shp}")
         if not received or not hmac.compare_digest(received, expected):
             raise ProviderError("Robokassa: подпись уведомления не совпала")
 
@@ -255,13 +287,13 @@ class RobokassaProvider(ProviderDefaults):
         out_sum = minor_to_major(amount_minor)
         # Same composition as a first payment — the recurring call is signed
         # with its *own* invoice number, not the previous one.
-        signature = hashlib.md5(f"{login}:{out_sum}:{invoice_no}:{password1}".encode(), usedforsecurity=False).hexdigest()
+        signature = _digest(_algo(credentials), f"{login}:{out_sum}:{invoice_no}:{password1}")
         body = {
             "MerchantLogin": login,
             "InvoiceID": str(invoice_no),
             "PreviousInvoiceID": str(setup.token),
             "OutSum": out_sum,
-            "Description": (description or "Продление подписки")[:100],
+            "Description": _plain(description or "Продление подписки")[:100] or "Продление подписки",
             "SignatureValue": signature,
         }
 
