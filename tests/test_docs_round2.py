@@ -240,3 +240,12 @@ async def test_robokassa_description_has_no_special_characters_and_is_short():
     checkout = await get_provider("robokassa").create_checkout(request(ROBO, description='Бот "Магазин" & <Co> %' + "я" * 200))
     description = parse_qs(urlsplit(checkout.url).query)["Description"][0]
     assert len(description) <= 100 and not any(ch in description for ch in '"&<>%')
+
+
+async def test_freedompay_has_a_host_per_country():
+    from app.services.payments.freedompay import FreedomPayProvider
+
+    base = FreedomPayProvider._base
+    assert base({}) == "https://api.freedompay.kz"
+    assert base({"country": "uz"}) == "https://api.freedompay.uz"
+    assert base({"country": "KG"}) == "https://api.freedompay.kg"

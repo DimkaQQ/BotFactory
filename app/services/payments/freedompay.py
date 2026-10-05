@@ -49,16 +49,17 @@ from app.services.payments.base import (
 # мерчантов в Кыргызстане у них отдельный хост api.freedompay.kg.
 _BASE = "https://api.freedompay.kz"
 _BASE_KG = "https://api.freedompay.kg"
+_BASE_UZ = "https://api.freedompay.uz"
 #: The tail of our own callback address — what Freedom Pay signs its
 #: notification with. Must match the route in `payments.py`.
 logger = logging.getLogger(__name__)
 
 _CALLBACK_SCRIPT = "freedompay"
-#: Charging an existing profile. Without `.php`: that spelling belongs to
-#: Platron and the old Paybox, and the signature is built from the last URL
-#: segment exactly as called, so the wrong one fails as a signature error
-#: rather than as a 404.
-_RECURRING_SCRIPT = "make_recurring_payment"
+#: Списание по сохранённому профилю — `POST /g2g/recurrent` (официальная схема Gateway API → Sync API →
+#: Purchase → Recurrent). Подпись строится от ПОСЛЕДНЕГО сегмента адреса: `recurrent`. Раньше здесь стояло
+#: легаси-имя `make_recurring_payment`.
+_RECURRING_PATH = "g2g/recurrent"
+_RECURRING_SCRIPT = "recurrent"
 #: How long a saved profile stays chargeable — in MONTHS, not days: Freedom
 #: Pay's documentation gives `pg_recurring_lifetime` as 1..156 (months, up to
 #: 13 years). It used to be sent as 730 "days", which is outside the allowed
@@ -91,20 +92,21 @@ class FreedomPayProvider(ProviderDefaults):
     currencies = ("KZT", "UZS", "KGS", "RUB", "USD", "EUR")
     region = "ca"
     # Рекуррент: первый платёж с pg_recurring_start=1 создаёт профиль, его
-    # номер приходит на ResultURL, дальше POST на make_recurring_payment.
+    # номер приходит на ResultURL, дальше POST на /g2g/recurrent.
     # Имя скрипта — без .php (легаси-форма с .php осталась у Platron и
     # старого Paybox), и оно же идёт в подпись как последний сегмент URL.
     recurring = RecurringMode.token
     credential_fields = (
         CredentialField("merchant_id", "Merchant ID", "номер магазина из кабинета", secret=False),
         CredentialField("secret_key", "Секретный ключ", "секретный ключ мерчанта"),
-        CredentialField("country", "Страна магазина", "kz (по умолчанию) или kg — Кыргызстан", secret=False, required=False),
+        CredentialField("country", "Страна магазина", "kz (по умолчанию), uz — Узбекистан или kg — Кыргызстан", secret=False, required=False),
     )
 
     @staticmethod
     def _base(credentials: dict[str, str]) -> str:
-        """Хост API: у Казахстана и Кыргызстана они разные (тот же протокол и подпись)."""
-        return _BASE_KG if (credentials.get("country") or "").strip().lower() == "kg" else _BASE
+        """Хост API: у Казахстана, Узбекистана и Кыргызстана они разные (тот же протокол и подпись)."""
+        country = (credentials.get("country") or "").strip().lower()
+        return {"kg": _BASE_KG, "uz": _BASE_UZ}.get(country, _BASE)
 
     @staticmethod
     def _keys(credentials: dict[str, str]) -> tuple[str, str]:
@@ -294,13 +296,11 @@ class FreedomPayProvider(ProviderDefaults):
             "pg_request_method": "POST",
             "pg_salt": secrets.token_hex(8),
         }
-        # The signature takes the last segment of the URL exactly as called —
-        # so `_RECURRING_SCRIPT` is both the path and the signed name, and
-        # the two can never drift apart.
+        # Подпись берёт последний сегмент адреса — `recurrent`, а не весь путь.
         params["pg_sig"] = _sign(_RECURRING_SCRIPT, params, secret)
 
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(f"{self._base(credentials)}/{_RECURRING_SCRIPT}", data=params)
+            response = await client.post(f"{self._base(credentials)}/{_RECURRING_PATH}", data=params)
         if response.status_code >= 400:
             raise ProviderError(f"Freedom Pay: HTTP {response.status_code}")
 

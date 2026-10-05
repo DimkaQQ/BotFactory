@@ -963,9 +963,8 @@ def _generic_request(creds: dict, *, extra: dict) -> CheckoutRequest:
 
 async def test_freedompay_opens_a_profile_and_charges_it_by_name(mock_http):
     """The script name is not cosmetic: Freedom Pay signs the request with the
-    last segment of the URL exactly as called, so `make_recurring_payment` and
-    `make_recurring_payment.php` are two different signatures. Getting it wrong
-    fails as a signature error, not as a 404."""
+    last segment of the URL exactly as called: for `/g2g/recurrent` that is
+    `recurrent`. Getting it wrong fails as a signature error, not as a 404."""
     from app.services.payments.base import RecurringSetup
 
     seen: list[httpx.Request] = []
@@ -998,10 +997,17 @@ async def test_freedompay_opens_a_profile_and_charges_it_by_name(mock_http):
             invoice_no=7,
         )
 
-    assert str(seen[0].url).endswith("/make_recurring_payment"), "имя скрипта — без .php"
+    assert str(seen[0].url) == "https://api.freedompay.kz/g2g/recurrent"
     body = {k: v for k, v in (x.split("=", 1) for x in seen[0].content.decode().split("&"))}
     assert body["pg_recurring_profile"] == "profile-55"
-    # …and the signature was built over that same name.
+    # …и подпись построена от имени `recurrent`, не от всего пути.
+    import hashlib as _h
+
+    signed = {k: v for k, v in body.items() if k != "pg_sig"}
+    from urllib.parse import unquote_plus as _u
+
+    parts = ["recurrent", *[_u(signed[k]) for k in sorted(signed)], "s1"]
+    assert body["pg_sig"] == _h.md5(";".join(parts).encode()).hexdigest()
     assert verdict.status == PaymentStatus.pending, "pg_status=ok — это «платёж создан», а не «деньги списаны»"
 
 
