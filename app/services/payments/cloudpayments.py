@@ -160,22 +160,20 @@ class CloudPaymentsProvider(ProviderDefaults):
     ) -> WebhookResult:
         _public_id, secret = self._auth(credentials)
 
-        # Уведомление несёт два заголовка: `Content-HMAC` и `X-Content-HMAC`. Чем
-        # они отличаются (HMAC от закодированного и от раскодированного тела),
-        # документация коротко не говорит, поэтому подходит любой из них и
-        # любой из двух вариантов тела.
+        # По документации («Проверка уведомлений») приходят два заголовка:
+        # `Content-HMAC` — от URL-encoded тела (как пришло), `X-Content-HMAC` —
+        # от URL-decoded. Каждый сверяем только со своим вариантом тела;
+        # достаточно совпадения любого из присланных.
         from urllib.parse import unquote_plus
 
-        received = [
-            value.strip()
-            for value in (headers.get("content-hmac"), headers.get("x-content-hmac"))
-            if value and value.strip()
+        def _sign(body: bytes) -> str:
+            return base64.b64encode(hmac.new(secret.encode(), body, hashlib.sha256).digest()).decode()
+
+        pairs = [
+            (headers.get("content-hmac"), raw_body),
+            (headers.get("x-content-hmac"), unquote_plus(raw_body.decode("utf-8", "replace")).encode()),
         ]
-        variants = [raw_body, unquote_plus(raw_body.decode("utf-8", "replace")).encode()]
-        expected = [
-            base64.b64encode(hmac.new(secret.encode(), body, hashlib.sha256).digest()).decode() for body in variants
-        ]
-        if not any(hmac.compare_digest(got, want) for got in received for want in expected):
+        if not any(got and got.strip() and hmac.compare_digest(got.strip(), _sign(body)) for got, body in pairs):
             raise ProviderError("CloudPayments: подпись уведомления не совпала")
 
         # The header proves who sent it; this proves what it says. Both,

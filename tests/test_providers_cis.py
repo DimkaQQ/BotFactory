@@ -409,6 +409,30 @@ async def test_cloudpayments_still_re_reads_after_a_valid_hmac(mock_http):
     assert settled.response_body == '{"code":0}'  # anything else means "resend"
 
 
+async def test_cloudpayments_pairs_each_hmac_header_with_its_own_body_variant(mock_http):
+    """По документации Content-HMAC — от URL-encoded тела, X-Content-HMAC — от
+    decoded. Подпись одного не принимается за подпись другого."""
+    from urllib.parse import unquote_plus
+
+    body = b"TransactionId=504&Amount=990.00&Name=%D0%98%D0%B2%D0%B0%D0%BD&Status=Completed"
+    decoded = unquote_plus(body.decode()).encode()
+    assert decoded != body
+
+    async def verify(headers):
+        return await get_provider("cloudpayments").verify_webhook(
+            headers=headers, raw_body=body, form={"InvoiceId": str(PAYMENT_ID)}, credentials=CP_CREDS,
+            amount_minor=99000, invoice_no=4242, payment_id=PAYMENT_ID, provider_payment_id=None,
+        )
+
+    with mock_http(cp_api()):
+        assert (await verify({"x-content-hmac": cp_hmac(decoded)})).status.value == "paid"
+        assert (await verify({"content-hmac": cp_hmac(body)})).status.value == "paid"
+    with mock_http(cp_api()), pytest.raises(ProviderError, match="подпись"):
+        await verify({"content-hmac": cp_hmac(decoded)})
+    with mock_http(cp_api()), pytest.raises(ProviderError, match="подпись"):
+        await verify({"x-content-hmac": cp_hmac(body)})
+
+
 # --------------------------------------------------------------------- Click
 
 CLICK_CREDS = {"service_id": "12345", "merchant_id": "6789", "secret_key": "click_secret"}
