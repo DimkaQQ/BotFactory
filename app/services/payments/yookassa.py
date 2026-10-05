@@ -40,7 +40,9 @@ YK_VAT = {Vat.NONE: 1, Vat.VAT0: 2, Vat.VAT10: 3, Vat.VAT110: 5, Vat.VAT22: 11, 
 
 
 def receipt_yookassa(r: Receipt, currency: str = "RUB") -> dict:
-    customer = {k: v for k, v in (("email", r.email), ("phone", r.phone)) if v}
+    # Телефон по схеме ЮKassa — только цифры (ITU-T E.164 без «+», пример 79000000000).
+    phone = "".join(ch for ch in (r.phone or "") if ch.isdigit())
+    customer = {k: v for k, v in (("email", r.email), ("phone", phone)) if v}
     items = []
     for i in r.items:
         if i.vat not in YK_VAT:
@@ -48,7 +50,7 @@ def receipt_yookassa(r: Receipt, currency: str = "RUB") -> dict:
         items.append(
             {
                 "description": i.name,
-                "quantity": str(i.qty),
+                "quantity": float(i.qty),  # по схеме — число, не строка
                 "amount": {"value": f"{i.price:.2f}", "currency": currency.upper()},
                 "vat_code": YK_VAT[i.vat],
                 "payment_mode": i.method.value,
@@ -56,6 +58,17 @@ def receipt_yookassa(r: Receipt, currency: str = "RUB") -> dict:
             }
         )
     return {"customer": customer, "items": items}
+
+
+def _tax_system(credentials: dict[str, str]) -> int | None:
+    """Код системы налогообложения (тег 1055, 1–6). Нужен сторонним онлайн-кассам с несколькими
+    системами налогообложения (и Атол Онлайн на ФФД 1.2); для «Чеков от ЮKassa» игнорируется."""
+    raw = (credentials.get("tax_system_code") or "").strip()
+    if not raw:
+        return None
+    if not raw.isdigit() or not 1 <= int(raw) <= 6:
+        raise ProviderError("ЮKassa: код системы налогообложения — число от 1 до 6")
+    return int(raw)
 
 
 def _receipt(
@@ -69,6 +82,9 @@ def _receipt(
     if receipt is None:
         return None
     body = receipt_yookassa(receipt, currency)
+    tax_system = _tax_system(credentials)
+    if tax_system:
+        body["tax_system_code"] = tax_system
     legacy = (credentials.get("vat_code") or "").strip()
     if legacy.isdigit() and not (credentials.get("default_vat") or "").strip():
         # Прежнее поле: числовой код ставки из кабинета, отдаём как есть.
@@ -107,6 +123,9 @@ class YooKassaProvider(ProviderDefaults):
             "fiscal_email", "Почта для чеков (если включены чеки)", "email для чека 54-ФЗ", secret=False, required=False),
         CredentialField(
             "default_vat", "Ставка НДС в чеке", "none (по умолчанию), vat0, vat10, vat110, vat22, vat122", secret=False, required=False),
+        CredentialField(
+            "tax_system_code", "Система налогообложения в чеке", "число 1–6 из справочника ЮKassa; только если у кассы несколько систем налогообложения",
+            secret=False, required=False),
         CredentialField(
             "vat_code", "Код ставки НДС для чека", "1 — без НДС (по умолчанию); см. справочник ЮKassa", secret=False, required=False),
     )
@@ -167,6 +186,9 @@ class YooKassaProvider(ProviderDefaults):
         except json.JSONDecodeError:
             return PaymentRef()
         obj = event.get("object") or {}
+        if event.get("event") == "refund.succeeded" and obj.get("payment_id"):
+            # В событии о возврате в object лежит возврат, а наш платёж — в payment_id.
+            return PaymentRef(provider_payment_id=str(obj["payment_id"]))
         raw_id = (obj.get("metadata") or {}).get("order_id", "")
         try:
             return PaymentRef(payment_id=uuid.UUID(str(raw_id)))
@@ -229,7 +251,13 @@ class YooKassaProvider(ProviderDefaults):
         # adds `refunded_amount`. Checked first, or a refunded sale would go
         # on counting as revenue for good.
         refunded = (payment.get("refunded_amount") or {}).get("value")
-        if status == "succeeded" and refunded not in (None, "", "0.00"):
+        total = (payment.get("amount") or {}).get("value")
+        try:
+            fully = bool(refunded) and float(refunded) > 0 and (not total or float(refunded) >= float(total) - 0.009)
+        except ValueError:
+            fully = False
+        # Частичный возврат заказ не отменяет: деньги вернули за часть, остальное — продажа.
+        if status == "succeeded" and fully:
             return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=str(remote_id))
         if status == "succeeded" and payment.get("paid"):
             value = (payment.get("amount") or {}).get("value", "")

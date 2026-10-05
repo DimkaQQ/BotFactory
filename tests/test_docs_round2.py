@@ -426,3 +426,61 @@ async def test_lava_leaves_out_return_urls_it_would_reject(mock_http):
         await provider.create_checkout(bad)
     assert seen[0]["successful_return_url"] == "https://t.me/x"
     assert "successful_return_url" not in seen[1], "http-адрес lava.top отверг бы весь счёт"
+
+
+# ------------------------------------------------ ЮKassa по официальному OpenAPI
+
+
+def test_yookassa_receipt_phone_digits_only_and_quantity_number():
+    from decimal import Decimal
+
+    from app.services.payments.base import Receipt, ReceiptItem, TaxSystem, Vat
+    from app.services.payments.yookassa import receipt_yookassa
+
+    body = receipt_yookassa(
+        Receipt(items=[ReceiptItem(name="Гайд", qty=Decimal(1), price=Decimal("990.00"), vat=Vat.NONE)], tax_system=TaxSystem.USN_INCOME, phone="+79000000000")
+    )
+    assert body["customer"] == {"phone": "79000000000"}
+    assert body["items"][0]["quantity"] == 1.0
+
+
+def test_yookassa_refund_event_is_located_by_payment_id():
+    from app.services.payments import get_provider
+
+    raw = json.dumps(
+        {"event": "refund.succeeded", "object": {"id": "refund-1", "payment_id": "pay-777", "status": "succeeded"}}
+    ).encode()
+    ref = get_provider("yookassa").locate_payment(headers={}, raw_body=raw, form={})
+    assert ref.provider_payment_id == "pay-777"
+
+
+def test_yookassa_tax_system_code_is_validated():
+    import pytest
+
+    from app.services.payments.base import ProviderError
+    from app.services.payments.yookassa import _tax_system
+
+    assert _tax_system({}) is None
+    assert _tax_system({"tax_system_code": "2"}) == 2
+    with pytest.raises(ProviderError):
+        _tax_system({"tax_system_code": "9"})
+
+
+async def test_yookassa_partial_refund_keeps_payment_paid(mock_http):
+    from app.models.payment import PaymentStatus
+    from app.services.payments import get_provider
+
+    def api(refunded: str):
+        def handler(request):
+            return httpx.Response(200, json={
+                "id": "p1", "status": "succeeded", "paid": True,
+                "amount": {"value": "990.00", "currency": "RUB"},
+                "refunded_amount": {"value": refunded, "currency": "RUB"}})
+        return handler
+
+    creds = {"shop_id": "1", "secret_key": "s"}
+    kwargs = dict(credentials=creds, amount_minor=99000, invoice_no=1, payment_id=PAYMENT_ID, provider_payment_id="p1", meta={}, currency="RUB")
+    with mock_http(api("100.00")):
+        assert (await get_provider("yookassa").check_status(**kwargs)).status == PaymentStatus.paid
+    with mock_http(api("990.00")):
+        assert (await get_provider("yookassa").check_status(**kwargs)).status == PaymentStatus.refunded
