@@ -1,0 +1,2522 @@
+
+
+===== https://paymaster.ru/docs/en/direct =====
+
+API PayMaster
+        NAV
+General
+Interaction scheme
+Technical information
+Data transmission
+Signature types
+Payloads (data)
+Authorization
+Authorization Request
+Request Parameters
+Reply parameters
+Request to get an access token
+Request to revoke an access token
+Request parameters
+Reply parameters
+Payment processing
+Payment initiation
+Payment processing
+Request Parameters
+Reply parameters
+Inline tokenization of cards
+Authorization request
+Confirmation of the amount charged
+3DSecure authorization
+Completion of the 3DSecure authorization
+Directories
+Error codes
+Appendix A
+Appendix B
+General
+This is an old version of the API. Switch to the 
+new API version
+.
+The Paymaster Direct protocol is designed for Companies (Sellers) charging funds from payers without their additional confirmation of each transaction (direct payments, Direct Debit). The following may serve as examples thereof: a subscription to news content, renewals of domain or hosting services, one-click purchases in games, and other environments where it is not desirable to exit the process, mobile applications, and so on.
+Obviously, the Seller cannot carry out a direct debit without the payer's permission in the selected payment system. This permission (long-term acceptance, long-term payment order) represents their right to spend a specified amount within a specified period of time without payment authorization procedures (one-time acceptance). After they have obtained permission and as long as it is valid, funds can be charged at the level of inter-server communication (without the payer's participation).
+The Seller should initiate the process of obtaining special permissions for this from the payment system that the paying client wishes to use. The Seller directs the payer to the Paymaster website; the payer interacts with the selected payment system, arranges the permissions (acceptance), and informs the Seller about the transaction status. After the transaction has been completed successfully, the Seller gets access to the direct debiting of the payer's funds.
+Interaction scheme
+Technical information
+Data transmission
+All requests should be directed to https://paymaster.ru using the client verification key.
+The Seller can use one of two communication protocols:
+JWS
+Rest
+The protocol type should be transmitted in the HTTP header 
+type
+ of each request (or in the 
+get
+ or 
+post
+ parameter). If there is no value, JWS is used by default. If the 
+resp-type
+ HTTP header (or in the 
+get
+ or 
+post
+ parameter) transmits the "xml" value, the response will be in XML format. If there is no value, the response will be in the JWS format. The signature data and signature transfer method are defined for each protocol.
+Signature types
+The Seller can use 2 types of request signatures:
+RSA - RSA (SHA256) signature, UTF-8 string encoding.
+Hash - SHA256 hash from "signature data; secret key", UTF-8 string encoding.
+Payloads (data)
+The header of all requests should contain the mandatory field 
+iat
+ (meaning "initiated at") with an integer value in seconds (UTC 1970-01-01T0:0:0Z). In each request, this field should contain the actual time when the request was sent. Service can use the 
+iat
+ field to prevent the risk of a repeated payment by comparing the time entered in this field and the specified time interval with the actual time interval.
+JWS
+The request content will take a form of messages in the format of JSON Web Signature (JWS). Signed request body: "HeaderEncoded.BodyEncoded" (the separator is a decimal point ".") - all parameters except the sign. HeaderEncoded is the UrlSafeBase64Encoding encoded message header, BodyEncoded is the UrlSafeBase64Encoding encoded request body. The signature is written with a decimal point (.) after Body ("HeaderEncoded.BodyEncoded.SignEncoded") and encoded with UrlSafeBase64Encoding.
+The header should contain the standard 
+alg
+ field and should be coercible to RS256 ("alg":"RS256"). For PayMaster's convenience in implementing this specification, HTTPS is used in the "request" parameter to transfer the request data.
+Rest
+Signature generation for the REST request
+```
+{
+var encoding = Encoding.UTF8;
+var iat = GetUnixtime();
+var payload = string.Empty
+    + "access_token=" + accessToken
+    + "&type=rest"
+    + "&merchant_id=" + merchantId
+    + "&merchant_transaction_id=" + transactionId
+    + "&currency=" + currencyCode
+    + "&amount=" + chargeAmount;
+var dataToSign = string.Format("{0};{1};{2}", payload, iat, secretKey);
+var bytesToSign = encoding.GetBytes(dataToSign);
+string signBase64Encoded;
+using (var sha256 = SHA256.Create())
+{
+    var sign = sha256.ComputeHash(bytesToSign);
+    signBase64Encoded = Convert.ToBase64String(sign);
+}
+var result = SendRequest("/payment/init", payload, iat, signBase64Encoded);
+```
+Signed request body:
+In the case of the Get request, this is "QueryString;iat", where: QueryString is the parameter string after the question mark in Url; iat is the "initiated at" field. In the case of the Post request, this is "Body;iat;secret key", where: Body is the request body; iat is the "initiated at" field; secret key is assigned by the Seller in their personal account ("Direct Signature Settings").
+Requests are formed and sent with Get or Post (application/x-www-form-urlencoded) parameters. The signature is transmitted in the "sign" header or in the request parameters and encoded with Base64Encoding. Note for PHP developers: if $str is the parameter string, the hash is calculated as follows base64_encode(hash('sha256', $string, true)). URLs: for all types of requests listed below, PayMaster assigns a unique URL and passes it to the Seller. URLs for different types of requests do not need to be on the same host.
+Authorization
+Authorization is implemented with the OAuth 2.0 Authorization protocol. Authorization occurs as follows:
+The Seller directs a user to the PayMaster Direct website. The user will be prompted to login if he/she is not yet authorized or has not permitted the Seller to use his/her Web wallet.
+After authorization, the user is redirected to redirect_uri, specified by the Seller when redirecting the user, with the addition of a temporary token.
+In PayMaster, the Seller generates a token request with a temporary token in order to get a permanent token.
+Authorization Request
+POST /direct/security/auth
+The authorization request is defined by the OAuth protocol.
+Request Parameters
+This is defined by the OAuth protocol. Authorization request should be sent to 
+/direct/security/auth
+. This URL will be used by the customers to authorize access to their account in the payment system by merchant. The processor for this URL accepts HTTP POST parameters. Following parameters should always be provided:  !!!!URLS
+Parameter | Data Type | Mandatory | Description
+response_type | String | Yes | Constant. Should always be set to "code"
+client_id | String | Yes | ID of the Merchant's site account. ID could be obtained from sites list in the merchant account
+redirect_uri | String | Yes | The URL where the redirect response should send the customer  when they successfully complete the authorization process
+scope | String | Yes | The permission scope being requested. For testing
+limits | Dictionary | No | Daily, weekly, and monthly limit for charging the user's funds (0 - no limit). Example: JSON: {....,limits:[{RUB:" ; ; "}],...}¸ POST: limits[RUB]= ; ;
+email | String | No | User's email address
+phone | String (\d{11,15}) | No | User's mobile phone number
+sign | String | Yes | Request signature. Transmitted either in the request header or in the parameter
+type | String | No | Protocol Type. Determined by the seller. Transmitted either in the request header or in the parameter. Valid values: jws, rest
+iat | String | Yes | Actual time when the request was sent. Transmitted either in the request header or in the parameters
+Redirection example:
+```
+HTTP/1.1 302 Found
+Location: https://www.example.com/?code=Pbl8KuP8vg
+```
+Reply parameters
+The reaction to successful completion of the authorization process is the user's redirection to the provided redirect_uri with the following parameters:
+Parameter | DataType | Mandatory | Description
+code | String | Yes | The temporary authorization token that will be exchanged for the permanent token. This token should expire in a  period of time no greater than 10 minutes after the originating request.
+POST /direct/security/token
+The request is determined by the OAuth protocol. The Seller transmits the request to PayMaster to exchange the temporary token from the initial request to a permanent token to be used for future payments.
+Request to get an access token
+Request header:
+```
+{
+  "iat": 1347447988,
+  "alg": "RS256"
+}
+```
+Request data:
+```
+{
+  "client_id": "54bf4d42-b85c-48e2-8bda-ad0cf876f411",
+  "code": "Pbl8KuP8vg",
+  "grant_type": "authorization_code",
+  "redirect_uri": "example.com"
+}
+```
+Response:
+```
+{
+  "access_token": "thN250MQ5scFlaa-1Kc61PP8gpAusuHgpJKoflAzF5g",
+  "token_type": "bearer",
+  "expires_in": 31535999,
+  "account_identifier": "WebMoney Purse R111111111111"
+}
+```
+POST /direct/security/token
+The request is determined by the OAuth protocol. The Seller transmits the request to PayMaster to exchange the temporary token from the initial request to a permanent token to be used for future payments.
+Request parameters
+Parameter | Datatype | Mandatory | Description
+client_id | String | Yes | Seller ID in PayMaster
+code | String | Yes | A temporary token assigned when authorization is requested
+grant_type | String | Yes | Constant. Should always be set to "authorization_code"
+redirect_uri | String | Yes | Should always be equal to redirect_uri, as specified in the authorization request
+sign | String | Yes | Request signature. Transmitted either in the request header or in the parameter
+type | String | No | Protocol Type. Determined by the seller. Transmitted either in the request header or in the parameter. Valid values: jws, rest
+iat | String | Yes | Actual time when the request was sent. Transmitted either in the request header or in the parameters
+Reply parameters
+Parameter | Datatype | Mandatory | Description
+access_token | String | Only in the case of success | A permanent token to be used in subsequent requests
+token_type | String | Only in the case of success | Constant. Should always have the "bearer" value
+expires_in | Number | Only in the case of success | Number of seconds before the token expires
+account_identifier | String | Only in the case of success | Client ID in the payment system. The parameter will be displayed to the user in order to differentiate various accounts in the same system
+error | String | Only in case of failure | The reason why the access token request failed. Valid values: "invalid_request", "invalid_client", "invalid_grant", "unauthorized_client", "unsupported_grant_type" and "invalid_scope"
+Request to revoke an access token
+Request header:
+```
+{
+  "iat": 1384949320,
+  "alg": "RS256"
+}
+```
+Request data:
+```
+{
+  "client_id": "1",
+  "access_token": "7J-YBO_7cI9A5lb1U2PgLwoDyZxnTJhkM2o5XWIpjjE"
+}
+```
+Response:
+```
+{
+    "status": "complete"
+}
+```
+POST /direct/security/revoke
+To cancel the existing trust, the Seller transmits the request to PayMaster at the buyer's request. Once the request is completed, the access token will be revoked.
+Request parameters
+Parameter | Datatype | Mandatory | Description
+client_id | String | Yes | Seller ID in PayMaster
+access_token | String | Yes | Permanent access token
+sign | String | Yes | Request signature. Transmitted either in the request header or in the parameter
+type | String | No | Protocol Type. Determined by the seller. Transmitted either in the request header or in the parameter. Valid values: jws, rest
+iat | String | Yes | Actual time when the request was sent. Transmitted either in the request header or in the parameters
+Reply parameters
+Parameter | Datatype | Mandatory | Description
+status | String | Yes | Request result. Valid values are "complete", "in_progress", and "failure"
+error_code | String | Only in case of failure | Cause of the error. See Error codes
+error | String | Only in case of failure | A free form description of the error that caused the request cancellation. This is used for fixing problems and is not visible to the user
+Payment processing
+Payment initiation
+Request header:
+```
+{
+  "alg": "RS256",
+  "iat": 1347448234
+}
+```
+Request data:
+```
+{
+  "access_token": "thN250MQ5scFlaa-1Kc61PP8gpAusuHgpJKoflAzF5g",
+  "merchant_id": "54bf4d42-b85c-48e2-8bda-ad0cf876f411",
+  "merchant_transaction_id": "da47e4ee-ef12-469e-a9f0-1fa0d4a4365c",
+  "amount": 1,
+  "currency": "RUB"
+}
+```
+Response:
+```
+{
+    "status": "success",
+    "processor_transaction_id": "36"
+}
+```
+POST /direct/payment/init
+To initiate a payment, the Seller transmits the request to PayMaster. A successfully completed request does not guarantee that the funds will be transferred to the Seller. It merely indicates that the user is in the payment system and is ready to pay the full amount at the time when the request is sent. If the request failed for any reason, the user will see an error message and will not be able to repeat the current payment.
+Request Parameters
+Parameter | Datatype | Mandatory | Description
+access_token | String | Yes | A permanent access token previously provided to the Seller
+merchant_id | String | Yes | Seller ID in the PayMaster system. The same as "client_id" used to get access_token
+merchant_transaction_id | String | Yes | Transaction ID generated in the Seller's system. Should be used to prevent a payment reminder in case the payment is overdue or if processor_transaction_id was not returned
+amount | Number | Yes | Amount to be paid by the Client
+currency | String | Yes | 3-letter currency code (ISO). Should always be RUB
+description | String | Extra | Purchase description (no more than 255 characters)
+custom | String |  | Extra
+sign | String | Yes | Request signature. Transmitted either in the request header or in the parameter
+type | String | No | Protocol Type. Determined by the seller. Transmitted either in the request header or in the parameter. Valid values: jws, rest
+iat | String | Yes | Actual time when the request was sent. Transmitted either in the request header or in the parameters
+Reply parameters
+Parameter | Datatype | Mandatory | Description
+status | String | Yes | Request result. Valid values are "success" and "failure"
+processor_transaction_id | String | Only in the case of success | Transaction ID in the payment system
+error_code | String | Only in case of failure | Cause of the error. See Error codes
+error | String | Only in case of failure | A free form description of the error that caused the request cancellation. This is used for fixing problems and is not visible to the user
+Payment processing
+Request header:
+```
+{
+    "alg": "RS256",
+    "iat": 1347448499
+}
+```
+Request data:
+```
+{
+  "access_token": "thN250MQ5scFlaa-1Kc61PP8gpAusuHgpJKoflAzF5g",
+  "merchant_id": "54bf4d42-b85c-48e2-8bda-ad0cf876f411",
+  "merchant_transaction_id": "da47e4ee-EF12-469e-a9f0-1fa0d4a4365c",
+  "processor_transaction_id": "36"
+}
+```
+Response:
+```
+{
+  "status": "complete"
+}
+```
+POST /direct/payment/complete
+The request is required in order to complete the payment that was initiated by the payment initiation request. If the request is successful, the funds are considered to have been transferred from the client to the Seller. If the request fails for any reason and is marked as repeated, the user will be notified of the incomplete payment and he/she cannot repeat the current payment. If the request is returned with the in_progress status without the return code 200 or payment timeout, the request should be repeated later (the recommended time to resend the request is 15 seconds). The Seller should be able to process this request using only the merchant_transaction_id parameter to identify the transaction.
+The processor_transaction_id parameter is used only for the executor's convenience. A payment processing request that is in its final state (processed or declined) should return the last result of the payment processing request. Requests that haven't reached "processed" or "declined" state within 120 hours from the start of the payment are regarded as cancelled and get the "declined" state.
+Request Parameters
+Parameter | Datatype | Mandatory | Description
+access_token | String | Yes | A permanent access token previously provided to the Seller
+merchant_id | String | Yes | Seller ID in the PayMaster system. The same as the "client_id" that is used to get access_token
+merchant_transaction_id | String | Yes | Transaction ID generated in the Seller's system
+processor_transaction_id | String | No | Transaction ID in the payment system. It will be activated when the response to the payment initiation returns this value and the invoice is valid
+sign | String | Yes | Request signature. Transmitted either in the request header or in the parameter
+type | String | No | Protocol Type. Determined by the seller. Transmitted either in the request header or in the parameter. Valid values: jws, rest
+iat | String | Yes | Actual time when the request was sent. Transmitted either in the request header or in the parameters
+Reply parameters
+Parameter | Datatype | Mandatory | Description
+status | String | Yes | Request result. Valid values are "complete", "in_progress", and "failure"
+error_code | String | Only in case of failure | Cause of the error. See Error codes
+error | String | Only in case of failure | A free form description of the error that caused the request cancellation. This is used for fixing problems and is not visible to the user
+Inline tokenization of cards
+Additional methods allow the card to be linked (tokenized) directly from the store site (or from the application) without having to direct the user to the PayMaster website.
+Authorization request
+Request header:
+```
+{
+  "alg": "RS256",
+  "iat": 1347447988
+}
+```
+Request data:
+```
+{
+  "response_type": "code",
+  "client_id": "54bf4d42-b85c-48e2-8bda-ad0cf876f411",
+  "card_number": "5470000000000000",
+  "card_holder": "IVAN IVANOV",
+  "card_expiry": "04/18",
+  "card_cvv": "123"
+}
+```
+Response with token:
+```
+{
+  "access_token":"thN2****zF5g",
+  "token_type":"bearer",
+  "expires_in":31535999,
+  "account_identifier":"4************1234"
+}
+```
+Response with 3DS request:
+```
+{
+  "confirmation": "3DSecure",
+  "code": "Pbl8KuP8vg",
+  "redirect_url": "https://acs.somebank.ru",
+  "pa_req": "bhzV****jzVL"
+}
+```
+Response with the amount confirmation request:
+```
+{
+  "confirmation": "DebitAmount",
+  "code": "Pbl8KuP8vg",
+}
+```
+POST /direct/authorize/card
+Creating a link by bank card. Depending on the settings, additional confirmation may be required: via 3DSecure authorization or confirmation of a random amount that is locked on the card account.
+Accordingly, the following response can be given to this request:
+Access token
+3DSecure authorization settings
+Indication of confirmation by locking a random amount
+Request Parameters
+Parameter | Datatype | Mandatory | Description
+response_type | String | Yes | Constant. This parameter should always have the "code" value
+client_id | String | Yes | Seller ID in PayMaster
+card_number | String | Yes | User's card number
+card_holder | String | Yes | Cardholder's name
+card_expiry | String | Yes | Card expiration date (MM/YY or YYYY-MM)
+card_cvv | String | Yes | Card's CVV code
+sign | String | Yes | Request signature. Transmitted either in the request header or in the parameter
+type | String | No | Protocol Type. Determined by the seller. Transmitted either in the request header or in the parameter. Valid values: jws, rest
+iat | String | Yes | Actual time when the request was sent. Transmitted either in the request header or in the parameters
+Reply parameters
+Parameter | Datatype | Description
+confirmation | String | Method of additional confirmation 3DSecure/DebitAmount
+code | String | A temporary token for identifying the current session
+redirect_url | String | ACS page for processing the issuer
+pa_req | String | Encoded data from the 3DS request
+Confirmation of the amount charged
+Request header:
+```
+{
+  "alg": "RS256",
+  "IAT": 1438247717
+}
+```
+Request data:
+```
+{
+  "response_type": "code",
+  "client_id": "54bf4d42-b85c-48e2-8bda-ad0cf876f411",
+  "code": "Pbl8KuP8vg",
+  "amount": "83.98"
+}
+```
+Response:
+```
+{
+  "access_token":"thN2****zF5g",
+  "token_type":"bearer",
+  "expires_in":31535999,
+  "account_identifier":"4************1234"
+}
+```
+POST /direct/authorize/confirm
+Request Parameters
+Parameter | Datatype | Mandatory | Description
+response_type | String | Yes | Constant. This parameter should always have the "code" value
+client_id | String | Yes | Seller ID in PayMaster
+code | String | Yes | A temporary token assigned when authorization is requested amount   String  Yes Amount charged, two characters are allowed in the fractional part, the separator is a decimal point "."
+sign | String | Yes | Request signature. Transmitted either in the request header or in the parameter
+type | String | No | Protocol Type. Determined by the seller. Transmitted either in the request header or in the parameter. Valid values: jws, rest
+iat | String | Yes | Actual time when the request was sent. Transmitted either in the request header or in the parameters
+3DSecure authorization
+For 3DSecure authorization, the user should be redirected to a special page of the card issuer with the address of redirect_url. The following parameters are transmitted in the request:
+PaReq - encoded operation information, the pa_req value is substituted
+MD - the seller's request number, in order to identify the result
+TermUrl - the store page, in order to return the user after authorization
+The POST method is used to send the request.
+After authorization, the issuer will redirect the user to the Seller's page, as specified in TermUrl with the following fields:
+PaReq - encoded authorization result
+MD - the Seller's request number, copied from the request
+To complete the linking, the obtained PaRes authorization result should be transmitted by calling the linking completion method.
+Completion of the 3DSecure authorization
+Request header:
+```
+{
+  "alg": "RS256",
+  "IAT": 1438647742
+}
+```
+Request data:
+```
+{
+"response_type": "code",
+"client_id": "54bf4d42-b85c-48e2-8bda-ad0cf876f411",
+"code": "Pbl8KuP8vg",
+"pa_res": "eJzV****jX/L"
+}
+```
+Response:
+```
+{
+  "access_token":"thN2****zF5g",
+  "token_type":"bearer",
+  "expires_in":31535999,
+  "account_identifier":"4************1234"
+}
+```
+POST /direct/authorize/complete3ds
+Request Parameters
+Parameter | Datatype | Mandatory | Description
+response_type | String | Yes | Constant. This parameter should always have the "code" value
+client_id | String | Yes | Seller ID in PayMaster
+code | String | Yes | A temporary token assigned when authorization is requested
+pa_res | String | Yes | 3DSecure authorization result
+sign | String | Yes | Request signature. Transmitted either in the request header or in the parameter
+type | String | No | Protocol Type. Determined by the seller. Transmitted either in the request header or in the parameter. Valid values: jws, rest
+iat | String | Yes | Actual time when the request was sent. Transmitted either in the request header or in the parameters
+Directories
+Error codes
+Code | Description
+invalid_request | There are no mandatory parameters in the request, or the parameter is a string of the wrong type
+verification_failure | The signature verification reqest failed or the "iat" parameter is out of the allowed time interval
+invalid_token | access_token is invalid because it is not identical to the token provided, the token expired or was cancelled by the client
+token_locked | Token is locked out
+unknown_transaction_id | Cannot find the transaction by merchant_transaction_id or processor_transaction_id (if applicable)
+insufficient_funds | The client does not have enough funds in the account to make a full payment
+payment_cancelled | The payment was cancelled by the payment cancellation request or by timeout
+payment_limit_exceeded | The operation cannot be completed because the limit has been exceeded
+payment_count_exceeded | The operation cannot be completed because the number of operations has been exceeded
+invalid_operation | Invalid card transaction
+invalid_amount | Invalid payment amount
+account_blocked | Card blocked
+account_expired | Card expired
+invalid_account | Incorrect card number
+payment_system_rejected | Rejected by payment system
+other | This code can be used for any other errors not mentioned above
+Appendix A
+The example of the secret RSA key (used, for example, to sign a message in this document):
+```
+-----BEGIN RSA PRIVATE KEY----- 
+MIIEowIBAAKCAQEAxw6Wp7mDULZksgyOfvDJYTpbwdQeDXWTG0mq6Z6geDT2naYm 
+6q3bL17oy2IbBhXqrh6CzufPoppb3H8v+2mdR484fO955HwCWekVqaWUw5MzYpaq 
+KbBqBepENi9lxaOGEg4Tuy48ARsmZc7KBubnEohA6BjDyx8AdwCLeKYNKhKSwzrl 
+EKteCwWvqpXwszOck2zqK1VzDKZT8+G7g7aZH496sw16iBtId0QcI5sV/IAq58Vj 
+QqCsKj7khweiPaxtWpsawnmylazm0O8/8Mj5d+GSLmO3hhT2ZoPpeSdvruC2RPLA 
+YliWAl+NouqrAp2Di4yYFwKAX2nwvuZVFk5TiQIDAQABAoIBABzvwvjY3/0Atryn 
+VKOhbzTiHeqcYk4ElID4AY96jstKr7sVJz0gTueg/Whrd5A36WisaMmZKzbxB3+T 
+Qa9jmAiKCmUnDuonGNRnLM3/kxOnN2YSjuQGkDMR7h6OX1YOwnOndjjUrMZgYwGT 
+wQylzluEUSMsTnIdrJygCKZeRTWjQYOwzIDoLamsaaYTq5MPKs30DDsiQW8GRRra 
+510CiXuDzig10ohpqZNvXAjoGhSCWm83ZrCF9R4ge8D7WJju8zX5IJfaauqecfpK 
+6Z8N87tScFJJ8sIEbsK0cAqKpDbeRo40r8rQG8CECzeDn9bzBbDUdiWE435INV8o 
+mWaaH4ECgYEA/LMU2Cd+Md6/EQlbs7oqh60YnU0S/a5GlVuB60EQR209qXOGmG7G 
+7nff3aCzMIKon5pm/QURmW7udLGekJKWeyXwUTmsE4xGfeFXBqmxV1nhCN0klj0h 
+YCzYxYgSHNgDGCf9UXvecAa4SD1Axtdmww58mMCMz/n/jy+mtvZ7zlkCgYEAyagm 
+QptkufmmHErUI0O3iCVtJqcbdBJBpUCj5hT4vwGiktOPTPxG1fNvi1QQ5uI5Ygo4 
++Hl2vNmHJj+TNsvoSdWI40Ad6wADKMZngkl+y/mPeQp2DZbmLyT49zO7XbVYKjSg 
+JQudk3cvU31Jml2Zx/1QTONRCWNogmm144bU6LECgYBplY3VDxNMVQyyWp2lR9jz 
+XaDWQNj5g/Lb/yMWn9XkckF8ZtfLIyYdh5rTKI0WbNF19nanq5GB8XbS7VAaihU0 
+GVMDLTy34jml6RyKnSaLH/PF11itKZejbrmYN1WSFbOdSUAv5ri3SCeBj45cRq4a 
+PBhVXsa3M3bTZg6bjfuG6QKBgHp3pSzEZKrRY8FA7I6yHG8Rk7VqvTCDudxbYm5k 
+BCE0JACZfSja+UYMPozWNCGT+BeDb8/vLF5KmVpwN76KnXrhtO2WTdUfP8vumoQ0 
+kE3eNPTklodwQkEVaiHvB/ZEINQY+70jzcH2GwbQSvf1qmQbgj3/u4JBHgI9otoY 
+U4sxAoGBAO6mMtFer5H2XepHqQ+MELswkLX7K1WC7Pc/vLhRHxpaZX6Mcdn3KbB1 
+B3eb8YtNmkUIFP4mYzmf/vL0qdOLFOzvJ0XwXGvSoDLspvwz/tZHqk6rtV22TA57 
+j8PDSV2Byd8TAgedFnF3cPlVCXsvQVH7k5MBhEY4b1jJWp8U1i6M 
+-----END RSA PRIVATE KEY-----
+```
+The example of the public RSA key (can be used to check the message signature in this document):
+```
+-----BEGIN PUBLIC KEY----- 
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxw6Wp7mDULZksgyOfvDJ
+YTpbwdQeDXWTG0mq6Z6geDT2naYm6q3bL17oy2IbBhXqrh6CzufPoppb3H8v+2md 
+R484fO955HwCWekVqaWUw5MzYpaqKbBqBepENi9lxaOGEg4Tuy48ARsmZc7KBubn 
+EohA6BjDyx8AdwCLeKYNKhKSwzrlEKteCwWvqpXwszOck2zqK1VzDKZT8+G7g7aZ 
+H496sw16iBtId0QcI5sV/IAq58VjQqCsKj7khweiPaxtWpsawnmylazm0O8/8Mj5 
+d+GSLmO3hhT2ZoPpeSdvruC2RPLAYliWAl+NouqrAp2Di4yYFwKAX2nwvuZVFk5T 
+iQIDAQAB 
+-----END PUBLIC KEY-----
+```
+Appendix B
+Test activities before accepting final settings:
+Test the request using a token with the wrong code. Check the error message in the reply.
+Test the request using a token with the wrong client_id. Check the error message in the reply.
+Test the payment initialization request using an access token that is not identical to the one used on the authorization page.
+Test the payment initialization request using a particular merchant_transaction_id parameter. Make an other request using the same value for the merchant_transaction_id parameter and make sure that processor_transaction_id contains the same value as in the first request.
+Test the payment initialization request with a negative amount. Receive the error message.
+Test the payment processing request without the processor_transaction_id parameter. Make sure that the request is successful.
+Test the payment processing request with merchant_transaction_id and processor_transaction_id parameters that relate to different operations. Receive the error message.
+
+
+===== https://paymaster.ru/docs/en/api =====
+
+Service API
+        NAV
+General information
+Request authentication
+Data types
+Working with lists
+Payments
+Payment link
+Creating a payment
+Payment completion
+Payment capture
+Payment cancellation
+Getting payment details
+List of payments
+Refunds
+Creating a refund
+Refund details
+List of refunds
+Payment tokens
+Tokenization link
+Create token request
+Token completion
+Token details
+Token revocation
+Receipts
+Creating a receipt
+Getting receipt details
+Список чеков
+Stickers
+Sticker registration
+Sticker activation / deactivation
+Getting sticker details
+List of stickers
+Notifications
+Payment status
+Payment token status
+Payment methods
+Codes and dictionaries
+Error codes
+Payment status
+Refund status
+Authorization code
+Receipt registration status
+Receipt type
+VAT type 
+Agent type
+Types of goods/services
+Payment type
+Measure
+General information
+If you were looking for an old version of the API, it is available at 
+HTTP-protocol
+.
+Interaction is carried out via HTTPS using GET/POST/PUT methods. The API uses the REST architecture:
+  POST and PUT requests use JSON arguments;
+  GET requests work with query strings;
+  The API always returns a response in JSON format, regardless of the type of the request;
+Request headers:
+```
+curl --request POST 'https://paymaster.ru/api/v2/invoices' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Idempotency-Key: 86cf125c' \
+--header 'Content-Type: application/json' \
+--header 'Accept: application/json'
+```
+Content-type: application/json
+ is transmitted in the headers of all requests and responses;
+Authorization: Bearer {token}
+is transmitted in the headers of all requests;
+Idempotency-Key: {key_value}
+ - request id (idempotency key);
+In case of an error, the response contains code and the reason (code, message), and the answer may also contain sections with additional details.
+An example of an error response:
+```
+{
+  "code": "validation_error",
+  "message": "One or many validation errors. See 'errors' list.",
+  "errors": [
+    "Specify required MerchantId value."
+  ]
+}
+```
+In requests, mandatory parameters are highlighted in 
+bold
+.
+Request authentication
+Requests must be transmitted via a secure protocol (https). Base service address: 
+https://paymaster.ru
+The following methods of request authentication are supported:
+Bearer
+: The token for the site can be generated in the 
+Merchant's Personal Account
+. Must add to the 
+Authorization
+ header of each request.
+Data types
+The following data types are used in the requests:
+Strings (
+string
+)
+Numbers with a fractional part (
+numeric
+)
+Dates (
+date
+). 
+ISO 8601
+ format is used for the information transmission in the requests.
+A three-letter code according to 
+ISO 4217
+ is used to encode currencies.
+Working with lists
+Loading lists (payments, refunds, etc.) is made page by page: if there is a pointer to the next page (cursor) in the response, you must request the next part of data. To do this, repeat the request and add a cursor value to the list of parameters.
+Payments
+Payment link
+POST /api/v2/invoices
+Request example:
+```
+curl --request POST 'https://paymaster.ru/api/v2/invoices' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Idempotency-Key: 86cf125c' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "merchantId": "cf128151-127b-44ed-bde5-26c531cad20d",
+  "invoice": {
+    "description": "test payment",
+    "params": {
+      "BT_USR": "34"
+    }
+  },
+  "amount": {
+    "value": 10.50,
+    "currency": "RUB"
+  },
+  "paymentMethod": "BankCard"   
+}'
+```
+Request:
+Parameter | Type | Description
+merchantId | string | Merchant identification
+dualMode | bool | DMS payments flag ( false by default)
+testMode | bool | Test payments flag ( false by default)
+tokenization |  | Tokenization details
+type | string | Token type ( cof / recurring )
+purpose | string | Subscription purpose
+callbackUrl | string | Url to notify for token changes
+invoice |  | Invoice details
+description | string | Payments description
+orderNo | string | Order number in the merchant system
+expires | date | Invoice expiration date
+params |  | Additional parameters
+amount |  | Amount
+value | decimal | Amount to pay
+currency | string | Currency code
+paymentMethod | string | Payment method
+protocol |  | Protocol parameters
+returnUrl | string | User is redirected to this web page after the payment
+callbackUrl | string | Url for payment notification
+customer |  | Customer data
+email | string | e-mail
+phone | string | phone (E.164 formatted w/o + sign)
+ip | string | IP address
+account | string | Customer account
+receipt |  | Receipt details
+client |  | Client details
+items |  | Items list
+settlements |  | Settlements
+Response example:
+```
+{
+  "paymentId": "12769",
+  "url": "https://paymaster.ru/cpay/a62beecb68c84778b2424294f635b370"  
+}
+```
+Response:
+Parameter | Type | Description
+paymentId | string | Payment identification
+url | string | Payment page url, where the user should be redirected for making a payment
+Creating a payment
+POST /api/v2/payments
+Request example:
+```
+curl --request POST 'https://paymaster.ru/api/v2/payments' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Idempotency-Key: 86cf125c' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "merchantId": "cf128151-127b-44ed-bde5-26c531cad20d",
+  "invoice": {
+    "description": "test payment",
+    "params": {
+      "BT_USR": "34"
+    }
+  },
+  "amount": {
+    "value": 10.50,
+    "currency": "RUB"
+  },
+  "paymentData": {
+    "paymentMethod": "BankCard",        
+    "card": {
+      "pan": "4**********0540",
+      "expiry": "10/22",
+      "cvc": "***"
+    }
+  }
+}'
+```
+Request:
+Parameter | Type | Description
+merchantId | string | Merchant identification
+dualMode | bool | DMS payments flag ( false by default)
+testMode | bool | Test payments flag ( false by default)
+tokenization |  | Tokenization details
+type | string | Token type ( cof / recurring )
+purpose | string | Subscription purpose
+callbackUrl | string | Url to notify for token changes
+invoice |  | Invoice details
+description | string | Payments description
+orderNo | string | Order number in the merchant system
+expires | date | Invoice expiration date
+params |  | Additional parameters
+amount |  | Amount
+value | decimal | Amount to pay
+currency | string | Currency code
+paymentData |  | Payment data
+paymentMethod | string | Payment method
+card |  | Card details
+pan | string | Card number
+expiry | string | Expiry date
+cvc | string | CVV/CVC2
+dsrp |  | 
+type | string | Type ( ApplePay / GooglePay )
+cryptogram | string | Cryptogram
+eci | string | ECI
+authorizationCode | string | Payment authorization code
+account | string | Login/account
+phone | string | Phone number
+token |  | Payment token
+id | string | Token identification
+stickerId | string | Sticker id (cashlink payment)
+protocol |  | Protocol parameters
+returnUrl | string | User is redirected to this web page after the payment
+callbackUrl | string | Url for payment notification
+threeDSCompleteUrl | string | threeDSCompleteUrl using the scenario 3DSecure Challenge Flow
+customer |  | Customer data
+email | string | e-mail
+phone | string | phone
+ip | string | IP address
+account | string | Customer account
+device |  | User device details
+language | string | Language
+acceptHeader | string | Accept header definition
+userAgent | string | UserAgent header definition
+colorDepth | string | Color depth on bits
+screenHeight | string | Screen height in pixels
+screenWidth | string | Screen width in pixels
+utcOffsetMinutes | string | UTC offset in minutes
+receipt |  | Receipt details
+client |  | Client details
+items |  | Items list
+settlements |  | Settlements
+Parameters for making a payment depend on the payment method chosen.
+Response example:
+```
+{
+  "id": "12769",
+  "created":"2021-09-01T08:20:00Z",
+  "testMode": false,
+  "status": "Confirmation",
+  "resultCode": "Success",
+  "merchantId": "96e809e9-8bce-40fd-86cb-d34db39b4668",
+  "amount": {
+    "value": 10.5000,
+    "currency": "RUB"
+  },
+  "invoice": {
+    "description": "test payment",
+    "params": {
+      "BT_USR": "34"
+    }
+  },
+  "paymentData": {
+    "paymentMethod": "BankCard"
+  },
+  "confirmation": {
+    "type": "ThreeDSv1",
+    "acsUrl": "https://paymaster.ru/acs/pareq",
+    "PAReq": "eJxVUtuO0...v4BOrji7g=="
+  }
+}
+```
+Response
+Parameter | Type | Description
+id | string | Payment identification
+created | date | Payment date
+completed | date | Finish date
+testMode | bool | Test payments flag
+status | string | Payment status
+resultCode | string | Result code
+message | string | Authorization result description
+merchantId | string | Merchant identification
+invoice |  | Invoice details
+description | string | Payments description
+orderNo | string | Order number in the merchant system
+expires | date | Invoice expiration date
+params |  | Additional parameters
+amount |  | Amount
+value | decimal | Amount to pay
+currency | string | Currency code
+customer |  | Customer data
+ip | string | IP address
+paymentData |  | Payment data
+paymentMethod | string | Payment method
+paymentInstrumentTitle | string | Payment instrument title
+agreement | string | Agreement reference code
+cardInfo |  | Card BIN details
+brand | string | Card brand name
+issuer | string | Issuer bank name
+country | string | Country ISO-code
+type | string | Card type (credit, debit)
+category | string | Card category (gold, classic)
+confirmation |  | Payment confirmation method
+type | string | Confirmation type
+*** |  | Confirmation parameters
+paymentToken |  | Payment token data
+id | string | Token ID
+expires | date | Token expiration date
+title | string | Description to be displayed
+Additional confirmation (or several confirmations) may be required during the payment process.
+Payment confirmation in the external system
+Parameter | Type | Description
+type | string | Confirmation type External
+paymentUrl | string | Payment confirmation address to redirect the user
+universalLink | bool | Payment link attribute
+instruction | string | Payment instruction
+Payment confirmation with a one-time code
+Parameter | Type | Description
+type | string | Confirmation type SmsOtp
+maskedPhone | string | Telephone number that receives the confirmation code
+3DS Method scenario
+Parameter | Type | Description
+type | string | Confirmation type ThreeDSMethod
+methodUrl | string | ACS page address to pass the scenario
+transactionId | string | Transaction authentication ID
+3DS Challenge Flow scenario
+Parameter | Type | Description
+type | string | Confirmation type ThreeDSChallenge
+acsUrl | string | ACS page address to pass the scenario
+creq | string | Challenge request
+3DS v1 scenario
+Parameter | Type | Description
+type | string | Confirmation type ThreeDSv1
+acsUrl | string | ACS page address to pass the scenario
+PAReq | string | Payer Authentication request
+Payment completion
+PUT /api/v2/payments/{id}/complete
+Request example:
+```
+curl --request PUT 'https://paymaster.ru/api/v2/payments/12769/complete' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "PARes": "eJx7v3u...IxsAwA="  
+}'
+```
+Request:
+Parameter | Type | Description
+id | string | Payment identification
+code | string | Confirmation code
+threeDSCompInd | string | 3DS Method complete indicator
+cres | string | Challenge response
+PARes | string | Payer Authentication response
+In response service returns the 
+payment details
+.
+Payment capture
+PUT /api/v2/payments/{id}/confirm
+Request example:
+```
+curl --request PUT 'https://paymaster.ru/api/v2/payments/12769/confirm' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "amount": {
+    "value": 10.50,
+    "currency": "RUB"
+  }
+}'
+```
+Request:
+Parameter | Type | Description
+id | string | Payment identification
+amount |  | Amount
+value | decimal | Amount to pay
+currency | string | Currency code
+receipt |  | Receipt details
+client |  | Client details
+items |  | Items list
+If the request is successful, the service returns an empty response with HTTP status 200.
+Payment cancellation
+PUT /api/v2/payments/{id}/cancel
+Request example:
+```
+curl --request PUT 'https://paymaster.ru/api/v2/payments/12769/cancel' \
+--header 'Authorization: Bearer QdvdwiXKFm='
+```
+If the request is successful, the service returns an empty response with HTTP status 200.
+Getting payment details
+GET /api/v2/payments/{id}
+Request example:
+```
+curl --request GET 'https://paymaster.ru/api/v2/payments/12769' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+```
+Request:
+Parameter | Type | Description
+id | string | Payment identification
+The service returns 
+payment details
+ in the response.
+List of payments
+GET /api/v2/payments?merchantId={merchantId}&start={start}&end={end}
+Request example:
+```
+curl --request GET 'https://paymaster.ru/api/v2/payments?merchantId=cf128151-127b-44ed-bde5-26c531cad20d&start=2021-08-01T06:00:00Z&end=2021-08-01T06:30:00Z'  \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+```
+Request:
+Parameter | Type | Description
+merchantId | string | Merchant identification
+start | date | Period starts
+end | date | Period ends
+Response example:
+```
+{
+  "items": [
+    {
+      "id": "9755",
+      "status": "Settled",
+      "created":"2021-08-01T06:15:00Z",
+      "completed":"2021-08-01T06:15:30Z",
+      "merchantId": "96e809e9-8bce-40fd-86cb-d34db39b4668",
+      "amount": {
+        "value": 10.0000,
+        "currency": "RUB"
+      },
+      "invoice": {
+        "description": "test"
+      },
+      "paymentData": {
+        "paymentMethod": "BankCard",
+        "paymentInstrumentTitle": "410000XXXXXXX0000"
+      }
+    }
+  ]
+}
+```
+Response:
+Parameter | Type | Description
+id | string | Payment identification
+created | date | Payment date
+completed | date | Finish date
+status | string | Payment status
+merchantId | string | Merchant identification
+invoice |  | Invoice details
+description | string | Payment description
+orderNo | string | Order number in the merchant system
+expires | date | Invoice expiration date
+amount |  | Amount
+value | decimal | Amount to pay
+currency | string | Currency code
+paymentData |  | Payment data
+paymentMethod | string | Payment method
+paymentInstrumentTitle | string | Payment instrument title
+Refunds
+Creating a refund
+POST /api/v2/refunds
+Request example:
+```
+curl --request POST 'https://paymaster.ru/api/v2/refunds' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Idempotency-Key: 86cf125c' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "paymentId": "12870",
+  "amount": {
+    "value": 5.5,
+    "currency": "RUB"
+  }
+}'
+```
+Request:
+Parameter | Type | Description
+paymentId | string | Payment identification
+amount |  | Refund amount
+value | decimal | Refund amount value
+currency | string | Currency code
+receipt |  | Receipt details
+client |  | Client details
+items |  | Items list
+Response example:
+```
+{
+  "id": "1276",
+  "created": "2021-10-01T06:23:02.273Z",
+  "status": "Pending",
+  "paymentId": "12870",
+  "amount": {
+    "value": 5.5,
+    "currency": "RUB"
+  }
+}
+```
+Response
+Parameter | Type | Description
+id | string | Refund identification
+created | date | Refund date
+paymentId | string | Payment identification
+amount |  | Refund amount
+value | decimal | Refund amount value
+currency | string | Currency code
+status | string | Refund status
+resultCode | string | Result code
+Refund details
+GET /api/v2/refunds/{id}
+Request example:
+```
+curl --request GET 'https://paymaster.ru/api/v2/refunds/1276' \
+--header 'Authorization: Bearer QdvdwiXKFm='
+```
+Request:
+Parameter | Type | Description
+id | string | Refund identification
+The service returns the 
+refund details
+ in the response.
+List of refunds
+GET /api/v2/refunds?merchantId={merchantId}&start={start}&end={end}
+Request example:
+```
+curl --request GET 'https://paymaster.ru/api/v2/refunds?merchantId=cf128151-127b-44ed-bde5-26c531cad20d&start=2021-08-01T06:00:00Z&end=2021-08-01T06:30:00Z'  \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+```
+Request:
+Parameter | Type | Description
+merchantId | string | Merchant identification
+start | date | Period starts
+end | date | Period ends
+Response example:
+```
+{
+  "items": [
+    {
+      "id": "1276",
+      "created": "2021-10-01T06:23:02.273Z",
+      "status": "Pending",
+      "paymentId": "12870",
+      "amount": {
+        "value": 5.5,
+        "currency": "RUB"
+      }
+    }
+  ]
+}
+```
+Response:
+Parameter | Type | Description
+id | string | Refund identification
+created | date | Refund date
+paymentId | string | Payment identification
+amount |  | Refund amount
+value | decimal | Refund amount value
+currency | string | Currency code
+status | string | Refund status
+Payment tokens
+Tokenization link
+POST /api/v2/tokenization
+Request example:
+```
+curl --request POST 'https://paymaster.ru/api/v2/tokenization' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Idempotency-Key: 86cf125c' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "merchantId": "cf128151-127b-44ed-bde5-26c531cad20d",
+  "type": "recurring",
+  "purpose": "Test subscription"
+  "paymentMethod": "bankcard",
+  "customer": {
+    "account": "47733000003"
+  }   
+}'
+```
+Request:
+Parameter | Type | Description
+merchantId | string | Merchant ID
+testMode | bool | Test mode flag ( false by default)
+type | string | Token type ( recurring )
+purpose | string | Subscription description
+paymentMethod | string | Payment method
+callbackUrl | string | Token status notification url
+returnUrl | string | Url for customer return page
+customer |  | Customer data
+account | string | Customer account in merchant's system
+email | string | Customer e-mail
+Response example:
+```
+{
+  "tokenId": "8cd9991b47ab42018f0bb56ca0fbdba0",
+  "url": "https://paymaster.ru/cpay/tokenization/f3da06b158924a6c8da280a8b49c2996"  
+}
+```
+Response:
+Parameter | Type | Description
+tokenId | string | Token ID
+url | string | Tokenization url for customer to complete scenario
+Create token request
+POST /api/v2/paymenttokens
+Request example:
+```
+curl --request POST 'https://paymaster.ru/api/v2/paymenttokens' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Idempotency-Key: 86cf125c' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "merchantId": "cf128151-127b-44ed-bde5-26c531cad20d",
+  "type": "recurring",
+  "purpose": "Test subscription"
+  "paymentData": {
+    "paymentMethod": "sbp"
+  },
+  "customer": {
+    "account": "47733000003"
+  }   
+}'
+```
+Request:
+Parameter | Type | Description
+merchantId | string | Merchant ID
+testMode | bool | Test mode flag ( false by default)
+type | string | Token type ( recurring )
+purpose | string | Subscription description
+paymentData |  | Payment data
+paymentMethod | string | Payment method
+card |  | Card details
+pan | string | Card number
+expiry | string | Expiry date
+cvc | string | CVV/CVC2
+protocol |  | Protocol parameters
+returnUrl | string | Url for customer return page
+callbackUrl | string | Token status notification url
+threeDSCompleteUrl | string | threeDSCompleteUrl for 3DSecure Challenge Flow
+customer |  | Customer data
+account | string | Customer account in merchant's system
+email | string | Customer e-mail
+device |  | User device details
+language | string | Language
+acceptHeader | string | Accept header definition
+userAgent | string | UserAgent header definition
+colorDepth | string | Color depth on bits
+screenHeight | string | Screen height in pixels
+screenWidth | string | Screen width in pixels
+utcOffsetMinutes | string | UTC offset in minutes
+Response example:
+```
+{
+    "id": "8cd9991b47ab42018f0bb56ca0fbdba0",
+    "status": "Created",
+    "confirmation": {
+        "type": "External",
+        "universalLink": true,
+        "paymentUrl": "https://paymaster.ru/cpay/mock/sbp/subscription/8cd9991b47ab42018f0bb56ca0fbdba0"
+    }
+}
+```
+Response
+Parameter | Type | Description
+id | string | Token identifier
+status | string | Token status ( Active / Revoked / Declined )
+resultCode | string | Result code
+title | string | Display name
+expires | date | Token expire date
+cardInfo |  | Card BIN details
+brand | string | Card brand name
+issuer | string | Issuer bank name
+country | string | Country ISO-code
+type | string | Card type (credit, debit)
+category | string | Card category (gold, classic)
+confirmation |  | Additional confirmation
+type | string | Confirmation type
+*** |  | Confirmation parameters
+Additional confirmation (or several confirmations) may be required during the process.
+Confirmation in the external system
+Parameter | Type | Description
+type | string | Confirmation type External
+paymentUrl | string | Confirmation address to redirect the user
+universalLink | bool | Payment link attribute
+instruction | string | Payment instruction
+Token completion
+PUT /api/v2/paymenttokens/{id}/complete
+Request example:
+```
+curl --request PUT 'https://paymaster.ru/api/v2/paymenttokens/8cd9991b47ab42018f0bb56ca0fbdba0/complete' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "PARes": "eJx7v3u...IxsAwA="  
+}'
+```
+Request:
+Parameter | Type | Description
+id | string | Token identifier
+code | string | Confirmation code
+threeDSCompInd | string | 3DS Method complete indicator
+cres | string | Challenge response
+PARes | string | Payer Authentication response
+In response service returns the 
+token details
+.
+Token details
+GET /api/v2/paymenttokens/{id}
+Request example:
+```
+curl --request GET 'https://paymaster.ru/api/v2/paymenttokens/8cd9991b47ab42018f0bb56ca0fbdba0' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+```
+Request:
+Parameter | Type | Description
+id | string | Token identifier
+In response service returns the 
+token details
+.
+Token revocation
+PUT /api/v2/paymenttokens/{id}/revoke
+Request example:
+```
+curl --request PUT 'https://paymaster.ru/api/v2/paymenttokens/8cd9991b47ab42018f0bb56ca0fbdba0/revoke' \
+--header 'Authorization: Bearer QdvdwiXKFm='
+```
+Request:
+Parameter | Type | Description
+id | string | Token identifier
+HTTP 200 status shows the successful completion of the request.
+Receipts
+Creating a receipt
+POST /api/v2/receipts
+Request example:
+```
+curl --request POST 'https://paymaster.ru/api/v2/receipts' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Idempotency-Key: 86cf125c' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "paymentId": "13167",
+  "amount": {
+    "value": 10,
+    "currency": "RUB"
+  },
+  "type": "Payment",
+  "client": {
+    "email": "customer@gmail.com"
+  },
+  "items": [{
+      "name": "Apples",
+      "quantity": 1,
+      "price": 10,
+      "vatType": "Vat120",
+      "paymentSubject": "Commodity",
+      "paymentMethod": "FullPrepayment"
+    }
+  ]
+}'
+```
+Request
+Parameter | Type | Description
+paymentId | string | Payment identification
+amount |  | Receipt amount
+value | decimal | Amount value
+currency | string | Currency code
+type | string | Receipt type
+client |  | Client details
+email | string | Client e-mail
+phone | string | Client telephone
+name | string | Company name
+inn | string | Company TIN
+items |  | Items list
+name | string | Name
+quantity | decimal | Quantity
+price | decimal | Price
+measure | string | Product measure
+excise | decimal | Excise
+product |  | 
+country | string | Country origin code
+declaration | string | Tax declaration number
+vatType | string | VAT type
+paymentSubject | string | Payment subject
+paymentMethod | string | Payment method
+marking |  | Marking details
+code | string | Product code
+quantity |  | Fractional quantity data
+numerator | int | Numerator
+denominator | int | Denominator
+agentType | string | Agent type
+supplier |  | Supplier details
+name | string | Supplier name
+inn | string | Supplier TIN
+phone | string | Supplier telephone
+settlements |  | Settlements
+cashless | decimal | Cashless amount
+advance | decimal | Prepayment amount
+loan | decimal | Postpayment amount
+consideration | decimal | Consideration amount
+Response example:
+```
+{
+  "id": "1860",
+  "created": "2021-11-02T09:54:35.45Z",
+  "paymentId": "13167",
+  "amount": {
+    "value": 10.0,
+    "currency": "RUB"
+  },
+  "type": "Payment",
+  "status": "Pending"
+}
+```
+Response
+Parameter | Type | Description
+id | string | Receipt identification
+created | date | Creation date
+paymentId | string | Payment identification
+amount |  | Receipt amount
+value | decimal | Amount value
+currency | string | Currency code
+type | string | Receipt type
+status | string | Receipt registration status
+providerOperationId | string | Provider's operation id
+fiscalData |  | Fiscal data
+fiscalDeviceId | string | Fiscal device serial number
+shiftNumber | string | Shift number
+receiptNumber | string | Receipt number
+documentId | string | Fiscal document id
+fiscalAttribute | string | Fiscal attribute
+timestamp | date | Receipt registration data
+Getting receipt details
+GET /api/v2/receipts/{id}
+Request example:
+```
+curl --request GET 'https://paymaster.ru/api/v2/receipts/1860' \
+--header 'Authorization: Bearer QdvdwiXKFm='
+```
+Request:
+Parameter | Type | Description
+id | string | Receipt identification
+The service returns 
+receipt details
+ in the response.
+Список чеков
+GET /api/v2/receipts?paymentId={paymentId}
+Request example:
+```
+curl --request GET 'https://paymaster.ru/api/v2/receipts?paymentId=22504'  \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+```
+Request:
+Parameter | Type | Description
+paymentId | string | Payment id
+The response will contain the list of 
+receipt details
+Stickers
+Sticker registration
+POST /api/v2/stickers
+Request example:
+```
+curl --request POST 'https://paymaster.ru/api/v2/stickers' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Idempotency-Key: 86cf125c' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "merchantId": "cf128151-127b-44ed-bde5-26c531cad20d",
+  "stickerType": "Sbp",
+  "productCode": "product-1234",
+  "paymentPurpose": "Payment for the product",
+  "description": "Product #1234",
+  "amount": {
+    "value": 39.90,
+    "currency": "RUB"
+  }
+}'
+```
+Request:
+Parameter | Type | Description
+merchantId | string | Merchant identification
+stickerType | string | Sticker type (example, Sbp)
+cashlink | bool | Cashlink mode
+description | string | Sticker description
+productCode | string | Product code
+paymentPurpose | string | Payment purpose
+amount |  | Amount
+value | decimal | Amount to pay
+currency | string | Currency code
+callbackUrl | string | Url for payment notification
+Response example:
+```
+{
+  "id": "24cc565dea08",
+  "stickerType": "Sbp",
+  "productCode": "product-1234",
+  "paymentPurpose": "Payment for the product",
+  "description": "Product #1234",
+  "amount": {
+    "value": 39.90,
+    "currency": "RUB"
+  },
+  "status": "Active",
+  "payload": "https://qr.nspk.ru/AS****G0?type=01&sum=3990&cur=RUB&crc=ZZZZ"
+}
+```
+Response
+Parameter | Type | Description
+id | string | Sticker identification
+stickerType | string | Sticker type
+cashlink | bool | Cashlink mode
+productCode | string | Product code
+paymentPurpose | string | Payment purpose
+description | string | Sticker description
+amount |  | Amount
+value | decimal | Amount to pay
+currency | string | Currency code
+status | string | Sticker status
+payload | string | Content  (payment link)
+Sticker activation / deactivation
+PUT /api/v2/stickers/{id}
+Request example:
+```
+curl --request PUT 'https://paymaster.ru/api/v2/stickers/24cc565dea08' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "active": true
+}'
+```
+Request:
+Parameter | Type | Description
+id | string | Sticker identification
+active | bool | Sticker status
+HTTP 200 status shows the successful completion of the request.
+Getting sticker details
+GET /api/v2/stickers/{id}
+Request example:
+```
+curl --request GET 'https://paymaster.ru/api/v2/stickers/24cc565dea08' \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+```
+Request:
+Parameter | Type | Description
+id | string | Sticker identification
+The service returns 
+sticker details
+ in the response. 
+List of stickers
+GET /api/v2/stickers?merchantId={merchantId}
+Request example:
+```
+curl --request GET 'https://paymaster.ru/api/v2/stickers?merchantId=cf128151-127b-44ed-bde5-26c531cad20d'  \
+--header 'Authorization: Bearer QdvdwiXKFm=' \
+```
+Request:
+Parameter | Type | Description
+merchantId | string | Merchant identification
+Response example:
+```
+{
+  "items": [
+    {
+      "id": "24cc565dea08",
+      "stickerType": "Sbp",
+      "productCode": "product-1234",
+      "paymentPurpose": "Payment for the product",
+      "description": "Product #1234",
+      "amount": {
+        "value": 39.90,
+        "currency": "RUB"
+      },
+      "status": "Active",
+      "payload": "https://qr.nspk.ru/AS****G0?type=01&sum=3990&cur=RUB&crc=ZZZZ"
+    }
+  ]
+}
+```
+Ответ:
+Parameter | Type | Description
+items | array | List of stickers
+Notifications
+Payment status
+POST {callbackUrl}
+Request example:
+```
+curl --request POST 'https://merchant-site.com/payments/result' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "id": "12769",
+  "created":"2021-09-01T08:20:00Z",
+  "testMode": false,
+  "status": "Settled",
+  "merchantId": "96e809e9-8bce-40fd-86cb-d34db39b4668",
+  "amount": {
+    "value": 10.5000,
+    "currency": "RUB"
+  },
+  "invoice": {
+    "description": "test payment",
+    "params": {
+      "BT_USR": "34"
+    }
+  },
+  "paymentData": {
+    "paymentMethod": "BankCard",
+    "paymentInstrumentTitle": "410000XXXXXXX0000"
+  }
+}'
+```
+Request:
+Parameter | Type | Description
+id | string | Payment identification
+created | date | Payment date
+testMode | bool | Test payments flag
+status | string | Payment status
+merchantId | string | Merchant identification
+invoice |  | Invoice details
+description | string | Payments description
+orderNo | string | Order number in the merchant system
+expires | date | Invoice expiration date
+params |  | Additional parameters
+amount |  | Amount
+value | decimal | Amount to pay
+currency | string | Currency code
+paymentData |  | Payment data
+paymentMethod | string | Payment method
+paymentInstrumentTitle | string | Payment instrument title
+Payment token status
+POST {callbackUrl}
+Request example:
+```
+curl --request POST 'https://merchant-site.com/tokens/result' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "id": "8cd9991b47ab42018f0bb56ca0fbdba0",
+  "status": "Active",
+  "title": "410000XXXXXX0001",
+  "expires": "2022-10-31T23:59:59Z"
+}'
+```
+Request:
+Parameter | Type | Description
+id | string | Token identifier
+status | string | Token status ( Active / Revoked )
+title | string | Display name
+expires | date | Token expire date
+Payment methods
+Alias | Name
+bankcard | Bank card
+sbp | Faster Payment System
+sberpay | SberPay
+tpay | T-Pay
+alfapay | Alfa Pay
+yandexpay | Yandex Pay
+wbpay | WB Pay
+dolyame | Dolyame
+davaydelit | Davay delit
+Codes and dictionaries
+Error codes
+Code | Description
+validation_error | Incorrect request format
+not_authorized | Not enough user rights for the operation
+idempotency_key_violation | Idempotency key violation
+invalid_operation | Request is rejected
+payment_token_revoked | Payment token is revoked
+payment_token_blocked | Payment token is locked out
+Payment status
+Code | Description
+Authorized | Payment is authorized
+Settled | Payment is settled
+Cancelled | Payment is cancelled
+Rejected | Payment is rejected
+Confirmation | Additional confirmation is required
+Pending | Payment is pending
+Refund status
+Code | Description
+Success | Refund is successful
+Rejected | Refund is rejected
+Pending | Refund is pending
+Authorization code
+Code | Description
+TransactionDeclined | Transaction authorization is declined
+IssuerUnavailable | Issuer is not available
+RejectedByFraud | Rejected by fraud monitoring
+InvalidAmount | Invalid amount
+InvalidAccount | Incorrect card number / card does not exist
+BlockedAccount | Card is blocked (lost)
+OperationNotAllowed | Operation is not allowed
+InsufficientFunds | Insufficient funds
+ExpiredAccount | Expired card date / incorrect card date
+PaymentLimitExceeded | Payment limit exceeded
+PaymentCountExceeded | Payment count exceeded
+CardNotEnrolled | Card is not enrolled for 3DS
+ThreeDSecureFailed | 3DS authentication is not passed
+CancelledByUser | User cancelled the payment
+PaymentExpired | Payment expired
+Receipt registration status
+Code | Description
+Success | Receipt is registered successfully
+Rejected | Receipt is rejected for registration
+Cancelled | Receipt registration is cancelled
+Pending | Receipt registration is pending
+Receipt type
+Code | Description
+Payment | Payment
+Refund | Payment refund
+VAT type 
+Code | Description
+None | No VAT
+Vat0 | VAT 0%
+Vat5 | VAT 5%
+Vat7 | VAT 7%
+Vat10 | VAT 10%
+Vat22 | VAT 22%
+Vat105 | VAT formula  5/105
+Vat107 | VAT formula  7/107
+Vat110 | VAT formula  10/110
+Vat122 | VAT formula  22/122
+Agent type
+Code | Description
+BankPaymentAgent | Bank payment agent
+BankPaymentSubagent | Bank payment subagent
+PaymentAgent | Payment agent
+PaymentSubagent | Payment subagent
+Attorney | Attorney
+Commissioner | Commissioner
+Agent | Agent
+Types of goods/services
+Code | Description
+Commodity | Commodity
+Excise | Excise
+Job | Job
+Service | Service
+Gambling | Gambling
+Lottery | Lottery
+IntellectualActivity | Intellectual activity
+Payment | Payment
+AgentFee | Agent fee
+PropertyRights | Property rights
+NonOperatingIncome | Non operating income
+InsurancePayment | Insurance payment
+SalesTax | Sales tax
+ResortFee | Resort fee
+Other | Other
+Payment type
+Code | Description
+FullPrepayment | Full prepayment
+PartialPrepayment | Partial prepayment
+Advance | Advance
+FullPayment | Full payment
+PartialPayment | Partial payment
+Credit | Credit
+Measure
+Code | Description
+Piece | Piece
+Gram | Gram
+Kilogram | Kilogram
+Tonne | Tonne
+Centimeter | Centimeter
+Decimeter | Decimeter
+Meter | Meter
+SquareCentimeter | Square Centimeter
+SquareDecimeter | Square Decimeter
+SquareMeter | Square Meter
+Millilitre | Millilitre
+Litre | Litre
+QubicMeter | Qubic Meter
+KilowattHour | Kilowatt * Hour
+Gigacal | Gigacalorie
+Day | Day
+Hour | Hour
+Minute | Minute
+Second | Second
+Kilobyte | Kilobyte
+Megabyte | Megabyte
+Gigabyte | Gigabyte
+Terabyte | Terabyte
+Other | Other
+
+
+===== https://paymaster.ru/docs/en/wmi =====
+
+API PayMaster
+        NAV
+HTTP-protocol
+Workflow
+Language of the payment form
+Payment order form
+Autoparameters
+Invoice Confirmation
+Payment Notification
+Request hash generation
+Return pages
+Successful and failed payment pages
+Account settings
+Company site’s settings
+Site status
+User roles
+How to check a payment status
+Automated invoicing of goods/services
+Workflow
+Appendices
+Error codes
+HTTP-protocol
+This is an old version of the API. Switch to the 
+new API version
+.
+Workflow
+A company (merchant) interacts with PayMaster in the following way:
+The merchant generates (or requests) a 
+payment order form
+ for PayMaster.
+The buyer submits this form to the Paymaster payment page.
+The merchant chooses a payment method on the PayMaster website.
+The system sends a pre-request to the merchant 
+Invoice Confirmation
+.
+The buyer completes the payment, the merchant receives a 
+Payment Notification
+.
+The buyer is returned to the 
+Success or Fail page
+ of the  merchant'swebsite.
+Language of the payment form
+The language of the payment form is primarily defined by the cookies stored on the buyer's computer. If there is no cookie, the language is determined by the buyer’s browser settings. If no language is specified in the browser settings or an unsupported language is selected, then 
+English language
+ will be used. The default language is 
+English
+.
+Payment order form
+To initiate a payment, this form is sent from the buyer’s browser (using the GET or POST method) to 
+https://paymaster.ru/payment/init
+ .
+Parameter | Mandatory | Description
+LMI_MERCHANT_ID | Yes | Website ID in PayMaster. You can find this ID in your Personal Account in the first column of the Website List page
+LMI_PAYMENT_AMOUNT | Yes | The payment amount to be received by the merchant from the buyer. The amount must be more than zero and the fractional part should be separated by a decimal point
+LMI_CURRENCY | Yes | Payment currency ID. Paymaster recognizes both the 3-letter currency code (RUB, EUR) and ISO codes
+LMI_PAYMENT_NO | No | In this field, the merchant sets the account number (purchase ID) in accordance with its accounting system. Although the parameter is not mandatory, we recommend you always set it. The ID must be a non-empty string
+LMI_PAYMENT_DESC | No(*) | A product or service description. It is generated by the merchant. The maximum length is 255 characters. It must contain either a LMI_PAYMENT_DESC or LMI_PAYMENT_DESC_BASE64 field!
+LMI_PAYMENT_DESC_BASE64 | No(*) | A product or service description in UTF-8 then encoded using the Base64 algorithm. It is generated by the merchant. If present, the decoded result will be substituted for LMI_PAYMENT_DESC. Due to this, the encoding on the merchant’s website does not matter. It must contain either a LMI_PAYMENT_DESC or LMI_PAYMENT_DESC_BASE64 field!
+LMI_SIM_MODE | No | An additional field that determines the type of test mode. It is only valid in test mode and it can take one of the following values: 0 or none: With this service, all test payments will be successful; 1 : With this service, all test payments will fail; 2 : About 80% of payment requests will be successful while the other 20% will fail
+LMI_PAYMENT_TYPE | No | HOLD is a pre-authorized payment (authorization held). The service will hold the authorization if the payment system allows it.
+LMI_INVOICE_CONFIRMATION_URL | No | If present, the Invoice Confirmation request will be sent to the specified URL (instead of the one in the settings). If URL replacement is disabled in the website settings, the system will ignore this parameter
+LMI_PAYMENT_NOTIFICATION_URL | No | If present, a Payment Confirmation request will be sent to the specified URL (instead of the one in the settings). If URL replacement is disabled in the website settings, the system will ignore this parameter
+LMI_SUCCESS_URL | No | If present and in case the payment is successful, the user will be sent to the specified URL (instead of the one in the settings). If URL replacement is disabled in the website settings, the system will ignore this parameter
+LMI_SUCCESS_METHOD | No | GET/POST, SuccessUrl method
+LMI_FAIL_URL | No | If present and in case the payment is canceled, the user will be sent to the specified URL (instead of the one in the settings). If URL replacement is disabled in the website settings, the system will ignore this parameter
+LMI_FAIL_METHOD | No | GET/POST, SuccessUrl method
+LMI_PAYER_PHONE_NUMBER | No | The buyer’s telephone number in international format without the leading ‘+’ (e.g. 79031234567). PayMaster will use this data to notify the user about the payment status. Also, some payment systems require a telephone number
+LMI_PAYER_EMAIL | No | The buyer’s e-mail. PayMaster will use this data to notify the user about the payment status. Also, some payment systems require an e-mail.
+LMI_EXPIRES | No | The date and time until the issued invoice is valid. The format is YYYY-MM-DDThh:mm:ss, UTC time zone.  PayMaster will make every effort to reject the payment upon expiration, but it cannot guarantee it.
+LMI_SHOP_ID | Yes (for integrators only) | Sub-merchant identifier. Mandatory if merchant works as an aggregator.
+LMI_PAYMENT_METHOD | No | ID of the payment method selected by the user. If absent, the user will need to select it later on the PayMaster payment page. A payment method is specified in square brackets next to the payment system name in the website settings (For example, Webmoney [WebMoney]).
+Additional merchant parameters | No | PayMaster automatically processes all the form fields without LMI_ and AP_ prefixes and, after the payment has occurred, the system transfers them to the merchant’s website
+Autoparameters
+When you transfer the request parameters and know in advance what parameters the payment system requires from the user, you can set their values. The parameter naming principle is as follows: if you want to transfer the custom Name parameter, you should transfer the AP_Name parameter in the 
+payment order form
+. The custom parameters will not be involved in further data exchange.
+Invoice Confirmation
+When the buyer has selected a payment system and is ready to make payment, PayMaster sends this HTTP POST request to the merchant’s web server URL indicated in the settings. Depending on the settings, the merchant may ignore the request or else they must reply to it. The encoding for requests is UTF-8.
+Parameter | Description
+LMI_PREREQUEST | The preflight request flag. The value is always "1"
+LMI_MERCHANT_ID | Website ID in PayMaster
+LMI_PAYMENT_NO | Invoice number specified in the payment request form
+LMI_PAYMENT_AMOUNT | Payment amount requested by the merchant. A fractional number separated with ".", no more than 2 characters after the separator
+LMI_CURRENCY | Payment currency requested by the merchant.
+LMI_PAID_AMOUNT | Payment amount in the currency used by the buyer to make payment. A fractional number separated with ".", no more than 2 characters after the separator.
+LMI_PAID_CURRENCY | The currency used to make payment. The currency inline code (not necessary ISO).
+LMI_PAYMENT_METHOD | Payment method (if specified in payment order).
+LMI_SIM_MODE | The test mode flag. This field is available only if the payment is made in test mode. The values are the same as in the payment order form
+LMI_PAYMENT_DESC | Payment description as it is shown to the user. That is, if the payment order form contained a value for LMI_PAYMENT_DESC64, this request will contain the description already decoded from Base64.
+Additional merchant parameters | Defined by the merchant. These include all additional fields from the payment order form
+In response to the request, the merchant’s website may generate a blank document or the message "YES" (case-insensitive) indicating that the merchant accepts the payment. Any other response from the merchant will be interpreted as a refusal to accept the payment and the user will receive an error message.
+Payment Notification
+If the payment is successful, PayMaster sends this HTTP POST request to the merchant. It is important to understand that the Payment Notification request is the only one that the merchant should take into account when considering whether a payment is accepted (provide a service, etc.)
+If the merchant for some reason could not process the Payment Notification correctly, they will have to deal with they user who paid money but did not receive the promised goods or services from the merchant.
+The system has an option to retry the Payment Notification request with the same values of key parameters in case the first attempt failed.
+Whatever these option settings are in the merchant’s personal account, you should check the LMI_PAYMENT_NO and LMI_SYS_PAYMENT_ID uniqueness in the notification sent by PayMaster and prevent repetition of services (re-shipment of goods) in case if you receive the Payment Notification with the same parameters.
+Also, with PayMaster, the merchant can verify the payment status by payment number, date, etc. (both interactively and programmatically).
+Parameter | Description
+LMI_MERCHANT_ID | Website ID in PayMaster.
+LMI_PAYMENT_NO | The merchant’s internal account number specified in the payment request
+LMI_SYS_PAYMENT_ID | Payment ID in PayMaster. The merchant is recommended to save this ID
+LMI_SYS_PAYMENT_DATE | Paymaster payment date. Format: YYYY-MM-DDThh:mm:ss, UTC time zone
+LMI_PAYMENT_AMOUNT | A decimal number separated by a period (.). Not more than two characters after the period
+LMI_CURRENCY | Payment currency requested by the merchant
+LMI_PAID_AMOUNT | Payment amount in the currency used by the buyer to make payment. A fractional number separated with ".", no more than 2 characters after the separator
+LMI_PAID_CURRENCY | The currency used to make payment. The currency inline code (not necessary ISO). For example: WMZ, YANDEX.RUB
+LMI_PAYMENT_METHOD | Payment method
+LMI_SIM_MODE | The test mode flag. This field is available only if the payment is made in test mode. The values are the same as in the payment order form
+LMI_PAYMENT_DESC | Payment description as it is shown to the user. That is, if the payment order form contained a value for LMI_PAYMENT_DESC64, this request will contain the description already decoded from Base64
+LMI_HASH | The request reference signature generated by the rules for generating a reference signature
+LMI_PAYER_IDENTIFIER | Buyer ID in the payment system (WMID, masked bank card number, etc.)
+LMI_PAYER_COUNTRY | The buyer’s country code for their location if the payment system provides it
+LMI_PAYER_PASSPORT_COUNTRY | The buyer’s citizenship country code if the payment system provides it
+LMI_PAYER_IP_ADDRESS | Buyer’s IP
+LMI_PAYMENT_SYSTEM | Payment gateway code.
+Additional merchant parameters | Defined by the merchant. These include all additional fields from the payment order form
+In response to this request, the merchant may return anything: PayMaster will ignore the response.
+If a network request transfer failure occurred, in your personal account you can configure the request to be re-sent.
+Request hash generation
+To ensure the request integrity, PayMaster generates a reference signature for the Payment Notification request according to the following rule:
+Place in one line the following parameters separated by ‘;’:
+LMI_MERCHANT_ID, LMI_PAYMENT_NO, LMI_SYS_PAYMENT_ID, LMI_SYS_PAYMENT_DATE, LMI_PAYMENT_AMOUNT, LMI_CURRENCY, LMI_PAID_AMOUNT, LMI_PAID_CURRENCY, LMI_PAYMENT_SYSTEM, LMI_SIM_MODE 
+(all of these are standard, except LMI_PAYMENT_DESC).
+If any parameter is not available, use an empty string instead of it. Note that LMI_SIM_MODE in live(!) mode is always considered empty.
+If the request is a Payment Status Notification, then LMI_PAYMENT_STATUS separated by a semicolon will be added to the parameters.
+An additional ‘;’ and a secret word from the website settings will be added into the string. The resulting string is interpreted as a UTF-8 byte array and the MD5 or SHA1 hash will be calculated from this string (depending on the method specified in the merchant’s settings).
+This hash (a sequence of bytes) will be transformed into a Base64 string. This string is the LMI_HASH value.
+We recommend using a signature generation tool to verify the correctness of the algorithm.
+Return pages
+Successful and failed payment pages
+Parameter | Description
+LMI_MERCHANT_ID | Website ID in PayMaster
+LMI_PAYMENT_NO | The merchant’s internal account number specified in the payment request
+LMI_SYS_PAYMENT_ID | Payment ID in PayMaster. The merchant is recommended to save this ID
+LMI_SYS_PAYMENT_DATE | Payment date in PayMaster. The format is YYYY-MM-DDThh:mm:ss, UTC time zone
+LMI_PAYMENT_AMOUNT | Payment amount requested by the merchant. A fractional number separated with ".", no more than 2 characters after the separator
+LMI_CURRENCY | Payment currency requested by the merchant
+Additional merchant parameters | Defined by the merchant. These include all additional fields from the payment order form
+Account settings
+Company site’s settings
+Parameter | Description
+State | The status of the website’s readiness to accept test or real payments (*)
+Secret Key | A secret word is set independently in the personal account (the Technical data section), the key should not contain any Cyrillic characters as well as special symbols like <, >, . The secret word is not transferred by the network and is used to generate a reference signature for the Payment Notification request.
+Check for account number duplicates | If this parameter is enabled, PayMaster will not allow sending payment requests with a duplicate (or missing) LMI_PAYMENT_NO. The system will immediately send the user the "wrong payment number" error and forward them to the Failure URL page
+User has to return to the site | If this feature is enabled, the Payment Notification will be sent only after the user returns to the merchant’s website. Prior to that, the payment will will be given the status "Paid". Payments with this status are paid to the merchant and are included in the register of payable transfers but not in the register of daily payments.
+Repeat the Payment Notification in case of failure | If the parameter is enabled, the Payment Notification will be repeated in case of network failures. Before enabling it, make sure that the funds will not be re-charged to the payer (fulfillment of the payment obligations) when the Payment Notification is received anew
+Result URL | URL where the Payment Notification request should be sent
+Invoice Confirmation URL | URL where the Invoice Confirmation request should be sent. If the parameter is disabled, it is considered equal to the Result URL (i. e. the request will be sent to the Result URL with LMI_PREREQUEST=1 flag)
+Success URL, method | URL of the successful payment page and the request methods (GET, POST)
+Failure URL, method | URL of the failed payment page and the request methods (GET, POST)
+Allow URL override | It is allowed to use the return URLs indicated in the payment request form.
+Signature Method | SHA1 or SHA256A is used to generate a hash
+Site status
+The site may be in one of five states:
+Test mode, waiting for approval
+Test mode
+Production mode
+Disconnected
+Blocked
+After the merchant has created a website and added the required data, it awaits verification. After PayMaster employees have verified the website, its status will be changed to Test. Then, the merchant’s authorized representatives may change its status to Production mode.
+User roles
+The merchant may give their employees access to the website and assign them one of the following roles:
+Role | Available actions
+Cashier | Can view a list of payments and issue invoices.
+Accountant | Has the cashier options + can view the website information, documents, the list of transfers, payment statistics, make refunds, and issue invoices.
+Programmer | Can view and edit the website settings, view the list of payments and the network exchange of transactions.
+Administrator | Has the accountant and programmer options + can change a website’s status and manage websites and users.
+How to check a payment status
+PayMaster provides the following ways to check the status of a payment by its number:
+Manually in the merchant’s personal account on the PayMaster website.
+By sending a REST HTTP request to the PayMaster server. You can find more information about the REST interfaces 
+here
+By searching for a payment in the successful payments file. Every day the service can (optional) send an email to the merchant’s email address with a list of transactions made (those with the Payment Notification generated and sent) and refunds for the previous period.
+Automated invoicing of goods/services
+Using PayMaster, companies/merchants can accept invoice based payments, greatly simplifying their operations with buyers. This is suitable for merchants who need to check the availability of goods before payment.
+Workflow
+Invoices are generated by sending a request to https://paymaster.ru/builtinpayment/initonly. The request parameters are the same as in the standard payment request form but they differ as follows:
+When generating invoices, the signature should contain the following parameters: LMI_MERCHANT_ID, LMI_PAYMENT_AMOUNT (the fractional part separated with a dot with two symbols required after it), LMI_CURRENCY, SecretKey (the value is set in the personal account). The values of these fields are separated with a semicolon (;) and placed in one line, then using the resulting UTF8-string, the SHA1 (\sha256\md5 depending on the Signature type option for the website) hash is calculated and then it is encoded with base64. PHP hash code when using SHA1:
+$authhash = base64_encode(sha1($str, true)), where $str is the string parameter. Pay attention that base64 is calculated from the hash byte array and not from its hex value.
+Appendices
+Error codes
+Code | Description
+-1 | Unknown error
+-2 | Unknown network error
+-5 | Payment system network error
+-6 | Access denied
+-7 | Invalid request signature
+-8 | The Merchant rejected the invoice
+-9 | Invoice expired
+-10 | Payment system failure
+-11 | Cannot refund
+-12 | The refund amount exceeds
+-13 | Identifier not found
+-14 | New request with the same nonce
+-15 | The payment timeout period has expired
+-16 | Simulation error by Merchant
+-17 | You have declined to pay
+-18 | Invalid payment amount
+-19 | Insufficient funds
+-20 | Internal error, refresh the page
+-21 | A previous payment is in progress
+-22 | Authorization denied by the payment system
+-23 | Action does not match the payment status
+-24 | Payment system is temporarily suspended
+-25 | 3Dsec authorization failed
+-26 | Incorrect card number
+-27 | Card expired
+-28 | Card blocked
+-29 | Payment amount limit exceeded
+-30 | Number of payments limit exceeded
+-31 | Invalid card transaction
+
+
+===== https://paymaster.ru/docs/en/restapi =====
+
+API PayMaster
+        NAV
+General information
+Authenticating requests
+Response format
+Methods of checking payment status
+Checking payment status by Payment ID
+Checking payment status by invoice ID
+Getting a list of payments
+Refunds
+Payment refund
+Getting a list of refunds
+Holds
+Confirm payment
+Payment cancellation
+Documents and payments
+List of documents
+Document download
+Getting a list of payments
+Getting a transfer register
+Directories
+Error codes
+Payment statuses
+Refund statuses
+General information
+This is an old version of the API. Switch to the 
+new API version
+.
+Interface method
+PayMaster's API methods are available via HTTP requests to the specific URLs.
+All the requests should be transmitted over TLS. The base endpoint address is 
+https://paymaster.ru
+Authenticating requests
+All requests are carried out on behalf of users that were created with the Automatic access login method. Users should have assigned the Cashier (acquiring a payment status and list of payments) or Accountant (Cashier + payment refund + list of refunds + confirmation and cancellation of holds) role. All requests must contain three fields: login, nonce, and hash, which are used to authenticate requests:
+login
+ - user login. This login cannot be used to enter the personal account: only to authenticate REST requests.
+password
+ - the user's password.
+nonce
+ - one-time request ticket. This is a free-form string containing no more than 255 characters and without ";". You should generate a one-time ticket for each request. This is done so that an intruder, even if they have intercepted the request once, cannot repeat it.
+hash
+ - hash of the request fields. The description of each request indicates what fields are to be hashed. The values of these fields are separated with a semicolon and placed in one line, then, using the resulting UTF8 string, the SHA1 hash is calculated, and then it is encoded with base64. If the request does not contain an optional parameter, but the latter participates in hashing, then a blank string should be inserted into the hash instead of it. PHP cashing code: $hash = base64_encode(sha1($str, true)), where $str is the parameter string.
+If the request signature (hash) is incorrect, PayMaster returns the error code -7 (see Error codes).
+Attention! When the GET string is generated, all parameters (especially the 
+hash
+) should be encoded with URL!
+Response format
+Response example:
+```
+{
+  "ErrorCode": 0,
+  "Payment": {
+    "PaymentID": 1,
+    "SiteInvoiceID": "12345",
+    "SiteID": 1,
+    "CurrencyCode": "RUB",
+    "Amount": 100,
+    "PaymentCurrencyCode": "RUB",
+    "PaymentAmount": 100,
+    "State": "COMPLETE",
+    "IsTestPayment": false,
+    "LastUpdateTime": "2013-05-22T18:08:52"
+  }
+}
+```
+In response to the request, PayMaster always returns HTTP code 200. If another code is returned, there has been a server error while parsing the request. PayMaster generates responses in the JSON format.
+All responses contain a numeric 
+ErrorCode
+ field equal to the request error code (see 
+Error codes
+). The parameters of request responses can be expanded by making the appropriate changes to the documentation. Write the response processing code in such as way as to take into account that you may receive additional fields.
+Methods of checking payment status
+Checking payment status by Payment ID
+Request example:
+```
+GET /api/v1/getPayment?login=TestLogin&nonce=74DF1SM&hash=***&paymentid=1 HTTP/1.1
+Host: paymaster.ru
+```
+Response example:
+```
+{
+  "ErrorCode": 0,
+  "Payment": {
+    "PaymentID": 1,
+    "SiteInvoiceID": "12345",
+    "SiteID": 1,
+    "CurrencyCode": "RUB",
+    "Amount": 100,
+    "PaymentMethod": "BankCard",
+    "PaymentCurrencyCode": "RUB",
+    "PaymentAmount": 100,
+    "State": "COMPLETE",
+    "Purpose": "Payment by order #12345",
+    "IsTestPayment": false,
+    "LastUpdateTime": "2017-05-22T18:08:52",
+    "ErrorCode": 0
+  }
+}
+```
+GET /api/v1/getPayment
+This request is used to receive the payment information according to its number in PayMaster.
+Request parameters
+First name | Description
+paymentID | Payment ID in PayMaster (LMI_SYS_PAYMENT_ID field)
+Hashed parameters: 
+login;password;nonce;paymentID
+Response parameters
+Parameter | Description
+State | Payment status, see List of payment statuses
+ErrorCode | Failure reason code, see Error codes
+Amount | Payment amount
+CurrencyCode | 3-letter ISO currency code
+IsTestPayment | Test payment indicator (the payment is made in test mode)
+LastUpdate ( LastUpdateTime for JSON) | Time of last status update. For completed payments, this is the payment completion time
+PaymentAmount | Paid amount
+PaymentCurrencyCode | Payment currency
+PaymentID | Payment ID
+PaymentMethod | Payment method
+Purpose | Payment notes
+SiteID | Payment recipient site ID
+SiteInvoiceID | Account number (LMI_PAYMENT_NO parameter)
+UserIdentifier | User identifier in the payment system
+UserPhoneNumber | Buyer's phone number
+Checking payment status by invoice ID
+Request example:
+```
+GET /api/v1/getPaymentByInvoiceID?login=TestLogin&nonce=74DF1SM&hash=***&invoiceid=1&siteAlias=yyy HTTP/1.1
+Host: paymaster.ru
+```
+Response example:
+```
+{
+  "ErrorCode": 0,
+  "Payment": {
+    "PaymentID": 1,
+    "SiteInvoiceID": "12345",
+    "SiteID": 1,
+    "CurrencyCode": "RUB",
+    "Amount": 100,
+    "PaymentMethod": "BankCard",
+    "PaymentCurrencyCode": "RUB",
+    "PaymentAmount": 100,
+    "State": "COMPLETE",
+    "Purpose": "Payment by order #12345",
+    "IsTestPayment": false,
+    "LastUpdateTime": "2017-05-22T18:08:52"
+  }
+}
+```
+GET /api/v1/getPaymentByInvoiceID
+This request is used to receive the payment information according to its number in the merchant's accounting system.
+Request parameters
+Parameter | Description
+invoiceID | Account number (LMI_PAYMENT_NO field)
+siteAlias | Site ID (LMI_MERCHANT_ID field)
+Hashed parameters: 
+login;password;nonce;invoiceID;siteAlias
+Response parameters
+See 
+Payment details
+Getting a list of payments
+Request example:
+```
+GET /api/v1/listPaymentsFilter?login=TestLogin&nonce=74DF1SM&hash=***&periodFrom=2011-12-01 HTTP/1.1
+Host: paymaster.ru
+```
+Response example:
+```
+{
+  "ErrorCode": 0,
+  "Response": {
+    "Overflow": false,
+    "Payments": [{
+        "PaymentID": 1,
+        "SiteInvoiceID": "12345",
+        "SiteID": 1,
+        "CurrencyCode": "RUB",
+        "Amount": 100,
+        "PaymentMethod": "BankCard",
+        "PaymentCurrencyCode": "RUB",
+        "PaymentAmount": 100,
+        "State": "COMPLETE",
+        "Purpose": "Payment by order #12345",
+        "IsTestPayment": false,
+        "LastUpdateTime": "2017-05-22T18:08:52"
+      }, {
+        "PaymentID": 2,
+        "SiteInvoiceID": "12346",
+        "SiteID": 1,
+        "CurrencyCode": "RUB",
+        "Amount": 100,
+        "PaymentMethod": "BankCard",
+        "PaymentCurrencyCode": "RUB",
+        "PaymentAmount": 100,
+        "State": "COMPLETE",
+        "Purpose": "Payment by order #12346",
+        "IsTestPayment": false,
+        "LastUpdateTime": "2017-05-22T18:08:52"
+      }
+    ]
+  }
+}
+```
+GET /api/v1/listPaymentsFilter
+This request is used to get a list of payments that meet the search criteria.
+Request parameters
+Parameter | Description
+accountID | account number in PayMaster. You can find this in the URL of the Account page in the personal account. You may not specify the accountID parameter if you have only one accoun
+siteAlias | site ID (LMI_MERCHANT_ID). If specified, only the payments of the given site will be returned
+periodFrom | the beginning of the time period (yyyy-MM-dd), UTC timezone. If specified, only payments after the specified date will be returned
+periodTo | the end of the time period (yyyy-MM-dd), UTC timezone. If specified, only payments before the specified date will be returned
+invoiceID | account number. If specified, only payments with the specified account number will be returned
+state | Payment status. If specified, only payments with the specified status will be returned
+Hashed parameters: 
+login;password;nonce;accountID;siteAlias;periodFrom;periodTo;invoiceID;state
+Response parameters
+Parameter | Description
+Overflow | "true" if the response does not include all payments that match the filter. If you do not need all the payments, narrow the search
+Payments | Payment list (see Payment details)
+Refunds
+Payment refund
+Request example:
+```
+POST /api/v1/refundPayment HTTP/1.1
+Host: paymaster.ru
+Content-Type: application/x-www-form-urlencoded
+login=TestLogin&nonce=74DF1SM&hash=***&paymentID=131212&amount=23.10
+```
+Response example:
+```
+{
+  "ErrorCode": 0,
+  "Refund": {
+    "RefundID": 1073969831,
+    "ExternalID": null,
+    "PaymentID": 131212,
+    "Amount": 23.10,
+    "ErrorCode": null,
+    "ErrorDesc": null,
+    "State": "EXECUTING"
+  }
+}
+```
+POST /api/v1/refundPayment
+This request is used to refund the payment.
+Request parameters
+Parameter | Description
+paymentID | Payment ID in PayMaster
+amount | Refund amount
+externalID | Optional refund ID in the merchant's system (a non-unique value is allowed)
+Response parameters
+Parameter | Description
+ExternalID | Refund operation ID
+PaymentID | Payment ID
+Status | Refund status, see List of refund statuses
+Amount | Refund amount
+Refund.ErrorCode | Error code if the refund is not successful (may be absent)
+Refund.ErrorDesc | Textual description of the error. The description may be absent if the specific reason for failure is unknown
+Getting a list of refunds
+Request example:
+```
+GET /api/v1/listRefunds?login=TestLogin&nonce=74DF1SM&hash=***&paymentID=131212&periodFrom=2017-01-01&periodTo=2017-11-11 HTTP/1.1
+Host: paymaster.ru
+```
+Response example:
+```
+{
+  "ErrorCode": 0,
+  "Response": {
+    "Overflow": false,
+    "Refunds": [{
+        "RefundID": 1234,
+        "ExternalID": null,
+        "PaymentID": 12345,
+        "Amount": 10.2,
+        "ErrorCode": null,
+        "ErrorDesc": null,
+        "LastUpdate": "2017-04-17T23:12:02",
+        "State": "SUCCESS"
+      }, {
+        "RefundID": 1236,
+        "ExternalID": null,
+        "PaymentID": 12346,
+        "Amount": 120,
+        "ErrorCode": -15,
+        "ErrorDesc": "we’ve been waiting for too long time",
+        "LastUpdate": "2017-04-17T12:15:02",
+        "State": "FAILURE"
+      }
+    ]
+  }
+}
+```
+GET /api/v1/listRefunds
+This request is used to get a list of refunds for the specified period.
+Request parameters
+Parameter | Description
+accountID | Account number in PayMaster
+paymentID | Payment ID. If available, only the refunds for this payment are returned
+periodFrom | The beginning of the time period (yyyy-mm-dd). If absent, there is no restriction for the earliest date
+periodTo | The end of the time period, inclusive (yyyy-mm-dd). If absent, there is no restriction for the latest date
+externalID | Optional refund ID in the merchant's system
+Hashed parameters: 
+login;password;nonce;accountID;paymentID;periodFrom;periodTo;externalID
+In this case, if the parameter is absent, an empty string (i.e. two consecutive semicolons) is inserted into the hashed string.  
+Response parameters
+Parameter | Description
+ErrorCode | Request error code (see Error codes )
+Overflow | True, if the full list of refunds is not returned. In this case, specify a narrower range for the search
+Refunds | Refund list. Each object is the same as the Response object of the first request
+Holds
+Confirm payment
+Request example:
+```
+POST /api/v1/confirmPayment HTTP/1.1
+Host: paymaster.ru
+Content-Type: application/x-www-form-urlencoded
+login=TestLogin&nonce=74DF1SM&hash=***&paymentID=1232&amount=11
+```
+Response example:
+```
+{
+  "ErrorCode": 0,
+  "Payment": {
+    "PaymentID": 1,
+    "SiteInvoiceID": "12345",
+    "SiteID": 1,
+    "CurrencyCode": "RUB",
+    "Amount": 100,
+    "PaymentMethod": "BankCard",
+    "PaymentCurrencyCode": "RUB",
+    "PaymentAmount": 100,
+    "State": "COMPLETE",
+    "Purpose": "Payment by order #12345",
+    "IsTestPayment": false,
+    "LastUpdateTime": "2017-05-22T18:08:52"
+  }
+}
+```
+POST /api/v1/confirmPayment
+This method is used to complete the payment with the held funds. In some cases, you can specify a smaller amount (than the holding value) to be charged.
+Request parameters
+Parameter | Description
+paymentID | Payment ID in PayMaster (LMI_SYS_PAYMENT_ID field)
+amount | Actual amount charged
+Hashed parameters: 
+login;password;nonce;paymentID;amount
+Payment cancellation
+Request example:
+```
+POST /api/v1/cancelPayment HTTP/1.1
+Host: paymaster.ru
+Content-Type: application/x-www-form-urlencoded
+login=TestLogin&nonce=74DF1SM&hash=***&paymentID=1232&error=-8
+```
+Response example:
+```
+{
+  "ErrorCode": 0,
+  "Payment": {
+    "PaymentID": 1,
+    "SiteInvoiceID": "12345",
+    "SiteID": 1,
+    "CurrencyCode": "RUB",
+    "Amount": 100,
+    "PaymentMethod": "BankCard",
+    "PaymentCurrencyCode": "RUB",
+    "PaymentAmount": 100,
+    "State": "COMPLETE",
+    "Purpose": "Payment by order #12345",
+    "IsTestPayment": false,
+    "LastUpdateTime": "2017-05-22T18:08:52"
+  }
+}
+```
+POST /api/v1/cancelPayment
+This request is used to cancel the hold and unblock the payer's funds.
+Request parameters
+Parameter | Description
+paymentID | Payment ID in PayMaster (LMI_SYS_PAYMENT_ID field)
+error | Optional parameter. Error code from the list of Error codes
+Hashed parameters: 
+login;password;nonce;paymentID;error
+Documents and payments
+List of documents
+Request example:
+```
+GET /api/v1/listDocuments?login=TestLogin&nonce=74DF1SM&hash=***&accountID=123&periodFrom=2005-02-17&periodTo=2013-06-17&xml=1 HTTP/1.1
+Host: paymaster.ru
+```
+Response example:
+```
+<RestController.RestResponse xmlns="http://schemas.datacontract.org/2004/07/PaymasterBackoffice.Controllers" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+  <ErrorCode>0</ErrorCode>
+  <Response xmlns:a="http://schemas.datacontract.org/2004/07/PaymasterBackoffice.Models.REST" i:type="a:RestDocumentList">
+    <a:Documents>
+      <a:RestDocumentInfo>
+        <a:Created>2013-06-17T12:57:03.6470638Z</a:Created>
+        <a:Description>Acceptance report, March 2012</a:Description>
+        <a:DocumentID>123456</a:DocumentID>
+        <a:FileName>act_052012.xls</a:FileName>
+      </a:RestDocumentInfo>
+      <a:RestDocumentInfo>
+        <a:Created>2013-06-17T12:57:03.6470638Z</a:Created>
+        <a:Description>Invoice #1123 for 05/2012</a:Description>
+        <a:DocumentID>123456</a:DocumentID>
+        <a:FileName>doc_052012.xls</a:FileName>
+      </a:RestDocumentInfo>
+    </a:Documents>
+  </Response>
+</RestController.RestResponse>
+```
+GET /api/v1/listDocuments
+This request can be used to obtain a list of documents for the specified period.
+Request parameters
+Parameter | Description
+accountID | Account number in PayMaster. You can find this in the URL of the Account page in the personal account
+periodFrom | The beginning of the time period (yyyy-MM-dd), UTC timezone. If specified, only documents created after the specified date will be returned
+periodTo | The beginning of the time period (yyyy-MM-dd), UTC timezone. If specified, only documents created before the specified date will be returned
+Hashed parameters: 
+login;password;nonce;accountID;periodFrom;periodTo
+Response parameters
+Parameter | Description
+Created | Document creation date
+Description | Document description
+DocumentID | Identifier for the content upload
+FileName | File name
+Document download
+Request example:
+```
+GET /api/v1/getDocumentContent?login=TestLogin&nonce=74DF1SM&hash=***&documentID=123456 HTTP/1.1
+Host: paymaster.ru
+```
+GET /api/v1/getDocumentContent
+This request can be used in order to download a document according to its identifier. The response includes the content of the document.
+Request parameters
+Parameter | Description
+documentID | Document ID
+Hashed parameters: 
+login;password;nonce;documentID
+Getting a list of payments
+Request example:
+```
+GET /api/v1/listTransfers?login=TestLogin&nonce=74DF1SM&hash=***&accountID=123&periodFrom=2005-02-17&periodTo=2013-06-17&xml=1 HTTP/1.1
+Host: paymaster.ru
+```
+Response example:
+```
+<RestController.RestResponse xmlns="http://schemas.datacontract.org/2004/07/PaymasterBackoffice.Controllers" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+  <ErrorCode>0</ErrorCode>
+  <Response xmlns:a="http://schemas.datacontract.org/2004/07/PaymasterBackoffice.Models.REST" i:type="a:RestTransferList">
+    <a:Transfers>
+      <a:RestTransferInfo>
+        <a:Created>2017-09-04T09:36:29.186576Z</a:Created>
+        <a:CurrencyCode>RUB</a:CurrencyCode>
+        <a:PaymentOrderID>11223/4</a:PaymentOrderID>
+        <a:RegisterID>54</a:RegisterID>
+        <a:TransferAmount>101150.00</a:TransferAmount>
+      </a:RestTransferInfo>
+      <a:RestTransferInfo>
+        <a:Created>2017-09-04T09:36:29.186576Z</a:Created>
+        <a:CurrencyCode>RUB</a:CurrencyCode>
+        <a:PaymentOrderID>11223/5</a:PaymentOrderID>
+        <a:RegisterID>55</a:RegisterID>
+        <a:TransferAmount>20000.00</a:TransferAmount>
+      </a:RestTransferInfo>
+    </a:Transfers>
+  </Response>
+</RestController.RestResponse>
+```
+GET /api/v1/listTransfers
+This request can be used to obtain a list of payments for the specified period.
+Request parameters
+Parameter | Description
+accountID | Account number in PayMaster. You can find this in the URL of the Account page in the personal account
+periodFrom | The beginning of the time period (yyyy-MM-dd), UTC timezone
+periodTo | The beginning of the time period (yyyy-MM-dd), UTC timezone
+Hashed parameters: 
+login;password;nonce;accountID;periodFrom;periodTo
+Response parameters
+Parameter | Description
+Created | Payment date
+CurrencyCode | Payment currency code
+TransferAmount | Payment amount
+PaymentOrderID | Number of the payment order
+RegisterID | Register ID
+Register upload, grouped by payments
+Getting a transfer register
+Request example:
+```
+GET /api/v1/getTransferRegister?login=TestLogin&nonce=74DF1SM&hash=***&registerID=123&xml=1 HTTP/1.1
+Host: paymaster.ru
+```
+Response example:
+```
+<RestController.RestResponse xmlns="http://schemas.datacontract.org/2004/07/PaymasterBackoffice.Controllers" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+  <ErrorCode>0</ErrorCode>
+  <Response xmlns:a="http://schemas.datacontract.org/2004/07/PaymasterBackoffice.Models.REST" i:type="a:RestRegisterInfo">
+    <a:Operations>
+      <a:RestRegisterOperationInfo>
+        <a:CurrencyCode>RUB</a:CurrencyCode>
+        <a:InvoiceID>SO223</a:InvoiceID>
+        <a:OperationAmount>1000.00</a:OperationAmount>
+        <a:OperationID>11022</a:OperationID>
+        <a:SiteAlias>96e809e9-8bce-40fd-86cb-d34db39b4668</a:SiteAlias>
+        <a:Stamp>2017-09-04T00:00:00Z</a:Stamp>
+        <a:TransferAmount>998.00</a:TransferAmount>
+      </a:RestRegisterOperationInfo>
+      <a:RestRegisterOperationInfo>
+        <a:CurrencyCode>RUB</a:CurrencyCode>
+        <a:InvoiceID>SO224</a:InvoiceID>
+        <a:OperationAmount>1500.00</a:OperationAmount>
+        <a:OperationID>11027</a:OperationID>
+        <a:SiteAlias>96e809e9-8bce-40fd-86cb-d34db39b4668</a:SiteAlias>
+        <a:Stamp>2017-09-04T00:00:00Z</a:Stamp>
+        <a:TransferAmount>1497.00</a:TransferAmount>
+      </a:RestRegisterOperationInfo>
+    </a:Operations>
+    <a:PeriodFrom>2017-09-03T00:00:00Z</a:PeriodFrom>
+    <a:PeriodTo>2017-09-04T00:00:00Z</a:PeriodTo>
+    <a:RegisterID>54</a:RegisterID>
+    <a:RegisterNumber>540/44</a:RegisterNumber>
+  </Response>
+</RestController.RestResponse>
+```
+GET /api/v1/getTransferRegister
+This request can be used to obtain a register that is used to pay funds.
+Request parameters
+Parameter | Description
+registerID | Register ID
+Hashed parameters: 
+login;password;nonce;registerID
+Response parameters
+Parameter | Description
+PeriodFrom | The beginning of the time period
+PeriodTo | The end of the time period
+RegisterNumber | Register number
+Operations | List of payments and refunds according to the register
+OperationID | Operation ID
+SiteAlias | Site ID (LMI_MERCHANT_ID field)
+InvoiceID | Merchant's account number
+Stamp | Operation date
+CurrencyCode | Operation currency code
+OperationAmount | Operation amount
+TransferAmount | Payment amount for the operation
+Directories
+Error codes
+Possible values of the 
+ErrorCode
+ field from PayMaster:
+Code | Description
+-1 | Unknown error. The PayMaster system failed. In case of a repeated failure, please contact Technical Support.
+-2 | Network error. The PayMaster system failed. In case of a repeated failure, please contact Technical Support.
+-6 | No access. The login is incorrect or does not have the necessary rights to the requested information.
+-7 | Invalid request signature. The generated hash is invalid.
+-8 | The merchant declined the payment at the pre-request stage.
+-9 | The account expired.
+-10 | The payment system declined the payment.
+-13 | Cannot find the payment according to the account number.
+-14 | Repeat the request with the same nonce.
+-15 | The payment expired or was cancelled.
+-17 | The user refused to pay.
+-18 | Incorrect amount value (in the case of refunds, this refers to the amount value).
+-19 | The user does not have enough funds to pay.
+-22 | Cannot log into the payment system.
+-25 | 3D Secure authorization failed
+-26 | Invalid card number
+-27 | Card expired
+-28 | Card blocked
+-29 | Payment amont limit exceeded
+-30 | Payment quantity ;imit exceeded
+-31 | Inadmissible card operation
+Payment statuses
+Status | Description
+INITIATED | Payment initiated
+PROCESSING | The payment is being processed
+COMPLETE | The payment has been completed successfully
+CANCELLED | The payment was unsuccessful
+HOLD | The funds are on hold
+Refund statuses
+Status | Description
+PENDING | Queued for the refund operation
+EXECUTING | Executing the payment refund transaction
+SUCCESS | The refund has been completed successfully
+FAILURE | The refund failed

@@ -1,0 +1,4567 @@
+
+
+===== docs.click.uz/additional/cms.md =====
+
+
+===== docs.click.uz/additional/example.md =====
+
+
+===== docs.click.uz/additional/get-info.md =====
+
+
+===== docs.click.uz/additional/get-info.md =====
+
+
+===== docs.click.uz/additional/mobile.md =====
+
+
+===== docs.click.uz/additional/shop-split.md =====
+
+
+===== docs.click.uz/additional/shop-split.md =====
+
+
+===== docs.click.uz/additional/telegram-payments.md =====
+
+
+===== docs.click.uz/additional/telegram-payments.md =====
+
+
+===== docs.click.uz/click-button/index.md =====
+
+
+===== docs.click.uz/click-button/index.md =====
+
+
+===== docs.click.uz/click-pay-by-card/index.md =====
+
+
+===== docs.click.uz/click-pay-by-card/index.md =====
+
+
+===== docs.click.uz/en/additional/cms.md =====
+
+
+===== docs.click.uz/en/additional/example.md =====
+
+
+===== docs.click.uz/en/additional/get-info.md =====
+Advanced Shop
+Getinfo Request (optional)
+getinfo-request-optional
+Request Parameters
+request-parameters
+Request Example
+request-example
+Header
+Body
+Response Parameters
+response-parameters
+Successful Response Example
+successful-response-example
+Unsuccessful Response Example
+unsuccessful-response-example
+Prepare Request
+prepare-request
+Request Parameters (CLICK → Merchant)
+request-parameters-click--merchant
+sign_string Formation
+sign_string-formation
+Request Example
+request-example-1
+Response Parameters
+response-parameters-1
+Successful Response Example
+successful-response-example-1
+Unsuccessful Response Example
+unsuccessful-response-example-1
+Complete Request
+complete-request
+Request Parameters
+request-parameters-1
+sign_string Formation
+sign_string-formation-1
+Request Example
+request-example-2
+Response Parameters
+response-parameters-2
+Successful Response Example
+successful-response-example-2
+Unsuccessful Response Example
+unsuccessful-response-example-2
+Check Request
+check-request
+Request Parameters
+request-parameters-2
+sign_string Formation
+sign_string-formation-2
+Request Example
+request-example-3
+Response Parameters
+response-parameters-3
+Possible status Field Values
+possible-status-field-values
+Successful Response Example
+successful-response-example-3
+Unsuccessful Response Example
+unsuccessful-response-example-3
+Compare Request
+compare-request
+Request Parameters
+request-parameters-3
+Request Example
+request-example-4
+Response Parameters
+response-parameters-4
+Successful Compare Response Example
+successful-compare-response-example
+Unsuccessful Compare Response Example
+unsuccessful-compare-response-example
+Parameters Reference
+parameters-reference
+Error Codes
+error-codes
+Error Codes (CLICK → Merchant)
+error-codes-click--merchant
+Error Codes (Merchant → CLICK)
+error-codes-merchant--click
+blockquote
+hr
+advanced-shop
+Advanced Shop
+
+getinfo-request-optional
+Getinfo Request (optional)
+
+Getinfo
+— a request to display necessary information to the CLICK system User before payment.
+
+
+request-parameters
+Request Parameters
+
+(from CLICK system → Merchant)
+
+#
+Parameter Name
+Data Type
+Description
+1
+service_id
+int
+Service ID
+2
+action
+int
+For Getinfo always
+0
+3
+params
+object
+Payment parameters. Object containing parameters in
+Key
+Value
+format
+
+
+[!NOTE]
+Standard parameter keys are defined in the
+Parameters Reference
+section.
+
+
+
+request-example
+Request Example
+
+Header
+
+language-http
+Content-Type: application/json; charset=utf-8
+
+Body
+
+language-json
+action
+service_id
+params
+contract
+***
+full_name
+***
+service_type
+***
+
+
+response-parameters
+Response Parameters
+
+(from Merchant → CLICK system)
+
+#
+Parameter Name
+Data Type
+Description
+1
+params
+object
+Parameters for displaying information to User in
+Key
+Value
+format
+2
+error
+int
+Request status code.
+0
+— success
+3
+error_note
+varchar
+Error code description
+
+
+successful-response-example
+Successful Response Example
+
+language-json
+error
+error_note
+Success
+params
+licshet
+***
+fio
+***
+address
+***
+period
+***
+
+
+unsuccessful-response-example
+Unsuccessful Response Example
+
+language-json
+error
+error_note
+Subscriber not found
+
+
+prepare-request
+Prepare Request
+
+request-parameters-click--merchant
+Request Parameters (CLICK → Merchant)
+
+#
+Parameter
+Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK system
+2
+attempt_trans_id
+int
+Request attempt ID
+3
+service_id
+int
+Service ID
+4
+action
+int
+For Prepare =
+1
+5
+params
+object
+Payment parameters
+6
+sign_time
+varchar
+Payment time (
+YYYY-MM-DD HH:mm:ss
+)
+7
+sign_string
+varchar
+MD5 signature
+
+sign_string-formation
+sign_string Formation
+
+MD5(click_paydoc_id + attempt_trans_id + service_id + SECRET_KEY + params + action + sign_time)
+
+Where:
+
+
+SECRET_KEY
+— unique key issued to Merchant upon connection
+
+params
+— all values of
+params
+object in original order
+
+
+request-example-1
+Request Example
+
+language-json
+action
+click_paydoc_id
+attempt_trans_id
+service_id
+sign_time
+2020-03-04 17:00:00
+sign_string
+***
+params
+contract
+***
+full_name
+***
+service_type
+***
+amount
+
+response-parameters-1
+Response Parameters
+
+(from Merchant → CLICK system)
+
+#
+Parameter Name
+Data Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK system
+2
+attempt_trans_id
+int
+Request attempt ID
+3
+merchant_prepare_id
+varchar
+Transaction ID in Merchant's billing system for confirmation. Optional parameter
+4
+params
+object
+Payment processing info parameters in
+Key
+Value
+format
+5
+error
+int
+Request status code.
+0
+— success. In case of error, an error code is returned
+6
+error_note
+varchar
+Request code description
+
+successful-response-example-1
+Successful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+merchant_prepare_id
+error
+error_note
+Success
+params
+branch_id
+payment_account
+***
+payment_mfo
+***
+transit_account
+***
+transit_mfo
+***
+
+unsuccessful-response-example-1
+Unsuccessful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+error
+error_note
+Error description
+
+
+complete-request
+Complete Request
+
+request-parameters-1
+Request Parameters
+
+#
+Parameter
+Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK
+2
+attempt_trans_id
+int
+Attempt ID
+3
+service_id
+int
+Service ID
+4
+action
+int
+For Confirm =
+2
+5
+merchant_prepare_id
+varchar
+ID from Prepare
+6
+params
+object
+Payment parameters
+7
+sign_time
+varchar
+Time
+8
+sign_string
+varchar
+MD5 signature
+
+sign_string-formation-1
+sign_string Formation
+
+MD5(click_paydoc_id + attempt_trans_id + service_id + SECRET_KEY + params + action + sign_time)
+
+request-example-2
+Request Example
+
+language-json
+action
+click_paydoc_id
+attempt_trans_id
+merchant_prepare_id
+service_id
+sign_time
+2020-03-04 17:00:00
+sign_string
+***
+params
+contract
+***
+full_name
+***
+service_type
+***
+amount
+
+response-parameters-2
+Response Parameters
+
+(from Merchant → CLICK system)
+
+#
+Parameter Name
+Data Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK system
+2
+attempt_trans_id
+int
+Request attempt ID
+3
+merchant_confirm_id
+varchar
+Transaction ID of payment completion in Merchant's billing system. Optional parameter
+4
+params
+object
+Payment completion info parameters in
+Key
+Value
+format
+5
+error
+int
+Request status code.
+0
+— success
+6
+error_note
+varchar
+Processing result description
+
+successful-response-example-2
+Successful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+merchant_confirm_id
+error
+error_note
+Success
+params
+***
+***
+
+unsuccessful-response-example-2
+Unsuccessful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+error
+error_note
+Error description
+
+
+check-request
+Check Request
+
+request-parameters-2
+Request Parameters
+
+(from CLICK system → Merchant)
+
+#
+Parameter Name
+Data Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK system
+2
+attempt_trans_id
+int
+Request attempt ID
+3
+service_id
+int
+Service ID
+4
+action
+int
+For Check always
+3
+5
+merchant_prepare_id
+varchar
+Payment ID in Merchants's billing system from
+Prepare
+request
+6
+params
+object
+Payment parameters in
+Key
+Value
+format
+7
+sign_time
+varchar
+Payment time. Format
+YYYY-MM-DD HH:mm:ss
+8
+sign_string
+varchar
+Verification string (MD5 signature)
+
+
+sign_string-formation-2
+sign_string Formation
+
+md5(click_paydoc_id + attempt_trans_id + service_id + SECRET_KEY + params + action + sign_time)
+
+
+request-example-3
+Request Example
+
+language-json
+action
+click_paydoc_id
+attempt_trans_id
+merchant_prepare_id
+service_id
+sign_time
+2020-03-04 17:00:00
+sign_string
+***
+params
+contract
+***
+full_name
+***
+service_type
+***
+amount
+
+
+response-parameters-3
+Response Parameters
+
+(from Merchant → CLICK system)
+
+#
+Parameter Name
+Data Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK system
+2
+attempt_trans_id
+int
+Request attempt ID
+3
+params
+object
+Payment verification info parameters
+4
+error
+int
+Request status code.
+0
+— success
+5
+error_note
+varchar
+Processing result description
+6
+status
+int
+Payment processing status
+
+
+possible-status-field-values
+Possible status Field Values
+
+Value
+Description
+0
+Request not yet processed (CLICK will retry payment)
+1
+Unsuccessful processing attempt (CLICK will cancel payment)
+2
+Request successfully processed (CLICK will mark payment as successful)
+
+
+successful-response-example-3
+Successful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+merchant_confirm_id
+error
+error_note
+Success
+status
+params
+***
+***
+
+
+unsuccessful-response-example-3
+Unsuccessful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+error
+error_note
+Error description
+
+compare-request
+Compare Request
+
+request-parameters-3
+Request Parameters
+
+#
+Parameter
+Type
+Description
+1
+service_id
+int
+Service ID
+2
+action
+int
+For Compare =
+4
+3
+from_date
+varchar
+Start date
+4
+till_date
+varchar
+End date
+
+request-example-4
+Request Example
+
+language-json
+action
+service_id
+from_date
+2020-03-03 00:00:00
+till_date
+2020-03-04 00:00:00
+
+
+response-parameters-4
+Response Parameters
+
+(from Merchant → CLICK system)
+
+#
+Parameter Name
+Data Type
+Description
+1
+requests
+object
+Payment registry
+2
+params
+object
+Parameters of each payment in the payment registry in
+Key
+Value
+format
+3
+error
+int
+Request status code.
+0
+— success. In case of error, an error code is returned
+4
+error_note
+varchar
+Payment completion code description
+
+successful-compare-response-example
+Successful Compare Response Example
+
+language-json
+error
+error_note
+Success
+requests
+123
+click_paydoc_id
+params
+contract
+***
+full_name
+***
+service_type
+***
+amount
+
+unsuccessful-compare-response-example
+Unsuccessful Compare Response Example
+
+language-json
+error
+error_note
+Error description
+
+parameters-reference
+Parameters Reference
+
+Parameter
+Description
+branch_id
+Branch ID
+payment_account
+Branch settlement account
+payment_mfo
+Branch settlement account MFO
+transit_account
+Branch transit account
+transit_mfo
+Branch transit account MFO
+account
+Subscriber personal account
+act_num
+Resolution number
+address
+Address
+amount
+Amount
+apart_num
+Apartment number
+birthday
+Date of birth
+caller_id
+Subscriber ID
+card_num
+Card number
+category
+Category
+contract
+Contract number
+credit_id
+Credit ID
+cross_phone
+Cross-connected number
+date
+Date
+email
+Email address
+full_name
+Full name
+house_num
+House number
+internet_package
+Internet package
+invoice
+Invoice
+login
+Login
+order_num
+Order number
+phone_num
+Phone number
+property_id
+Cadastral number
+receipt_num
+Receipt number
+region
+Region
+security_code
+Security code
+service_type
+Service type
+TIN
+TIN
+
+
+error-codes
+Error Codes
+
+error-codes-click--merchant
+Error Codes (CLICK → Merchant)
+
+error
+error_note
+Description
+0
+Success
+Operation completed successfully
+< 0
+Error
+On negative error code, payment must be cancelled and returned with code
+-9
+
+
+error-codes-merchant--click
+Error Codes (Merchant → CLICK)
+
+error
+error_note
+Description
+0
+Success
+Successful request
+-1
+SIGN CHECK FAILED!
+Signature verification error
+-2
+Incorrect parameter amount
+Invalid payment amount
+-3
+Action not found
+Action not found
+-4
+Already paid
+Transaction previously confirmed
+-5
+User does not exist by params
+User not found
+-6
+Transaction does not exist
+Transaction not found
+-7
+Failed to update user
+Failed to update data
+-8
+Error in request from click
+Error in request from CLICK
+-9
+Transaction cancelled
+Transaction cancelled
+function
+function
+
+===== docs.click.uz/en/additional/get-info.md =====
+Advanced Shop
+Getinfo Request (optional)
+getinfo-request-optional
+Request Parameters
+request-parameters
+Request Example
+request-example
+Header
+Body
+Response Parameters
+response-parameters
+Successful Response Example
+successful-response-example
+Unsuccessful Response Example
+unsuccessful-response-example
+Prepare Request
+prepare-request
+Request Parameters (CLICK → Merchant)
+request-parameters-click--merchant
+sign_string Formation
+sign_string-formation
+Request Example
+request-example-1
+Response Parameters
+response-parameters-1
+Successful Response Example
+successful-response-example-1
+Unsuccessful Response Example
+unsuccessful-response-example-1
+Complete Request
+complete-request
+Request Parameters
+request-parameters-1
+sign_string Formation
+sign_string-formation-1
+Request Example
+request-example-2
+Response Parameters
+response-parameters-2
+Successful Response Example
+successful-response-example-2
+Unsuccessful Response Example
+unsuccessful-response-example-2
+Check Request
+check-request
+Request Parameters
+request-parameters-2
+sign_string Formation
+sign_string-formation-2
+Request Example
+request-example-3
+Response Parameters
+response-parameters-3
+Possible status Field Values
+possible-status-field-values
+Successful Response Example
+successful-response-example-3
+Unsuccessful Response Example
+unsuccessful-response-example-3
+Compare Request
+compare-request
+Request Parameters
+request-parameters-3
+Request Example
+request-example-4
+Response Parameters
+response-parameters-4
+Successful Compare Response Example
+successful-compare-response-example
+Unsuccessful Compare Response Example
+unsuccessful-compare-response-example
+Parameters Reference
+parameters-reference
+Error Codes
+error-codes
+Error Codes (CLICK → Merchant)
+error-codes-click--merchant
+Error Codes (Merchant → CLICK)
+error-codes-merchant--click
+blockquote
+hr
+advanced-shop
+Advanced Shop
+
+getinfo-request-optional
+Getinfo Request (optional)
+
+Getinfo
+— a request to display necessary information to the CLICK system User before payment.
+
+
+request-parameters
+Request Parameters
+
+(from CLICK system → Merchant)
+
+#
+Parameter Name
+Data Type
+Description
+1
+service_id
+int
+Service ID
+2
+action
+int
+For Getinfo always
+0
+3
+params
+object
+Payment parameters. Object containing parameters in
+Key
+Value
+format
+
+
+[!NOTE]
+Standard parameter keys are defined in the
+Parameters Reference
+section.
+
+
+
+request-example
+Request Example
+
+Header
+
+language-http
+Content-Type: application/json; charset=utf-8
+
+Body
+
+language-json
+action
+service_id
+params
+contract
+***
+full_name
+***
+service_type
+***
+
+
+response-parameters
+Response Parameters
+
+(from Merchant → CLICK system)
+
+#
+Parameter Name
+Data Type
+Description
+1
+params
+object
+Parameters for displaying information to User in
+Key
+Value
+format
+2
+error
+int
+Request status code.
+0
+— success
+3
+error_note
+varchar
+Error code description
+
+
+successful-response-example
+Successful Response Example
+
+language-json
+error
+error_note
+Success
+params
+licshet
+***
+fio
+***
+address
+***
+period
+***
+
+
+unsuccessful-response-example
+Unsuccessful Response Example
+
+language-json
+error
+error_note
+Subscriber not found
+
+
+prepare-request
+Prepare Request
+
+request-parameters-click--merchant
+Request Parameters (CLICK → Merchant)
+
+#
+Parameter
+Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK system
+2
+attempt_trans_id
+int
+Request attempt ID
+3
+service_id
+int
+Service ID
+4
+action
+int
+For Prepare =
+1
+5
+params
+object
+Payment parameters
+6
+sign_time
+varchar
+Payment time (
+YYYY-MM-DD HH:mm:ss
+)
+7
+sign_string
+varchar
+MD5 signature
+
+sign_string-formation
+sign_string Formation
+
+MD5(click_paydoc_id + attempt_trans_id + service_id + SECRET_KEY + params + action + sign_time)
+
+Where:
+
+
+SECRET_KEY
+— unique key issued to Merchant upon connection
+
+params
+— all values of
+params
+object in original order
+
+
+request-example-1
+Request Example
+
+language-json
+action
+click_paydoc_id
+attempt_trans_id
+service_id
+sign_time
+2020-03-04 17:00:00
+sign_string
+***
+params
+contract
+***
+full_name
+***
+service_type
+***
+amount
+
+response-parameters-1
+Response Parameters
+
+(from Merchant → CLICK system)
+
+#
+Parameter Name
+Data Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK system
+2
+attempt_trans_id
+int
+Request attempt ID
+3
+merchant_prepare_id
+varchar
+Transaction ID in Merchant's billing system for confirmation. Optional parameter
+4
+params
+object
+Payment processing info parameters in
+Key
+Value
+format
+5
+error
+int
+Request status code.
+0
+— success. In case of error, an error code is returned
+6
+error_note
+varchar
+Request code description
+
+successful-response-example-1
+Successful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+merchant_prepare_id
+error
+error_note
+Success
+params
+branch_id
+payment_account
+***
+payment_mfo
+***
+transit_account
+***
+transit_mfo
+***
+
+unsuccessful-response-example-1
+Unsuccessful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+error
+error_note
+Error description
+
+
+complete-request
+Complete Request
+
+request-parameters-1
+Request Parameters
+
+#
+Parameter
+Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK
+2
+attempt_trans_id
+int
+Attempt ID
+3
+service_id
+int
+Service ID
+4
+action
+int
+For Confirm =
+2
+5
+merchant_prepare_id
+varchar
+ID from Prepare
+6
+params
+object
+Payment parameters
+7
+sign_time
+varchar
+Time
+8
+sign_string
+varchar
+MD5 signature
+
+sign_string-formation-1
+sign_string Formation
+
+MD5(click_paydoc_id + attempt_trans_id + service_id + SECRET_KEY + params + action + sign_time)
+
+request-example-2
+Request Example
+
+language-json
+action
+click_paydoc_id
+attempt_trans_id
+merchant_prepare_id
+service_id
+sign_time
+2020-03-04 17:00:00
+sign_string
+***
+params
+contract
+***
+full_name
+***
+service_type
+***
+amount
+
+response-parameters-2
+Response Parameters
+
+(from Merchant → CLICK system)
+
+#
+Parameter Name
+Data Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK system
+2
+attempt_trans_id
+int
+Request attempt ID
+3
+merchant_confirm_id
+varchar
+Transaction ID of payment completion in Merchant's billing system. Optional parameter
+4
+params
+object
+Payment completion info parameters in
+Key
+Value
+format
+5
+error
+int
+Request status code.
+0
+— success
+6
+error_note
+varchar
+Processing result description
+
+successful-response-example-2
+Successful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+merchant_confirm_id
+error
+error_note
+Success
+params
+***
+***
+
+unsuccessful-response-example-2
+Unsuccessful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+error
+error_note
+Error description
+
+
+check-request
+Check Request
+
+request-parameters-2
+Request Parameters
+
+(from CLICK system → Merchant)
+
+#
+Parameter Name
+Data Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK system
+2
+attempt_trans_id
+int
+Request attempt ID
+3
+service_id
+int
+Service ID
+4
+action
+int
+For Check always
+3
+5
+merchant_prepare_id
+varchar
+Payment ID in Merchants's billing system from
+Prepare
+request
+6
+params
+object
+Payment parameters in
+Key
+Value
+format
+7
+sign_time
+varchar
+Payment time. Format
+YYYY-MM-DD HH:mm:ss
+8
+sign_string
+varchar
+Verification string (MD5 signature)
+
+
+sign_string-formation-2
+sign_string Formation
+
+md5(click_paydoc_id + attempt_trans_id + service_id + SECRET_KEY + params + action + sign_time)
+
+
+request-example-3
+Request Example
+
+language-json
+action
+click_paydoc_id
+attempt_trans_id
+merchant_prepare_id
+service_id
+sign_time
+2020-03-04 17:00:00
+sign_string
+***
+params
+contract
+***
+full_name
+***
+service_type
+***
+amount
+
+
+response-parameters-3
+Response Parameters
+
+(from Merchant → CLICK system)
+
+#
+Parameter Name
+Data Type
+Description
+1
+click_paydoc_id
+int
+Payment ID in CLICK system
+2
+attempt_trans_id
+int
+Request attempt ID
+3
+params
+object
+Payment verification info parameters
+4
+error
+int
+Request status code.
+0
+— success
+5
+error_note
+varchar
+Processing result description
+6
+status
+int
+Payment processing status
+
+
+possible-status-field-values
+Possible status Field Values
+
+Value
+Description
+0
+Request not yet processed (CLICK will retry payment)
+1
+Unsuccessful processing attempt (CLICK will cancel payment)
+2
+Request successfully processed (CLICK will mark payment as successful)
+
+
+successful-response-example-3
+Successful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+merchant_confirm_id
+error
+error_note
+Success
+status
+params
+***
+***
+
+
+unsuccessful-response-example-3
+Unsuccessful Response Example
+
+language-json
+click_paydoc_id
+attempt_trans_id
+error
+error_note
+Error description
+
+compare-request
+Compare Request
+
+request-parameters-3
+Request Parameters
+
+#
+Parameter
+Type
+Description
+1
+service_id
+int
+Service ID
+2
+action
+int
+For Compare =
+4
+3
+from_date
+varchar
+Start date
+4
+till_date
+varchar
+End date
+
+request-example-4
+Request Example
+
+language-json
+action
+service_id
+from_date
+2020-03-03 00:00:00
+till_date
+2020-03-04 00:00:00
+
+
+response-parameters-4
+Response Parameters
+
+(from Merchant → CLICK system)
+
+#
+Parameter Name
+Data Type
+Description
+1
+requests
+object
+Payment registry
+2
+params
+object
+Parameters of each payment in the payment registry in
+Key
+Value
+format
+3
+error
+int
+Request status code.
+0
+— success. In case of error, an error code is returned
+4
+error_note
+varchar
+Payment completion code description
+
+successful-compare-response-example
+Successful Compare Response Example
+
+language-json
+error
+error_note
+Success
+requests
+123
+click_paydoc_id
+params
+contract
+***
+full_name
+***
+service_type
+***
+amount
+
+unsuccessful-compare-response-example
+Unsuccessful Compare Response Example
+
+language-json
+error
+error_note
+Error description
+
+parameters-reference
+Parameters Reference
+
+Parameter
+Description
+branch_id
+Branch ID
+payment_account
+Branch settlement account
+payment_mfo
+Branch settlement account MFO
+transit_account
+Branch transit account
+transit_mfo
+Branch transit account MFO
+account
+Subscriber personal account
+act_num
+Resolution number
+address
+Address
+amount
+Amount
+apart_num
+Apartment number
+birthday
+Date of birth
+caller_id
+Subscriber ID
+card_num
+Card number
+category
+Category
+contract
+Contract number
+credit_id
+Credit ID
+cross_phone
+Cross-connected number
+date
+Date
+email
+Email address
+full_name
+Full name
+house_num
+House number
+internet_package
+Internet package
+invoice
+Invoice
+login
+Login
+order_num
+Order number
+phone_num
+Phone number
+property_id
+Cadastral number
+receipt_num
+Receipt number
+region
+Region
+security_code
+Security code
+service_type
+Service type
+TIN
+TIN
+
+
+error-codes
+Error Codes
+
+error-codes-click--merchant
+Error Codes (CLICK → Merchant)
+
+error
+error_note
+Description
+0
+Success
+Operation completed successfully
+< 0
+Error
+On negative error code, payment must be cancelled and returned with code
+-9
+
+
+error-codes-merchant--click
+Error Codes (Merchant → CLICK)
+
+error
+error_note
+Description
+0
+Success
+Successful request
+-1
+SIGN CHECK FAILED!
+Signature verification error
+-2
+Incorrect parameter amount
+Invalid payment amount
+-3
+Action not found
+Action not found
+-4
+Already paid
+Transaction previously confirmed
+-5
+User does not exist by params
+User not found
+-6
+Transaction does not exist
+Transaction not found
+-7
+Failed to update user
+Failed to update data
+-8
+Error in request from click
+Error in request from CLICK
+-9
+Transaction cancelled
+Transaction cancelled
+function
+function
+
+===== docs.click.uz/en/additional/mobile.md =====
+
+
+===== docs.click.uz/en/additional/shop-split.md =====
+
+
+===== docs.click.uz/en/additional/shop-split.md =====
+
+
+===== docs.click.uz/en/additional/telegram-payments.md =====
+
+
+===== docs.click.uz/en/additional/telegram-payments.md =====
+
+
+===== docs.click.uz/en/click-button/index.md =====
+
+
+===== docs.click.uz/en/click-button/index.md =====
+
+
+===== docs.click.uz/en/click-pay-by-card/index.md =====
+
+
+===== docs.click.uz/en/click-pay-by-card/index.md =====
+
+
+===== docs.click.uz/en/getting-started/index.md =====
+
+
+===== docs.click.uz/en/getting-started/index.md =====
+
+
+===== docs.click.uz/en/merchant-api/click-pass.md =====
+
+
+===== docs.click.uz/en/merchant-api/click-pass.md =====
+
+
+===== docs.click.uz/en/merchant-api/errors.md =====
+Merchant API — Errors
+merchant-api--errors
+Merchant API — Errors
+
+Authentication and other errors related to API are returned using standard HTTP Status Codes.
+
+right
+#
+center
+HTTP Code
+Description
+right
+1
+center
+200
+OK
+right
+2
+center
+201
+OK
+right
+3
+center
+400
+Bad Request — malformed or invalid request
+right
+4
+center
+401
+Not Authorized — not authorized
+right
+5
+center
+403
+Forbidden — access denied
+right
+6
+center
+404
+Not Found — resource not found
+right
+7
+center
+406
+Not Acceptable — unacceptable request format
+right
+8
+center
+410
+Gone — resource is no longer available
+right
+9
+center
+500
+Internal Server Error — internal server error
+right
+10
+center
+502
+Service Unavailable — service unavailable or under maintenance
+function
+function
+
+===== docs.click.uz/en/merchant-api/errors.md =====
+Merchant API — Errors
+merchant-api--errors
+Merchant API — Errors
+
+Authentication and other errors related to API are returned using standard HTTP Status Codes.
+
+right
+#
+center
+HTTP Code
+Description
+right
+1
+center
+200
+OK
+right
+2
+center
+201
+OK
+right
+3
+center
+400
+Bad Request — malformed or invalid request
+right
+4
+center
+401
+Not Authorized — not authorized
+right
+5
+center
+403
+Forbidden — access denied
+right
+6
+center
+404
+Not Found — resource not found
+right
+7
+center
+406
+Not Acceptable — unacceptable request format
+right
+8
+center
+410
+Gone — resource is no longer available
+right
+9
+center
+500
+Internal Server Error — internal server error
+right
+10
+center
+502
+Service Unavailable — service unavailable or under maintenance
+function
+function
+
+===== docs.click.uz/en/merchant-api/fiscalization.md =====
+
+
+===== docs.click.uz/en/merchant-api/fiscalization.md =====
+
+
+===== docs.click.uz/en/merchant-api/index.md =====
+Overview of Merchant API for invoice creation, status checks, and payment cancellation.
+Merchant API — Overview
+General Provisions
+general-provisions
+Terms and Definitions
+terms-and-definitions
+CLICK System
+click-system
+Merchant
+merchant
+User
+user
+Merchant Services
+merchant-services
+hr
+merchant-api--overview
+Merchant API — Overview
+
+general-provisions
+General Provisions
+
+CLICK-API-MERCHANT-INVOICE Interface is used to:
+
+
+Place invoice requests to a user by a Merchant through Internet
+
+Check the status of the issued invoice
+
+Cancel payment
+
+
+
+terms-and-definitions
+Terms and Definitions
+
+click-system
+CLICK System
+
+CLICK payment system — a system that allows payments via:
+
+
+Mobile phone (through
+USSD / SMS-portal
+)
+
+Internet (through
+WEB / WEB-mobile
+)
+
+
+CLICK system provides the ability to:
+
+
+Pay for services of cellular operators and Internet providers
+
+Transfer funds to other individuals
+
+Pay for goods and services of trade and service enterprises
+
+Make online purchases in online stores from accounts opened in the bank
+
+
+
+merchant
+Merchant
+
+Merchant
+— a legal entity that sells goods or services to Users.
+
+
+user
+User
+
+User
+— an individual connected to the CLICK payment system.
+
+
+merchant-services
+Merchant Services
+
+Merchant Services
+— objects of Merchant's implementation. Services can be both
+services
+and
+goods
+available for payment through the CLICK system.
+
+center
+img
+/diagrams/merchant-light-en.drawio.svg
+800
+vp-light
+
+center
+img
+/diagrams/merchant-dark-en.drawio.svg
+800
+vp-dark
+function
+function
+
+===== docs.click.uz/en/merchant-api/index.md =====
+Overview of Merchant API for invoice creation, status checks, and payment cancellation.
+Merchant API — Overview
+General Provisions
+general-provisions
+Terms and Definitions
+terms-and-definitions
+CLICK System
+click-system
+Merchant
+merchant
+User
+user
+Merchant Services
+merchant-services
+hr
+merchant-api--overview
+Merchant API — Overview
+
+general-provisions
+General Provisions
+
+CLICK-API-MERCHANT-INVOICE Interface is used to:
+
+
+Place invoice requests to a user by a Merchant through Internet
+
+Check the status of the issued invoice
+
+Cancel payment
+
+
+
+terms-and-definitions
+Terms and Definitions
+
+click-system
+CLICK System
+
+CLICK payment system — a system that allows payments via:
+
+
+Mobile phone (through
+USSD / SMS-portal
+)
+
+Internet (through
+WEB / WEB-mobile
+)
+
+
+CLICK system provides the ability to:
+
+
+Pay for services of cellular operators and Internet providers
+
+Transfer funds to other individuals
+
+Pay for goods and services of trade and service enterprises
+
+Make online purchases in online stores from accounts opened in the bank
+
+
+
+merchant
+Merchant
+
+Merchant
+— a legal entity that sells goods or services to Users.
+
+
+user
+User
+
+User
+— an individual connected to the CLICK payment system.
+
+
+merchant-services
+Merchant Services
+
+Merchant Services
+— objects of Merchant's implementation. Services can be both
+services
+and
+goods
+available for payment through the CLICK system.
+
+center
+img
+/diagrams/merchant-light-en.drawio.svg
+800
+vp-light
+
+center
+img
+/diagrams/merchant-dark-en.drawio.svg
+800
+vp-dark
+function
+function
+
+
+
+===== docs.click.uz/en/shop-api/errors.md =====
+
+
+===== docs.click.uz/en/shop-api/errors.md =====
+
+
+===== docs.click.uz/en/shop-api/index.md =====
+
+
+===== docs.click.uz/en/shop-api/index.md =====
+
+
+
+
+===== docs.click.uz/getting-started/index.md =====
+/
+Обзор интерфейсов оплаты CLICK и общей схемы взаимодействия с системой поставщика.
+Интерфейсы оплаты подразделяются на две категории
+Интерфейсы оплаты
+интерфейсы-оплаты
+Интерфейсы оплаты поставщика
+интерфейсы-оплаты-поставщика
+Схема взаимодействия
+схема-взаимодействия
+интерфейсы-оплаты-подразделяются-на-две-категории
+Интерфейсы оплаты подразделяются на две категории
+
+интерфейсы-оплаты
+Интерфейсы оплаты
+
+
+Мобильное приложение CLICK SuperApp
+
+Web-сервис оплаты my.click.uz
+
+USSD-сервис
+
+Telegram-бот
+
+
+интерфейсы-оплаты-поставщика
+Интерфейсы оплаты поставщика
+
+
+Сайт поставщика
+
+Мобильное приложение поставщика
+
+
+схема-взаимодействия
+Схема взаимодействия
+
+center
+img
+/diagrams/overview-ru-light.drawio.svg
+800
+vp-light
+
+center
+img
+/diagrams/overview-ru-dark.drawio.svg
+800
+vp-dark
+
+При удовлетворении требований к биллинг системе поставщика
+(реализация запросов
+Prepare
+и
+Complete
+, описанных в разделе
+SHOP API
+)
+услуги поставщика могут быть доступны для оплаты
+через любой из интерфейсов оплаты.
+function
+function
+
+===== docs.click.uz/getting-started/index.md =====
+/
+Обзор интерфейсов оплаты CLICK и общей схемы взаимодействия с системой поставщика.
+Интерфейсы оплаты подразделяются на две категории
+Интерфейсы оплаты
+интерфейсы-оплаты
+Интерфейсы оплаты поставщика
+интерфейсы-оплаты-поставщика
+Схема взаимодействия
+схема-взаимодействия
+интерфейсы-оплаты-подразделяются-на-две-категории
+Интерфейсы оплаты подразделяются на две категории
+
+интерфейсы-оплаты
+Интерфейсы оплаты
+
+
+Мобильное приложение CLICK SuperApp
+
+Web-сервис оплаты my.click.uz
+
+USSD-сервис
+
+Telegram-бот
+
+
+интерфейсы-оплаты-поставщика
+Интерфейсы оплаты поставщика
+
+
+Сайт поставщика
+
+Мобильное приложение поставщика
+
+
+схема-взаимодействия
+Схема взаимодействия
+
+center
+img
+/diagrams/overview-ru-light.drawio.svg
+800
+vp-light
+
+center
+img
+/diagrams/overview-ru-dark.drawio.svg
+800
+vp-dark
+
+При удовлетворении требований к биллинг системе поставщика
+(реализация запросов
+Prepare
+и
+Complete
+, описанных в разделе
+SHOP API
+)
+услуги поставщика могут быть доступны для оплаты
+через любой из интерфейсов оплаты.
+function
+function
+
+===== docs.click.uz/merchant-api/click-pass.md =====
+
+
+===== docs.click.uz/merchant-api/click-pass.md =====
+
+
+===== docs.click.uz/merchant-api/errors.md =====
+Errors
+errors
+Errors
+
+Аутентификация и другие ошибки, связанные с API, возвращаются с использованием стандартных HTTP-кодов состояния.
+
+right
+№
+center
+HTTP код
+Описание
+right
+1
+center
+200
+OK
+right
+2
+center
+201
+OK
+right
+3
+center
+400
+Bad Request — плохой или неверный запрос
+right
+4
+center
+401
+Not Authorized — не авторизован
+right
+5
+center
+403
+Forbidden — доступ запрещён
+right
+6
+center
+404
+Not Found — ресурс не найден
+right
+7
+center
+406
+Not Acceptable — неприемлемый формат запроса
+right
+8
+center
+410
+Gone — ресурс более недоступен
+right
+9
+center
+500
+Internal Server Error — внутренняя ошибка сервера
+right
+10
+center
+502
+Service Unavailable — сервис недоступен или находится на обновлении
+function
+function
+
+===== docs.click.uz/merchant-api/errors.md =====
+Errors
+errors
+Errors
+
+Аутентификация и другие ошибки, связанные с API, возвращаются с использованием стандартных HTTP-кодов состояния.
+
+right
+№
+center
+HTTP код
+Описание
+right
+1
+center
+200
+OK
+right
+2
+center
+201
+OK
+right
+3
+center
+400
+Bad Request — плохой или неверный запрос
+right
+4
+center
+401
+Not Authorized — не авторизован
+right
+5
+center
+403
+Forbidden — доступ запрещён
+right
+6
+center
+404
+Not Found — ресурс не найден
+right
+7
+center
+406
+Not Acceptable — неприемлемый формат запроса
+right
+8
+center
+410
+Gone — ресурс более недоступен
+right
+9
+center
+500
+Internal Server Error — внутренняя ошибка сервера
+right
+10
+center
+502
+Service Unavailable — сервис недоступен или находится на обновлении
+function
+function
+
+===== docs.click.uz/merchant-api/fiscalization.md =====
+
+
+===== docs.click.uz/merchant-api/fiscalization.md =====
+
+
+===== docs.click.uz/merchant-api/index.md =====
+Обзор Merchant API для выставления инвойсов, проверки статусов и отмены платежей.
+Merchant API — Общее
+Общее положение
+общее-положение
+Термины и определения
+термины-и-определения
+Система CLICK
+система-click
+Поставщик
+поставщик
+Пользователь
+пользователь
+Сервисы поставщика
+сервисы-поставщика
+hr
+merchant-api--общее
+Merchant API — Общее
+
+общее-положение
+Общее положение
+
+Интерфейс
+CLICK-API-MERCHANT-INVOICE
+предназначен для:
+
+
+выставления счёта Пользователю на оплату товаров и услуг со стороны Поставщика посредством сети Интернет;
+
+проверки статуса выставленного счёта;
+
+отмены платежа.
+
+
+
+термины-и-определения
+Термины и определения
+
+система-click
+Система CLICK
+
+Система CLICK — платёжная система, позволяющая производить оплату посредством:
+
+
+мобильного телефона (через
+USSD / SMS-портал
+);
+
+сети Интернет (через
+WEB / WEB-mobile
+).
+
+
+Система CLICK предоставляет возможность:
+
+
+оплачивать услуги сотовых операторов и интернет-провайдеров;
+
+переводить денежные средства другим физическим лицам;
+
+оплачивать товары и услуги торгово-сервисных предприятий;
+
+совершать онлайн-покупки в интернет-магазинах
+
+со счетов, открытых в банке.
+
+
+
+поставщик
+Поставщик
+
+Поставщик
+— юридическое лицо, реализующее товары или услуги Пользователям.
+
+
+пользователь
+Пользователь
+
+Пользователь
+— физическое лицо, подключённое к системе CLICK.
+
+
+сервисы-поставщика
+Сервисы поставщика
+
+Сервисы поставщика
+— объекты реализации Поставщика.
+
+Сервисами могут являться как
+услуги
+, так и
+товары
+, доступные для оплаты через систему CLICK.
+
+center
+img
+/diagrams/merchant-light-ru.drawio.svg
+800
+vp-light
+
+center
+img
+/diagrams/merchant-dark-ru.drawio.svg
+800
+vp-dark
+function
+function
+
+===== docs.click.uz/merchant-api/index.md =====
+Обзор Merchant API для выставления инвойсов, проверки статусов и отмены платежей.
+Merchant API — Общее
+Общее положение
+общее-положение
+Термины и определения
+термины-и-определения
+Система CLICK
+система-click
+Поставщик
+поставщик
+Пользователь
+пользователь
+Сервисы поставщика
+сервисы-поставщика
+hr
+merchant-api--общее
+Merchant API — Общее
+
+общее-положение
+Общее положение
+
+Интерфейс
+CLICK-API-MERCHANT-INVOICE
+предназначен для:
+
+
+выставления счёта Пользователю на оплату товаров и услуг со стороны Поставщика посредством сети Интернет;
+
+проверки статуса выставленного счёта;
+
+отмены платежа.
+
+
+
+термины-и-определения
+Термины и определения
+
+система-click
+Система CLICK
+
+Система CLICK — платёжная система, позволяющая производить оплату посредством:
+
+
+мобильного телефона (через
+USSD / SMS-портал
+);
+
+сети Интернет (через
+WEB / WEB-mobile
+).
+
+
+Система CLICK предоставляет возможность:
+
+
+оплачивать услуги сотовых операторов и интернет-провайдеров;
+
+переводить денежные средства другим физическим лицам;
+
+оплачивать товары и услуги торгово-сервисных предприятий;
+
+совершать онлайн-покупки в интернет-магазинах
+
+со счетов, открытых в банке.
+
+
+
+поставщик
+Поставщик
+
+Поставщик
+— юридическое лицо, реализующее товары или услуги Пользователям.
+
+
+пользователь
+Пользователь
+
+Пользователь
+— физическое лицо, подключённое к системе CLICK.
+
+
+сервисы-поставщика
+Сервисы поставщика
+
+Сервисы поставщика
+— объекты реализации Поставщика.
+
+Сервисами могут являться как
+услуги
+, так и
+товары
+, доступные для оплаты через систему CLICK.
+
+center
+img
+/diagrams/merchant-light-ru.drawio.svg
+800
+vp-light
+
+center
+img
+/diagrams/merchant-dark-ru.drawio.svg
+800
+vp-dark
+function
+function
+
+===== docs.click.uz/merchant-api/requests.md =====
+Подключение и выполнение запросов
+Конфиденциальные данные
+конфиденциальные-данные
+Аутентификация
+аутентификация
+Пример формирования заголовка Auth (Node.js)
+пример-формирования-заголовка-auth-nodejs
+Требуемые HTTP‑заголовки
+требуемые-httpзаголовки
+Поддерживаемые форматы контента
+поддерживаемые-форматы-контента
+Создание инвойса (счёт‑фактуры)
+создание-инвойса-счётфактуры
+Запрос
+запрос
+Параметры запроса
+параметры-запроса
+Ответ
+ответ
+Параметры ответа
+параметры-ответа
+Проверка статуса инвойса
+проверка-статуса-инвойса
+Запрос
+запрос-1
+Ответ
+ответ-1
+Параметры ответа
+параметры-ответа-1
+Проверка статуса платежа
+проверка-статуса-платежа
+Запрос
+запрос-2
+Ответ
+ответ-2
+Проверка статуса платежа по merchant_trans_id
+проверка-статуса-платежа-по-merchant_trans_id
+Запрос
+запрос-3
+Ответ
+ответ-3
+Отмена платежа (Reversal)
+отмена-платежа-reversal
+Запрос
+запрос-4
+Ответ
+ответ-4
+Условия отмены платежа
+условия-отмены-платежа
+Создание токена карты
+создание-токена-карты
+Запрос
+запрос-5
+Ответ
+ответ-5
+Подтверждение токена карты
+подтверждение-токена-карты
+Запрос
+запрос-6
+Ответ
+ответ-6
+Оплата с помощью токена карты
+оплата-с-помощью-токена-карты
+Запрос
+запрос-7
+Ответ
+ответ-7
+Удаление токена карты
+удаление-токена-карты
+Запрос
+запрос-8
+Ответ
+ответ-8
+blockquote
+hr
+подключение-и-выполнение-запросов
+Подключение и выполнение запросов
+
+конфиденциальные-данные
+Конфиденциальные данные
+
+При регистрации поставщик услуг получает следующие данные для подключения и отправки запросов к API:
+
+
+merchant_id
+
+service_id
+
+merchant_user_id
+
+secret_key
+
+
+
+secret_key
+является конфиденциальным параметром. Поставщик услуг несёт полную ответственность за его безопасность.
+Хранение
+secret_key
+в открытом виде может привести к компрометации данных и несанкционированным операциям.
+
+
+
+аутентификация
+Аутентификация
+
+Все запросы к API должны содержать HTTP‑заголовок:
+
+Auth: merchant_user_id:digest:timestamp
+
+Где:
+
+
+digest
+—
+sha1(timestamp + secret_key)
+
+timestamp
+— UNIX timestamp (10‑значное количество секунд с начала эпохи)
+
+
+
+пример-формирования-заголовка-auth-nodejs
+Пример формирования заголовка Auth (Node.js)
+
+language-js
+import crypto from 'crypto'
+
+// Укажите ваши ключи
+const merchantUserId = 'YOUR_MERCHANT_USER_ID'
+const secretKey = 'YOUR_SECRET_KEY'
+
+// Получаем текущее время (Unix timestamp)
+const timestamp = Math.floor(Date.now() / 1000)
+
+// Формируем строку для подписи
+const digestString = timestamp + secretKey
+
+// Генерируем SHA1 хэш
+const digest = crypto.createHash('sha1').update(digestString).digest('hex')
+
+// Формируем Auth header
+const authorization = `${merchantUserId}:${digest}:${timestamp}`
+
+console.log('Auth:', authorization)
+
+требуемые-httpзаголовки
+Требуемые HTTP‑заголовки
+
+Заголовок
+Описание
+Accept
+Формат ответа
+Content-Type
+Формат тела запроса
+Auth
+Данные аутентификации
+
+
+поддерживаемые-форматы-контента
+Поддерживаемые форматы контента
+
+
+application/json
+
+application/xml
+
+
+
+создание-инвойса-счётфактуры
+Создание инвойса (счёт‑фактуры)
+
+запрос
+Запрос
+
+language-http
+POST https://api.click.uz/v2/merchant/invoice/create HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+language-json
+service_id
+amount
+phone_number
+998901234567
+merchant_trans_id
+order_123
+
+параметры-запроса
+Параметры запроса
+
+№
+Параметр
+Тип
+Описание
+1
+service_id
+integer
+ID сервиса
+2
+amount
+float
+Сумма платежа
+3
+phone_number
+string
+Получатель инвойса
+4
+merchant_trans_id
+string
+ID заказа / лицевого счёта
+
+
+ответ
+Ответ
+
+language-json
+error_code
+error_note
+Success
+invoice_id
+
+параметры-ответа
+Параметры ответа
+
+№
+Параметр
+Тип
+Описание
+1
+error_code
+integer
+Код ошибки
+2
+error_note
+string
+Описание ошибки
+3
+invoice_id
+bigint
+ID инвойса
+
+
+проверка-статуса-инвойса
+Проверка статуса инвойса
+
+запрос-1
+Запрос
+
+language-http
+GET https://api.click.uz/v2/merchant/invoice/status/:service_id/:invoice_id HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+ответ-1
+Ответ
+
+language-json
+error_code
+error_note
+Success
+invoice_status
+invoice_status_note
+Удалён
+
+параметры-ответа-1
+Параметры ответа
+
+№
+Параметр
+Тип
+Описание
+1
+error_code
+integer
+Код ошибки
+2
+error_note
+string
+Описание ошибки
+3
+invoice_status
+bigint
+Код статуса инвойса
+4
+invoice_status_note
+string
+Описание статуса
+
+
+проверка-статуса-платежа
+Проверка статуса платежа
+
+запрос-2
+Запрос
+
+language-http
+GET https://api.click.uz/v2/merchant/payment/status/:service_id/:payment_id HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+ответ-2
+Ответ
+
+language-json
+error_code
+error_note
+Success
+payment_id
+payment_status
+
+
+проверка-статуса-платежа-по-merchant_trans_id
+Проверка статуса платежа по merchant_trans_id
+
+запрос-3
+Запрос
+
+language-http
+GET https://api.click.uz/v2/merchant/payment/status_by_mti/:service_id/:merchant_trans_id/YYYY-MM-DD HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+ответ-3
+Ответ
+
+language-json
+error_code
+error_note
+Success
+payment_id
+merchant_trans_id
+user123
+
+
+отмена-платежа-reversal
+Отмена платежа (Reversal)
+
+запрос-4
+Запрос
+
+language-http
+DELETE https://api.click.uz/v2/merchant/payment/reversal/:service_id/:payment_id HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+ответ-4
+Ответ
+
+language-json
+error_code
+error_note
+Success
+payment_id
+
+условия-отмены-платежа
+Условия отмены платежа
+
+
+Платёж должен быть успешно завершён
+
+Возврат возможен только для платежей текущего отчётного месяца
+
+Платежи прошлого месяца могут быть отменены только в первый день текущего месяца
+
+Оплата должна быть произведена онлайн‑картой
+
+Отмена может быть отклонена платёжной системой UZCARD
+
+
+
+создание-токена-карты
+Создание токена карты
+
+запрос-5
+Запрос
+
+language-http
+POST https://api.click.uz/v2/merchant/card_token/request HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+
+language-json
+service_id
+card_number
+8600123412341234
+expire_date
+0526
+temporary
+
+№
+Параметр
+Тип
+Описание
+1
+service_id
+integer
+ID сервиса
+2
+card_number
+string
+Номер карты
+3
+expire_date
+string
+Срок действия карты (MMYY)
+4
+temporary
+integer
+1
+— одноразовый токен,
+0
+— постоянный
+
+temporary = 1
+— токен для одноразового использования.
+Временные токены автоматически удаляются после оплаты.
+
+
+ответ-5
+Ответ
+
+language-json
+error_code
+error_note
+
+card_token
+3B1DF3F1-7358-407C-B57F-0F6351310803
+phone_number
++998*******97
+temporary
+
+
+подтверждение-токена-карты
+Подтверждение токена карты
+
+запрос-6
+Запрос
+
+language-http
+POST https://api.click.uz/v2/merchant/card_token/verify HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+language-json
+service_id
+card_token
+token
+sms_code
+
+ответ-6
+Ответ
+
+language-json
+error_code
+error_note
+Success
+card_number
+8600 55** **** 3244
+
+
+оплата-с-помощью-токена-карты
+Оплата с помощью токена карты
+
+запрос-7
+Запрос
+
+language-http
+POST https://api.click.uz/v2/merchant/card_token/payment HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+language-json
+service_id
+card_token
+token
+amount
+transaction_parameter
+order_123
+
+ответ-7
+Ответ
+
+language-json
+error_code
+error_note
+Success
+payment_id
+payment_status
+
+
+удаление-токена-карты
+Удаление токена карты
+
+запрос-8
+Запрос
+
+language-http
+DELETE https://api.click.uz/v2/merchant/card_token/:service_id/:card_token HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+ответ-8
+Ответ
+
+language-json
+error_code
+error_note
+Success
+function
+function
+
+===== docs.click.uz/merchant-api/requests.md =====
+Подключение и выполнение запросов
+Конфиденциальные данные
+конфиденциальные-данные
+Аутентификация
+аутентификация
+Пример формирования заголовка Auth (Node.js)
+пример-формирования-заголовка-auth-nodejs
+Требуемые HTTP‑заголовки
+требуемые-httpзаголовки
+Поддерживаемые форматы контента
+поддерживаемые-форматы-контента
+Создание инвойса (счёт‑фактуры)
+создание-инвойса-счётфактуры
+Запрос
+запрос
+Параметры запроса
+параметры-запроса
+Ответ
+ответ
+Параметры ответа
+параметры-ответа
+Проверка статуса инвойса
+проверка-статуса-инвойса
+Запрос
+запрос-1
+Ответ
+ответ-1
+Параметры ответа
+параметры-ответа-1
+Проверка статуса платежа
+проверка-статуса-платежа
+Запрос
+запрос-2
+Ответ
+ответ-2
+Проверка статуса платежа по merchant_trans_id
+проверка-статуса-платежа-по-merchant_trans_id
+Запрос
+запрос-3
+Ответ
+ответ-3
+Отмена платежа (Reversal)
+отмена-платежа-reversal
+Запрос
+запрос-4
+Ответ
+ответ-4
+Условия отмены платежа
+условия-отмены-платежа
+Создание токена карты
+создание-токена-карты
+Запрос
+запрос-5
+Ответ
+ответ-5
+Подтверждение токена карты
+подтверждение-токена-карты
+Запрос
+запрос-6
+Ответ
+ответ-6
+Оплата с помощью токена карты
+оплата-с-помощью-токена-карты
+Запрос
+запрос-7
+Ответ
+ответ-7
+Удаление токена карты
+удаление-токена-карты
+Запрос
+запрос-8
+Ответ
+ответ-8
+blockquote
+hr
+подключение-и-выполнение-запросов
+Подключение и выполнение запросов
+
+конфиденциальные-данные
+Конфиденциальные данные
+
+При регистрации поставщик услуг получает следующие данные для подключения и отправки запросов к API:
+
+
+merchant_id
+
+service_id
+
+merchant_user_id
+
+secret_key
+
+
+
+secret_key
+является конфиденциальным параметром. Поставщик услуг несёт полную ответственность за его безопасность.
+Хранение
+secret_key
+в открытом виде может привести к компрометации данных и несанкционированным операциям.
+
+
+
+аутентификация
+Аутентификация
+
+Все запросы к API должны содержать HTTP‑заголовок:
+
+Auth: merchant_user_id:digest:timestamp
+
+Где:
+
+
+digest
+—
+sha1(timestamp + secret_key)
+
+timestamp
+— UNIX timestamp (10‑значное количество секунд с начала эпохи)
+
+
+
+пример-формирования-заголовка-auth-nodejs
+Пример формирования заголовка Auth (Node.js)
+
+language-js
+import crypto from 'crypto'
+
+// Укажите ваши ключи
+const merchantUserId = 'YOUR_MERCHANT_USER_ID'
+const secretKey = 'YOUR_SECRET_KEY'
+
+// Получаем текущее время (Unix timestamp)
+const timestamp = Math.floor(Date.now() / 1000)
+
+// Формируем строку для подписи
+const digestString = timestamp + secretKey
+
+// Генерируем SHA1 хэш
+const digest = crypto.createHash('sha1').update(digestString).digest('hex')
+
+// Формируем Auth header
+const authorization = `${merchantUserId}:${digest}:${timestamp}`
+
+console.log('Auth:', authorization)
+
+требуемые-httpзаголовки
+Требуемые HTTP‑заголовки
+
+Заголовок
+Описание
+Accept
+Формат ответа
+Content-Type
+Формат тела запроса
+Auth
+Данные аутентификации
+
+
+поддерживаемые-форматы-контента
+Поддерживаемые форматы контента
+
+
+application/json
+
+application/xml
+
+
+
+создание-инвойса-счётфактуры
+Создание инвойса (счёт‑фактуры)
+
+запрос
+Запрос
+
+language-http
+POST https://api.click.uz/v2/merchant/invoice/create HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+language-json
+service_id
+amount
+phone_number
+998901234567
+merchant_trans_id
+order_123
+
+параметры-запроса
+Параметры запроса
+
+№
+Параметр
+Тип
+Описание
+1
+service_id
+integer
+ID сервиса
+2
+amount
+float
+Сумма платежа
+3
+phone_number
+string
+Получатель инвойса
+4
+merchant_trans_id
+string
+ID заказа / лицевого счёта
+
+
+ответ
+Ответ
+
+language-json
+error_code
+error_note
+Success
+invoice_id
+
+параметры-ответа
+Параметры ответа
+
+№
+Параметр
+Тип
+Описание
+1
+error_code
+integer
+Код ошибки
+2
+error_note
+string
+Описание ошибки
+3
+invoice_id
+bigint
+ID инвойса
+
+
+проверка-статуса-инвойса
+Проверка статуса инвойса
+
+запрос-1
+Запрос
+
+language-http
+GET https://api.click.uz/v2/merchant/invoice/status/:service_id/:invoice_id HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+ответ-1
+Ответ
+
+language-json
+error_code
+error_note
+Success
+invoice_status
+invoice_status_note
+Удалён
+
+параметры-ответа-1
+Параметры ответа
+
+№
+Параметр
+Тип
+Описание
+1
+error_code
+integer
+Код ошибки
+2
+error_note
+string
+Описание ошибки
+3
+invoice_status
+bigint
+Код статуса инвойса
+4
+invoice_status_note
+string
+Описание статуса
+
+
+проверка-статуса-платежа
+Проверка статуса платежа
+
+запрос-2
+Запрос
+
+language-http
+GET https://api.click.uz/v2/merchant/payment/status/:service_id/:payment_id HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+ответ-2
+Ответ
+
+language-json
+error_code
+error_note
+Success
+payment_id
+payment_status
+
+
+проверка-статуса-платежа-по-merchant_trans_id
+Проверка статуса платежа по merchant_trans_id
+
+запрос-3
+Запрос
+
+language-http
+GET https://api.click.uz/v2/merchant/payment/status_by_mti/:service_id/:merchant_trans_id/YYYY-MM-DD HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+ответ-3
+Ответ
+
+language-json
+error_code
+error_note
+Success
+payment_id
+merchant_trans_id
+user123
+
+
+отмена-платежа-reversal
+Отмена платежа (Reversal)
+
+запрос-4
+Запрос
+
+language-http
+DELETE https://api.click.uz/v2/merchant/payment/reversal/:service_id/:payment_id HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+ответ-4
+Ответ
+
+language-json
+error_code
+error_note
+Success
+payment_id
+
+условия-отмены-платежа
+Условия отмены платежа
+
+
+Платёж должен быть успешно завершён
+
+Возврат возможен только для платежей текущего отчётного месяца
+
+Платежи прошлого месяца могут быть отменены только в первый день текущего месяца
+
+Оплата должна быть произведена онлайн‑картой
+
+Отмена может быть отклонена платёжной системой UZCARD
+
+
+
+создание-токена-карты
+Создание токена карты
+
+запрос-5
+Запрос
+
+language-http
+POST https://api.click.uz/v2/merchant/card_token/request HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+
+language-json
+service_id
+card_number
+8600123412341234
+expire_date
+0526
+temporary
+
+№
+Параметр
+Тип
+Описание
+1
+service_id
+integer
+ID сервиса
+2
+card_number
+string
+Номер карты
+3
+expire_date
+string
+Срок действия карты (MMYY)
+4
+temporary
+integer
+1
+— одноразовый токен,
+0
+— постоянный
+
+temporary = 1
+— токен для одноразового использования.
+Временные токены автоматически удаляются после оплаты.
+
+
+ответ-5
+Ответ
+
+language-json
+error_code
+error_note
+
+card_token
+3B1DF3F1-7358-407C-B57F-0F6351310803
+phone_number
++998*******97
+temporary
+
+
+подтверждение-токена-карты
+Подтверждение токена карты
+
+запрос-6
+Запрос
+
+language-http
+POST https://api.click.uz/v2/merchant/card_token/verify HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+language-json
+service_id
+card_token
+token
+sms_code
+
+ответ-6
+Ответ
+
+language-json
+error_code
+error_note
+Success
+card_number
+8600 55** **** 3244
+
+
+оплата-с-помощью-токена-карты
+Оплата с помощью токена карты
+
+запрос-7
+Запрос
+
+language-http
+POST https://api.click.uz/v2/merchant/card_token/payment HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+language-json
+service_id
+card_token
+token
+amount
+transaction_parameter
+order_123
+
+ответ-7
+Ответ
+
+language-json
+error_code
+error_note
+Success
+payment_id
+payment_status
+
+
+удаление-токена-карты
+Удаление токена карты
+
+запрос-8
+Запрос
+
+language-http
+DELETE https://api.click.uz/v2/merchant/card_token/:service_id/:card_token HTTP/1.1
+Accept: application/json
+Content-Type: application/json
+Auth: merchant_user_id:digest:timestamp
+
+ответ-8
+Ответ
+
+language-json
+error_code
+error_note
+Success
+function
+function
+
+===== docs.click.uz/shop-api/errors.md =====
+Коды ошибок SHOP API, формат ответов и примеры успешных и ошибочных операций.
+SHOP API — Ошибки
+Примеры ответов
+примеры-ответов
+Успешное выполнение операции
+успешное-выполнение-операции
+Ошибка выполнения операции
+ошибка-выполнения-операции
+Коды ошибок, возвращаемые системой CLICK
+коды-ошибок-возвращаемые-системой-click
+Коды ошибок, возвращаемые системой Поставщика
+коды-ошибок-возвращаемые-системой-поставщика
+hr
+shop-api--ошибки
+SHOP API — Ошибки
+
+примеры-ответов
+Примеры ответов
+
+Поставщик услуг возвращает ответ в формате
+JSON
+со следующими параметрами.
+
+успешное-выполнение-операции
+Успешное выполнение операции
+
+#
+Параметр
+Тип
+Описание
+1
+error
+int
+Код статуса операции. При успешном выполнении равен
+0
+2
+error_note
+varchar
+Описание статуса
+3
+click_trans_id
+int
+ID платежа в системе CLICK
+4
+merchant_trans_id
+varchar
+ID платежа в системе интернет-магазина
+5
+merchant_prepare_id
+или
+merchant_confirm_id
+int
+ID платежа в биллинговой системе Поставщика
+
+
+ошибка-выполнения-операции
+Ошибка выполнения операции
+
+#
+Параметр
+Тип
+Описание
+1
+error
+int
+Код статуса операции
+2
+error_note
+varchar
+Описание статуса
+
+
+коды-ошибок-возвращаемые-системой-click
+Коды ошибок, возвращаемые системой CLICK
+
+#
+error
+error_note
+Описание
+1
+0
+Success
+Операция выполнена успешно
+2
+< 0
+Описание ошибки
+При получении отрицательного кода ошибки Поставщик должен аннулировать платёж в биллинговой системе и вернуть код ошибки
+-9
+
+
+коды-ошибок-возвращаемые-системой-поставщика
+Коды ошибок, возвращаемые системой Поставщика
+
+#
+error
+error_note
+Описание
+1
+0
+Success
+Успешный запрос
+2
+-1
+SIGN CHECK FAILED!
+Ошибка проверки подписи
+3
+-2
+Incorrect parameter amount
+Неверная сумма оплаты
+4
+-3
+Action not found
+Запрашиваемое действие не найдено
+5
+-4
+Already paid
+Транзакция ранее была подтверждена
+6
+-5
+User does not exist
+Пользователь / заказ не найден (
+merchant_trans_id
+)
+7
+-6
+Transaction does not exist
+Транзакция не найдена (
+merchant_prepare_id
+)
+8
+-7
+Failed to update user
+Ошибка обновления данных пользователя
+9
+-8
+Error in request from click
+Ошибка в запросе от системы CLICK
+10
+-9
+Transaction cancelled
+Транзакция ранее была отменена
+function
+function
+
+===== docs.click.uz/shop-api/errors.md =====
+Коды ошибок SHOP API, формат ответов и примеры успешных и ошибочных операций.
+SHOP API — Ошибки
+Примеры ответов
+примеры-ответов
+Успешное выполнение операции
+успешное-выполнение-операции
+Ошибка выполнения операции
+ошибка-выполнения-операции
+Коды ошибок, возвращаемые системой CLICK
+коды-ошибок-возвращаемые-системой-click
+Коды ошибок, возвращаемые системой Поставщика
+коды-ошибок-возвращаемые-системой-поставщика
+hr
+shop-api--ошибки
+SHOP API — Ошибки
+
+примеры-ответов
+Примеры ответов
+
+Поставщик услуг возвращает ответ в формате
+JSON
+со следующими параметрами.
+
+успешное-выполнение-операции
+Успешное выполнение операции
+
+#
+Параметр
+Тип
+Описание
+1
+error
+int
+Код статуса операции. При успешном выполнении равен
+0
+2
+error_note
+varchar
+Описание статуса
+3
+click_trans_id
+int
+ID платежа в системе CLICK
+4
+merchant_trans_id
+varchar
+ID платежа в системе интернет-магазина
+5
+merchant_prepare_id
+или
+merchant_confirm_id
+int
+ID платежа в биллинговой системе Поставщика
+
+
+ошибка-выполнения-операции
+Ошибка выполнения операции
+
+#
+Параметр
+Тип
+Описание
+1
+error
+int
+Код статуса операции
+2
+error_note
+varchar
+Описание статуса
+
+
+коды-ошибок-возвращаемые-системой-click
+Коды ошибок, возвращаемые системой CLICK
+
+#
+error
+error_note
+Описание
+1
+0
+Success
+Операция выполнена успешно
+2
+< 0
+Описание ошибки
+При получении отрицательного кода ошибки Поставщик должен аннулировать платёж в биллинговой системе и вернуть код ошибки
+-9
+
+
+коды-ошибок-возвращаемые-системой-поставщика
+Коды ошибок, возвращаемые системой Поставщика
+
+#
+error
+error_note
+Описание
+1
+0
+Success
+Успешный запрос
+2
+-1
+SIGN CHECK FAILED!
+Ошибка проверки подписи
+3
+-2
+Incorrect parameter amount
+Неверная сумма оплаты
+4
+-3
+Action not found
+Запрашиваемое действие не найдено
+5
+-4
+Already paid
+Транзакция ранее была подтверждена
+6
+-5
+User does not exist
+Пользователь / заказ не найден (
+merchant_trans_id
+)
+7
+-6
+Transaction does not exist
+Транзакция не найдена (
+merchant_prepare_id
+)
+8
+-7
+Failed to update user
+Ошибка обновления данных пользователя
+9
+-8
+Error in request from click
+Ошибка в запросе от системы CLICK
+10
+-9
+Transaction cancelled
+Транзакция ранее была отменена
+function
+function
+
+===== docs.click.uz/shop-api/index.md =====
+
+
+===== docs.click.uz/shop-api/index.md =====
+
+
+===== docs.click.uz/shop-api/requests.md =====
+Формат запросов Prepare и Complete для SHOP API, параметры и правила обработки платежей.
+SHOP API — Запросы
+Описание взаимодействия
+описание-взаимодействия
+Формат взаимодействия
+формат-взаимодействия
+Подготовка и проверка платежа (Prepare)
+подготовка-и-проверка-платежа-prepare
+Параметры запроса
+параметры-запроса
+Параметры ответа
+параметры-ответа
+Проверки на этапе Prepare
+проверки-на-этапе-prepare
+Завершение платежа (Complete)
+завершение-платежа-complete
+Параметры запроса
+параметры-запроса-1
+Параметры ответа
+параметры-ответа-1
+blockquote
+hr
+shop-api--запросы
+SHOP API — Запросы
+
+описание-взаимодействия
+Описание взаимодействия
+
+Взаимодействие осуществляется через API-интерфейс, расположенный на сервере
+Поставщика. API-интерфейс должен полностью соответствовать требованиям
+данного документа.
+
+Созданный платёж в системе
+CLICK
+передаётся по протоколу HTTP (HTTPS)
+методом
+POST
+API-интерфейсу Поставщика услуг. Поставщик предоставляет
+системе CLICK URL-адреса для взаимодействия с API-интерфейсом.
+
+Взаимодействие разделено на два этапа:
+
+
+Prepare
+
+Complete
+
+
+формат-взаимодействия
+Формат взаимодействия
+
+Запрос от CLICK отправляется с заголовком:
+
+
+Content-Type: application/x-www-form-urlencoded
+
+
+Тело запроса передаётся в формате form-data (urlencoded)
+
+Ответ от Поставщика должен быть:
+
+
+В формате
+application/json
+
+
+подготовка-и-проверка-платежа-prepare
+Подготовка и проверка платежа (Prepare)
+
+Action = 0
+
+параметры-запроса
+Параметры запроса
+
+#
+Параметр
+Тип
+Описание
+1
+click_trans_id
+bigint
+Номер транзакции (итерации) в системе CLICK
+2
+service_id
+int
+ID сервиса
+3
+click_paydoc_id
+bigint
+Номер платежа в системе CLICK
+4
+merchant_trans_id
+varchar
+ID заказа / лицевого счёта / логина
+5
+amount
+float
+Сумма оплаты (в сумах)
+6
+action
+int
+Для Prepare — 0
+7
+error
+int
+Код статуса. 0 — успешно
+8
+error_note
+varchar
+Описание статуса
+9
+sign_time
+varchar
+Дата платежа (YYYY-MM-DD HH:mm
+:ss
+)
+10
+sign_string
+varchar
+Проверочная строка (MD5):
+md5(click_trans_id + service_id + SECRET_KEY + merchant_trans_id + amount + action + sign_time)
+
+SECRET_KEY
+— уникальная строка, выдаваемая Поставщику при подключении.
+
+параметры-ответа
+Параметры ответа
+
+#
+Параметр
+Тип
+Описание
+1
+click_trans_id
+bigint
+ID платежа в системе CLICK
+2
+merchant_trans_id
+varchar
+ID заказа / лицевого счёта / логина
+3
+merchant_prepare_id
+int
+ID платежа в биллинге Поставщика
+4
+error
+int
+Код статуса. 0 — успешно
+5
+error_note
+varchar
+Описание статуса
+
+проверки-на-этапе-prepare
+Проверки на этапе Prepare
+
+
+Наличие и актуальность заказа / логина / лицевого счёта, а также возможность
+отпуска товара или услуги.
+
+Актуальность суммы заказа или оплаты.
+
+
+Для интернет-магазинов при получении запроса Prepare Поставщик должен
+зарезервировать товар для предотвращения повторной продажи.
+
+
+завершение-платежа-complete
+Завершение платежа (Complete)
+
+Action = 1
+
+параметры-запроса-1
+Параметры запроса
+
+#
+Параметр
+Тип
+Описание
+1
+click_trans_id
+bigint
+ID платежа в системе CLICK
+2
+service_id
+int
+ID сервиса
+3
+click_paydoc_id
+bigint
+Номер платежа в системе CLICK
+4
+merchant_trans_id
+varchar
+ID заказа / лицевого счёта / логина
+5
+merchant_prepare_id
+int
+ID платежа, полученный на этапе Prepare
+6
+amount
+float
+Сумма оплаты (в сумах)
+7
+action
+int
+Для Complete — 1
+8
+error
+int
+Код статуса
+9
+error_note
+varchar
+Описание статуса
+10
+sign_time
+varchar
+Дата платежа
+11
+sign_string
+varchar
+Проверочная строка (MD5):
+md5(click_trans_id + service_id + SECRET_KEY + merchant_trans_id + merchant_prepare_id + amount + action + sign_time)
+
+параметры-ответа-1
+Параметры ответа
+
+#
+Параметр
+Тип
+Описание
+1
+click_trans_id
+bigint
+ID платежа в системе CLICK
+2
+merchant_trans_id
+varchar
+ID заказа / лицевого счёта / логина
+3
+merchant_confirm_id
+int
+ID транзакции завершения платежа
+4
+error
+int
+Код статуса
+5
+error_note
+varchar
+Описание статуса
+
+
+
+Примечание.
+При успешном ответе на запрос Prepare и успешном списании средств с карты,
+ответ на запрос Complete не может быть ошибочным, за исключением случаев,
+когда платёж уже был ранее подтверждён (
+error = -4
+) либо выполняется
+повторная попытка подтверждения ранее отменённого платежа (
+error = -9
+).
+
+
+
+При получении ошибочного ответа от Поставщика после нескольких попыток
+платёж может быть переведён в состояние ручного разбирательства со стороны
+Службы технической поддержки CLICK.
+
+
+
+payment/reversal
+).
+
+function
+function
+
+===== docs.click.uz/shop-api/requests.md =====
+Формат запросов Prepare и Complete для SHOP API, параметры и правила обработки платежей.
+SHOP API — Запросы
+Описание взаимодействия
+описание-взаимодействия
+Формат взаимодействия
+формат-взаимодействия
+Подготовка и проверка платежа (Prepare)
+подготовка-и-проверка-платежа-prepare
+Параметры запроса
+параметры-запроса
+Параметры ответа
+параметры-ответа
+Проверки на этапе Prepare
+проверки-на-этапе-prepare
+Завершение платежа (Complete)
+завершение-платежа-complete
+Параметры запроса
+параметры-запроса-1
+Параметры ответа
+параметры-ответа-1
+blockquote
+hr
+shop-api--запросы
+SHOP API — Запросы
+
+описание-взаимодействия
+Описание взаимодействия
+
+Взаимодействие осуществляется через API-интерфейс, расположенный на сервере
+Поставщика. API-интерфейс должен полностью соответствовать требованиям
+данного документа.
+
+Созданный платёж в системе
+CLICK
+передаётся по протоколу HTTP (HTTPS)
+методом
+POST
+API-интерфейсу Поставщика услуг. Поставщик предоставляет
+системе CLICK URL-адреса для взаимодействия с API-интерфейсом.
+
+Взаимодействие разделено на два этапа:
+
+
+Prepare
+
+Complete
+
+
+формат-взаимодействия
+Формат взаимодействия
+
+Запрос от CLICK отправляется с заголовком:
+
+
+Content-Type: application/x-www-form-urlencoded
+
+
+Тело запроса передаётся в формате form-data (urlencoded)
+
+Ответ от Поставщика должен быть:
+
+
+В формате
+application/json
+
+
+подготовка-и-проверка-платежа-prepare
+Подготовка и проверка платежа (Prepare)
+
+Action = 0
+
+параметры-запроса
+Параметры запроса
+
+#
+Параметр
+Тип
+Описание
+1
+click_trans_id
+bigint
+Номер транзакции (итерации) в системе CLICK
+2
+service_id
+int
+ID сервиса
+3
+click_paydoc_id
+bigint
+Номер платежа в системе CLICK
+4
+merchant_trans_id
+varchar
+ID заказа / лицевого счёта / логина
+5
+amount
+float
+Сумма оплаты (в сумах)
+6
+action
+int
+Для Prepare — 0
+7
+error
+int
+Код статуса. 0 — успешно
+8
+error_note
+varchar
+Описание статуса
+9
+sign_time
+varchar
+Дата платежа (YYYY-MM-DD HH:mm
+:ss
+)
+10
+sign_string
+varchar
+Проверочная строка (MD5):
+md5(click_trans_id + service_id + SECRET_KEY + merchant_trans_id + amount + action + sign_time)
+
+SECRET_KEY
+— уникальная строка, выдаваемая Поставщику при подключении.
+
+параметры-ответа
+Параметры ответа
+
+#
+Параметр
+Тип
+Описание
+1
+click_trans_id
+bigint
+ID платежа в системе CLICK
+2
+merchant_trans_id
+varchar
+ID заказа / лицевого счёта / логина
+3
+merchant_prepare_id
+int
+ID платежа в биллинге Поставщика
+4
+error
+int
+Код статуса. 0 — успешно
+5
+error_note
+varchar
+Описание статуса
+
+проверки-на-этапе-prepare
+Проверки на этапе Prepare
+
+
+Наличие и актуальность заказа / логина / лицевого счёта, а также возможность
+отпуска товара или услуги.
+
+Актуальность суммы заказа или оплаты.
+
+
+Для интернет-магазинов при получении запроса Prepare Поставщик должен
+зарезервировать товар для предотвращения повторной продажи.
+
+
+завершение-платежа-complete
+Завершение платежа (Complete)
+
+Action = 1
+
+параметры-запроса-1
+Параметры запроса
+
+#
+Параметр
+Тип
+Описание
+1
+click_trans_id
+bigint
+ID платежа в системе CLICK
+2
+service_id
+int
+ID сервиса
+3
+click_paydoc_id
+bigint
+Номер платежа в системе CLICK
+4
+merchant_trans_id
+varchar
+ID заказа / лицевого счёта / логина
+5
+merchant_prepare_id
+int
+ID платежа, полученный на этапе Prepare
+6
+amount
+float
+Сумма оплаты (в сумах)
+7
+action
+int
+Для Complete — 1
+8
+error
+int
+Код статуса
+9
+error_note
+varchar
+Описание статуса
+10
+sign_time
+varchar
+Дата платежа
+11
+sign_string
+varchar
+Проверочная строка (MD5):
+md5(click_trans_id + service_id + SECRET_KEY + merchant_trans_id + merchant_prepare_id + amount + action + sign_time)
+
+параметры-ответа-1
+Параметры ответа
+
+#
+Параметр
+Тип
+Описание
+1
+click_trans_id
+bigint
+ID платежа в системе CLICK
+2
+merchant_trans_id
+varchar
+ID заказа / лицевого счёта / логина
+3
+merchant_confirm_id
+int
+ID транзакции завершения платежа
+4
+error
+int
+Код статуса
+5
+error_note
+varchar
+Описание статуса
+
+
+
+Примечание.
+При успешном ответе на запрос Prepare и успешном списании средств с карты,
+ответ на запрос Complete не может быть ошибочным, за исключением случаев,
+когда платёж уже был ранее подтверждён (
+error = -4
+) либо выполняется
+повторная попытка подтверждения ранее отменённого платежа (
+error = -9
+).
+
+
+
+При получении ошибочного ответа от Поставщика после нескольких попыток
+платёж может быть переведён в состояние ручного разбирательства со стороны
+Службы технической поддержки CLICK.
+
+
+
+payment/reversal
+).
+
+function
+function
