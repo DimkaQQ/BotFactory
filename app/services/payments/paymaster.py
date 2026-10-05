@@ -77,6 +77,8 @@ class PayMasterProvider(ProviderDefaults):
     currencies = ("RUB",)
     region = "ru"
     supports_status_check = True
+    #: Адрес уведомлений уходит в каждом платеже сам — вписывать его в кабинете не нужно.
+    sends_own_callback_url = True
     # Хостируемая токенизация: объект tokenization в счёте, id токена
     # приходит и в ответе, и в колбэке, списание — POST /payments с
     # paymentData.token.id. Деньги только на Settled: Confirmation и

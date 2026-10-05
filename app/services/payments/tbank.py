@@ -203,6 +203,8 @@ class TBankProvider(ProviderDefaults):
     currencies = ("RUB",)
     region = "ru"
     supports_status_check = True
+    #: Адрес уведомлений уходит в каждом платеже сам — вписывать его в кабинете не нужно.
+    sends_own_callback_url = True
     # Автоплатёж: Init с Recurrent="Y" и CustomerKey, банк возвращает RebillId
     # в нотификации, дальше Init нового платежа + Charge(PaymentId, RebillId).
     # Поля сверены с типизированной реализацией github.com/nikita-vanyasin/tinkoff
