@@ -78,6 +78,17 @@
 
 Адрес уведомления подставляется в каждой ссылке. Подписок в сервисе нет: только разовые платежи.
 
+## Stripe (`stripe`) — USD, EUR, GBP, KZT, PLN, TRY, AED
+| Поле | Где взять |
+|---|---|
+| Secret key | Stripe Dashboard → Developers → API keys: `sk_test_…` для теста, `sk_live_…` для боя |
+| Webhook signing secret | Developers → Webhooks → добавить адрес вебхука, секрет `whsec_…` |
+
+События вебхука: `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`checkout.session.async_payment_failed`, `checkout.session.expired`. Подпись вебхука проверяем, оплату
+перепроверяем. Тест: режим test в Dashboard, карта `4242 4242 4242 4242`, срок любой, CVC любой.
+Stripe недоступен плательщикам из РФ и Беларуси: для них нужны другие кассы.
+
 ## Без юрлица
 - **Telegram Stars**: платёж мета-бота, подтверждает Telegram. Ключи не нужны.
 - **Crypto Bot**: токен приложения в @CryptoBot (testnet для проверки).
