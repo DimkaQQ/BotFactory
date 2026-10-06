@@ -675,3 +675,19 @@ def test_receipts_are_added_only_when_the_seller_gave_an_email_for_them():
     # вложенный Receipt в подпись Token не входит (документация Т-Банка)
     payload = {"TerminalKey": "t", "Amount": 99000, "Receipt": tb}
     assert tbank._token(payload, "pw") == tbank._token({"TerminalKey": "t", "Amount": 99000}, "pw")
+
+
+def test_catalogue_offers_only_the_configured_providers(monkeypatch):
+    """Скрытые кассы остаются в реестре (вебхуки), но новым выбором не предлагаются."""
+    from app.config import get_settings
+    from app.services.payments import PROVIDERS, describe_providers, is_offered
+
+    monkeypatch.setattr(get_settings(), "offered_payment_providers", "yookassa, cloudpayments")
+
+    offered = {p["slug"] for p in describe_providers(offered_only=True)}
+    assert offered == {"yookassa", "cloudpayments"}
+    assert is_offered("YooKassa") and not is_offered("click")
+    assert {p["slug"] for p in describe_providers()} == set(PROVIDERS)
+
+    monkeypatch.setattr(get_settings(), "offered_payment_providers", "*")
+    assert {p["slug"] for p in describe_providers(offered_only=True)} == set(PROVIDERS)

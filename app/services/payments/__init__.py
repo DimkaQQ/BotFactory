@@ -98,9 +98,25 @@ REGIONS: tuple[tuple[str, str], ...] = (
 )
 
 
-def describe_providers() -> list[dict]:
+def offered_slugs() -> set[str] | None:
+    """Slugs shown to new choices (`OFFERED_PAYMENT_PROVIDERS`); None — everything."""
+    from app.config import get_settings
+
+    raw = (get_settings().offered_payment_providers or "").strip()
+    if raw == "*":
+        return None
+    return {part.strip().lower() for part in raw.split(",") if part.strip()}
+
+
+def is_offered(slug: str) -> bool:
+    offered = offered_slugs()
+    return offered is None or (slug or "").strip().lower() in offered
+
+
+def describe_providers(offered_only: bool = False) -> list[dict]:
     """The provider catalogue the constructor renders its settings form
-    from — no provider-specific code on the frontend."""
+    from — no provider-specific code on the frontend. `offered_only` hides
+    adapters that are registered (their webhooks still work) but not offered."""
     return [
         {
             "slug": provider.slug,
@@ -133,6 +149,7 @@ def describe_providers() -> list[dict]:
             "has_test_mode": bool(provider.has_test_mode),
         }
         for provider in PROVIDERS.values()
+        if not offered_only or is_offered(provider.slug)
     ]
 
 
@@ -150,6 +167,8 @@ __all__ = [
     "REGIONS",
     "WebhookResult",
     "describe_providers",
+    "is_offered",
+    "offered_slugs",
     "get_provider",
     "minor_to_major",
     "same_currency",

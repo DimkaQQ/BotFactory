@@ -90,7 +90,7 @@ async def get_public_config() -> PublicConfig:
     from app.services import payment_service, platform_billing
     from app.services import payments as payment_providers
 
-    real = [p for p in payment_providers.describe_providers() if p["slug"] not in _NOT_A_GATEWAY]
+    real = [p for p in payment_providers.describe_providers(offered_only=True) if p["slug"] not in _NOT_A_GATEWAY]
     regions = [
         GatewayRegion(
             slug=slug,

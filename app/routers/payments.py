@@ -306,7 +306,7 @@ async def payment_done() -> HTMLResponse:
 @router.get("/api/payments/providers")
 async def list_providers(_client: Client = Depends(get_current_client)) -> dict:
     return {
-        "providers": payment_providers.describe_providers(),
+        "providers": payment_providers.describe_providers(offered_only=True),
         # Subscriptions are built but switched off while the one-off sale is
         # being shaken out; the constructor hides the control rather than
         # showing one that does nothing.
@@ -384,6 +384,12 @@ async def set_payment_settings(
             payment_providers.get_provider(payload.provider)
         except ProviderError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        # Скрытый провайдер не выбирают заново, но бот, который им уже пользуется, не ломаем.
+        if not payment_providers.is_offered(payload.provider) and payload.provider != bot.payment_provider:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Эта касса пока не подключена к конструктору: выбери другую из списка.",
+            )
 
     # Publishing refuses the test provider, but that check alone is a door
     # with a window beside it: publish with a real one, then switch. Its
