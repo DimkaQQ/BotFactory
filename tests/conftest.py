@@ -53,6 +53,8 @@ def _allow_the_test_till(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.config import get_settings
 
     monkeypatch.setattr(get_settings(), "platform_allow_test_till", True, raising=False)
+    # В проде каталог урезан (OFFERED_PAYMENT_PROVIDERS), тесты видят все кассы.
+    monkeypatch.setattr(get_settings(), "offered_payment_providers", "*", raising=False)
 
 
 @pytest_asyncio.fixture(autouse=True)
