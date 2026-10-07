@@ -565,8 +565,10 @@ async def test_cryptobot_creates_an_invoice_tagged_with_our_payment_id(mock_http
 
 async def test_cryptobot_reports_an_api_error_rather_than_a_bare_failure(mock_http):
     with mock_http(lambda r: httpx.Response(200, json={"ok": False, "error": {"code": 401, "name": "UNAUTHORIZED"}})):
-        with pytest.raises(ProviderError, match="UNAUTHORIZED"):
+        with pytest.raises(ProviderError, match="UNAUTHORIZED") as caught:
             await get_provider("cryptobot").create_checkout(checkout_request(CRYPTO_CREDS, currency="USDT"))
+    # 401 почти всегда значит «токен не той сети»: в сообщении подсказка про «Тестовый режим».
+    assert "Тестовым режимом" in str(caught.value) or "Тестовый режим" in str(caught.value)
 
 
 async def test_cryptobot_rejects_an_unsigned_callback(mock_http):

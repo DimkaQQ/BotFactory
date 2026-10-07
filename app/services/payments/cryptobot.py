@@ -87,7 +87,16 @@ class CryptoBotProvider(ProviderDefaults):
             raise ProviderError(f"Crypto Bot: {response.text[:200]}") from None
 
         if not payload.get("ok"):
-            raise ProviderError(f"Crypto Bot: {json.dumps(payload.get('error') or payload, ensure_ascii=False)[:200]}")
+            error = payload.get("error") or payload
+            if isinstance(error, dict) and str(error.get("code")) == "401":
+                # Токены тестовой (@CryptoTestnetBot) и боевой (@CryptoBot) сети не взаимозаменяемы:
+                # самая частая причина 401 — токен из одной сети, а «Тестовый режим» стоит от другой.
+                raise ProviderError(
+                    "Crypto Bot: токен не принят (401 UNAUTHORIZED). Токен из @CryptoTestnetBot работает только с "
+                    "включённым «Тестовым режимом», токен из @CryptoBot — только с выключенным."
+                    + (" Сейчас тестовый режим включён." if is_test else " Сейчас тестовый режим выключен.")
+                )
+            raise ProviderError(f"Crypto Bot: {json.dumps(error, ensure_ascii=False)[:200]}")
         return payload.get("result") or {}
 
     @staticmethod
