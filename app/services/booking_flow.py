@@ -251,13 +251,24 @@ async def confirm_after_payment(db: AsyncSession, payment) -> None:
 
 
 _PHONE_RE = re.compile(r"\D+")
+#: Телефон пишут цифрами с пробелами, скобками, дефисами и плюсом. Всё остальное — не номер:
+#: иначе «ул. Ленина 1234 дом 567» после выбрасывания букв превращалось в «номер».
+_PHONE_SHAPE = re.compile(r"^\+?[\d\s().\-]{7,25}$")
 
 
 def normalize_phone(raw: str) -> str | None:
-    digits = _PHONE_RE.sub("", raw or "")
+    raw = (raw or "").strip()
+    if not _PHONE_SHAPE.fullmatch(raw):
+        return None
+    digits = _PHONE_RE.sub("", raw)
     if not 7 <= len(digits) <= 15:
         return None
     return "+" + digits
+
+
+def clean_name(raw: str) -> str:
+    """Имя одной строкой, без управляющих символов и лишних пробелов."""
+    return " ".join("".join(ch for ch in (raw or "") if ch.isprintable() or ch.isspace()).split())[:128]
 
 
 async def _set_state(db: AsyncSession, bot_id: uuid.UUID, user_id: int, kind: str, payload: dict) -> None:
@@ -348,12 +359,18 @@ async def handle_message(bot: Bot, message: dict, bot_id: uuid.UUID, db: AsyncSe
 
     step = state.payload.get("step")
     if step == "name":
-        if not text:
+        name = clean_name(text)
+        if not name:
             await _ask(bot, chat_id, "name", block, first=False)
             return True
-        sub.contact_name = text[:128]
+        sub.contact_name = name
     else:
-        raw = (message.get("contact") or {}).get("phone_number") or text
+        shared = message.get("contact") or {}
+        if shared and shared.get("user_id") not in (None, user_id):
+            # Чужая карточка контакта: номер должен быть самого человека.
+            await bot.send_message(chat_id, "Это чужой контакт. Нажмите «Отправить мой номер» или напишите свой номер.")
+            return True
+        raw = shared.get("phone_number") or text
         phone = normalize_phone(raw)
         if phone is None:
             await bot.send_message(chat_id, "Не получилось разобрать номер. Напишите его цифрами, например +7 700 123 45 67.")

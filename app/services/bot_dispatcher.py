@@ -1166,8 +1166,28 @@ async def _handle_reply_button(
 
 
 async def _reaches_delivery_before_payment(db: AsyncSession, bot_id: uuid.UUID, start_id: uuid.UUID) -> bool:
+    """Ведёт ли быстрая кнопка к тому, что продаётся, минуя оплату.
+
+    Два случая. Цепочка от цели доходит до «Выдачи» раньше блока оплаты. Или сама цель лежит
+    в «оплаченной зоне» — это блоки, которые идут по стрелкам «дальше» после блока оплаты (до
+    ближайших кнопок): продавец вправе положить товар не только в «Выдачу», а в обычный текст,
+    файл или опрос."""
     rows = (await db.execute(select(BotBlock).where(BotBlock.bot_id == bot_id))).scalars().all()
     by_id = {block.id: block for block in rows}
+
+    paid_zone: set[uuid.UUID] = set()
+    for block in rows:
+        if block.block_type != BlockType.payment:
+            continue
+        current = by_id.get(block.next_block_id) if block.next_block_id else None
+        while current is not None and current.id not in paid_zone:
+            if current.block_type in (BlockType.buttons, BlockType.payment):
+                break  # развилка или следующая оплата: дальше начинается навигация
+            paid_zone.add(current.id)
+            current = by_id.get(current.next_block_id) if current.next_block_id else None
+    if start_id in paid_zone:
+        return True
+
     current = by_id.get(start_id)
     seen: set[uuid.UUID] = set()
     while current is not None and current.id not in seen:

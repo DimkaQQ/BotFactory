@@ -170,6 +170,9 @@ Telegram считал бы вебхук зависшим и повторял а�
 | `routers/auth.py` | `GET /api/config` (публичный конфиг лендинга, цены, документы), вход через Login Widget, `logout`, запись принятия условий |
 | `routers/bots.py` | `/api/me`, список/создание/правка (в т.ч. `paused`)/удаление ботов, публикация |
 | `routers/builder.py` | блоки бота: CRUD, `reorder` |
+| `routers/bot_profile.py` | оформление бота в Telegram: имя, описание, фото (Bot API токеном бота, у нас не хранится) |
+| `routers/crm.py` | мини-CRM и календарь записи: клиенты, карточка, календарь, закрытие времени, отмена записи |
+| `routers/reports.py` | страница жалоб `/report` (без входа) |
 | `routers/media.py` | загрузка файлов (магические байты, квота, uuid-имя) |
 | `routers/payments.py` | уведомления платёжных систем, настройки кассы, пейволл, заказы, подписчики, рассылка, возвраты, CSV |
 | `routers/webhook.py` | `POST /webhook/{bot_id}` — апдейты Telegram (проверка `secret_token`) |
@@ -180,6 +183,9 @@ Telegram считал бы вебхук зависшим и повторял а�
 | `services/payments/` | по файлу на провайдера (§7), `base.py` — контракт и `money()` |
 | `services/platform_billing.py` | период работы бота, напоминания, грейс, снятие с эфира, возврат одной оплатой |
 | `services/scheduler.py` | отложенные шаги (долгие паузы, напоминания) |
+| `services/booking.py` | календарь записи: слоты, придержка/бронь, отмена, часовые пояса |
+| `services/booking_flow.py` | диалог записи и блока «Контакты», подтверждение после оплаты |
+| `services/moderation.py` | жалобы, журнал действий, снятие бота/блокировка владельца |
 | `services/subscription_service.py` | подписки покупателей и закрытие периодов |
 | `services/group_access.py` | выдача/снятие доступа в закрытый чат |
 | `services/owner_panel.py` | данные кабинета владельца в мета-боте: карточки ботов, пауза, уведомления, принятие условий |
@@ -218,15 +224,17 @@ Telegram считал бы вебхук зависшим и повторял а�
 | `components/PublishPaywall.tsx` | свёрнутая кнопка → лист с оплатой запуска (Stripe/Crypto Bot/Stars) |
 | `components/PublishButton.tsx`, `BotFatherSteps.tsx` | форма токена после оплаты, инструкция 4 шага |
 | `components/PaymentSettingsPanel.tsx`, `PaymentEditor.tsx` | касса и блок «Оплата» |
-| `components/SalesPanel.tsx`, `BroadcastButton.tsx`, `BillingBanner.tsx` | продажи, рассылка, баннер периода |
+| `components/SalesPanel.tsx`, `SalesOverviewPanel.tsx`, `BroadcastButton.tsx`, `BillingBanner.tsx` | продажи бота, продажи и нажатия по всем ботам, рассылка, баннер периода |
+| `components/CrmPanel.tsx`, `BookingEditor.tsx`, `BotProfilePanel.tsx` | клиенты и календарь записи, блоки «Запись»/«Контакты», оформление бота |
 | `components/LivePreview.tsx`, `BlockPreviewFlyout.tsx` | предпросмотр сценария |
 | `templates.ts`, `blockTypes.ts`, `humanDelay.ts` | шаблоны, типы блоков, «человеческая» пауза |
-| `hooks/` | `useDraggablePanel`, `useEscape`, `useSwipeToDismiss`, `useTelegramWebApp`, `useWideScreen` |
+| `hooks/` | `useDraggablePanel`, `useEscape` (стопка окон: Escape закрывает одно верхнее), `useDialogA11y` (role=dialog, фокус), `useSwipeToDismiss`, `useTelegramWebApp`, `useWideScreen` |
+| `plural.ts`, `placeholders.ts`, `motion.ts` | склонения, подстановка `[цена]` в предпросмотре (как `fill_placeholders` в боте), прокрутка с учётом `prefers-reduced-motion` |
 | `confirm.ts` | подтверждение: нативный `showConfirm` Mini App только при `initData` и версии ≥ 6.2, иначе `window.confirm` |
 
 ### Прочее
 
-- `migrations/versions/0001…0017` — alembic (список в §5).
+- `migrations/versions/0001…0022` — alembic (список в §5).
 - `nginx/default.conf` — nginx фронтенд-контейнера (лимиты, resolver, прокси, CSP report-only).
 - `deploy/` — `deploy.sh`, `deployfirst.sh`, `backup.sh`, `watchdog.sh`, `install-cron.sh`, `nginx-vhost.example.conf`, `cloudflare-realip.conf`, `ops.md`, `runbook.md`, `scaling.md`.
 - `Caddyfile`, `docker-compose.prod.yml` — вариант А (чистый VPS с Caddy).
@@ -240,19 +248,20 @@ Telegram считал бы вебхук зависшим и повторял а�
 
 - `clients` — владелец бота: `telegram_user_id`, `full_name`, `sessions_valid_from` (выход везде), `notify_sales`, `banned_at`, `terms_version`/`terms_accepted_at`.
 - `bots` — клиентский бот: `client_id`, `name`, `bot_token_encrypted`, `telegram_bot_username`, `status` (`draft|active|disabled`), `start_block_id`, `payment_provider`, `payment_credentials_encrypted`, `payment_is_test`, `publication_paid_at`, `paid_until`, `paused` (пауза владельца — на уровне диспетчера, **не** то же, что биллинговый `disabled`), `billing_notice_stage`.
-- `bot_blocks` — блоки графа: `block_type` (`welcome, description, image, video, buttons, poll, delivery, delay, payment`), `content` JSONB, `next_block_id`, `position_x/y`, `order_index`.
+- `bot_blocks` — блоки графа: `block_type` (`welcome, description, image, video, buttons, poll, delivery, delay, payment, booking, contact`), `content` JSONB, `next_block_id`, `position_x/y`, `order_index`.
 - `bot_subscribers` — все, кто писал боту (имя, язык, `blocked_at`, `unsubscribed_at`).
 - `payments` — **и** покупки в ботах (`kind=order`), **и** оплата платформе (`publication`, `renewal`): `invoice_no`, `status` (`pending|paid|failed|refunded`), `provider`, `amount_minor`, `currency`, `bot_id`/`client_id` (**`ON DELETE SET NULL`** — учёт переживает удаление бота/аккаунта), `block_id`, `telegram_user_id`, `chat_id`, `meta` JSONB (`delivered_at`, `checkout_url`, …).
 - `subscriptions` — подписки покупателей бота (период, провайдер, доступ в чат).
 - `scheduled_steps` — отложенные шаги/рассылки (`pending|sent|failed|cancelled`).
 - `poll_answers`, `poll_sends` — ответы на опросы.
 - `support_relay` — соответствие «сообщение в чате поддержки ↔ автор».
+- `bookings` — записи клиентов, придержки и закрытое время (частичный уникальный индекс `uq_booking_active_slot`: одно время — одна активная запись); `chat_states` — бот ждёт ответ текстом (имя, телефон); `button_clicks` — нажатия кнопок; `abuse_reports`, `moderation_actions` — жалобы и журнал модерации. У `bot_subscribers` есть `contact_name/phone/note`.
 
 Миграции: 0001 initial · 0002 имя бота · 0003 граф блоков · 0004 платежи ·
 0005 backfill `delivered_at` · 0006 подписчики/планировщик/подписки · 0007 опросы ·
 0008 продления платформы · 0009 poll_sends · 0010 отписка · 0011 enum-проверки ·
 0012 отзыв сессий · 0013 принятие условий · 0014 `support_relay` · 0015 `paused` +
-`notify_sales` · 0016 платежи не каскадом · 0017 `banned_at`.
+`notify_sales` · 0016 платежи не каскадом · 0017 `banned_at` · 0018 флаг чека · 0019 вопросы поддержки · 0020 модерация · 0021 нажатия кнопок · 0022 запись и CRM. `alembic check` чистый: Enum без нативного типа сравнивается с VARCHAR как равный (`migrations/env.py`).
 
 Деньги везде — **целые минорные единицы** (копейки, центы). Звёзды: цена в
 `amount_minor` = звёзды × 100.
@@ -268,6 +277,9 @@ Telegram считал бы вебхук зависшим и повторял а�
 - Блоки: `/api/bots/{id}/blocks` (`GET|POST`, `PATCH /reorder`, `PATCH|DELETE /{block_id}`).
 - Файлы: `POST /api/bots/{id}/media/upload`; раздача `/api/media/<клиент>/<uuid>-имя` (**без авторизации** — адрес нельзя угадать, но можно переслать).
 - Платежи/касса: `GET /api/payments/providers`, `GET|PUT /api/bots/{id}/payment-settings`, `GET /api/bots/{id}/publication`, `POST …/publication-checkout`, `POST …/renewal-checkout`, `GET …/billing`, `GET /api/payments/{id}`.
+- Оформление бота: `GET|PUT /api/bots/{id}/profile`, `POST|DELETE …/profile/photo`. Статистика: `GET …/button-stats`. `GET /api/meta-bot/status`.
+- CRM и запись: `GET /api/crm/customers`, `GET|PATCH /api/crm/customers/{bot_id}/{telegram_user_id}`, `GET …/calendar`, `POST …/calendar/block`, `POST …/bookings/{id}/cancel`.
+- Жалобы: `GET|POST /report` (без входа, лимит 5/час с адреса).
 - Продажи: `GET …/orders` (+`.csv`), `POST …/orders/{id}/confirm|refund|redeliver|reject`, `GET …/subscribers`, `POST …/broadcast`, `GET …/broadcasts`, `GET …/polls`.
 - Вебхуки: `POST /webhook/{bot_id}` (Telegram, `secret_token`), `POST /webhook/pay/{provider}` (платёжки), `GET /webhook/pay/test/{id}` (тестовый провайдер), `GET /api/pay/redirect/{id}`, `GET /api/pay/done`.
 
@@ -537,16 +549,14 @@ cd frontend && npx tsc --noEmit && npm run build
 раз → уведомление владельцу; для «Записи на сессию» — с именем покупателя).
 Шаблоны берутся из `tests/fixtures/templates.json`, выгруженного из
 `frontend/src/templates.ts` — **после правки шаблонов перевыгрузить**:
-`cd frontend && npx esbuild src/templates.ts --bundle --format=esm --platform=node --outfile=/tmp/tpl.mjs && node -e "import('/tmp/tpl.mjs').then(m=>require('fs').writeFileSync('../tests/fixtures/templates.json',JSON.stringify(m.BOT_TEMPLATES.map(t=>({id:t.id,label:t.label,needsSubscriptions:!!t.needsSubscriptions,blocks:t.blocks})),null,1)))"`.
+`cd frontend && npx esbuild src/templates.ts --bundle --format=esm --platform=node --outfile=/tmp/tpl.mjs && node -e "import('/tmp/tpl.mjs').then(m=>require('fs').writeFileSync('../tests/fixtures/templates.json',JSON.stringify(m.BOT_TEMPLATES.map(t=>({id:t.id,label:t.label,needsSubscriptions:!!t.needsSubscriptions,blocks:t.blocks,nexts:t.nexts,links:t.links})),null,1)))"`.
 `tests/test_all_providers_contract.py` — общий договор всех касс (описание для формы
 настроек, подделка уведомления не считается оплатой).
 
 **Ловушки (набитые шишки):**
 
 - Postgres в песочнице часто не запущен → массовые ERROR: `pg_ctlcluster 16 main start`.
-- В песочнице стоят старые fastapi/starlette (нет `HTTP_413_CONTENT_TOO_LARGE`) →
-  2 теста падают (`test_uploads_are_capped_per_account`, `test_a_block_cannot_hold_megabytes`);
-  в CI с pinned-версиями проходят.
+- Тесты нужен `FERNET_KEY` (любой сгенерированный) и системный `python`, а не `uv`.
 - aiogram: роутер подключается только к одному `Dispatcher`; тесты используют
   сессионный `meta_dp`. В обработчиках — явные `bot.edit_message_text`/`bot.answer_callback_query`
   (не `query.answer`, у `CallbackQuery` из теста нет привязанного бота).
@@ -556,7 +566,7 @@ cd frontend && npx tsc --noEmit && npm run build
 - `ruff` в новой версии включает `BLE001` — новые `except Exception` помечай `# noqa: BLE001` с причиной.
 - `nginx -t` для `nginx/default.conf`: `nginx -t -c` с обёрткой `events{} http{ include …/default.conf; }`.
 - Платёжные провайдеры: деньги целыми; Stars — число звёзд ×100; не логируй токены.
-- Миграции: цепочка линейная; `alembic check` на этой схеме шумит из-за enum-типов (известно, не ошибка).
+- Миграции: цепочка линейная; `alembic check` должен быть чистым — при правке моделей держи их в соответствии с миграциями (индексы объявляются в модели).
 
 ## 17. Фронтенд и дизайн-проверка
 
