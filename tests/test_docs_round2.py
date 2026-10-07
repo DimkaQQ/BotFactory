@@ -99,6 +99,39 @@ async def test_lava_checks_the_block_price_against_the_catalogue(monkeypatch):
         await provider._check_offer_price(LAVA, "o1", "RUB", "ONE_TIME", 99000)
 
 
+async def test_lava_finds_the_offer_from_a_product_id_or_the_product_page_link():
+    from app.services.payments.lavatop import resolve_offer_id
+
+    product = "843f7652-0494-41cb-b035-62f39380576a"
+    offer = "11111111-2222-3333-4444-555555555555"
+    prices = [
+        {"product_id": product, "offer_id": offer, "product": "P", "currency": "RUB", "amount": 990.0,
+         "periodicity": "ONE_TIME"},
+    ]
+    # offerId остаётся offerId, id товара и ссылка со страницы товара превращаются в оффер.
+    assert resolve_offer_id(offer, prices, "RUB", "ONE_TIME") == offer
+    assert resolve_offer_id(product, prices, "RUB", "ONE_TIME") == offer
+    assert resolve_offer_id(f"https://app.lava.top/products/{product.upper()}/content", prices, "RUB", "ONE_TIME") == offer
+    # Нет каталога — ничего не угадываем, вставленное идёт дальше как есть.
+    assert resolve_offer_id(product, [], "RUB", "ONE_TIME") == product
+    # У товара нет оффера с такой валютой/периодом — говорим, что есть.
+    with pytest.raises(ProviderError, match="RUB/ONE_TIME|нет оффера"):
+        resolve_offer_id(product, prices, "USD", "ONE_TIME")
+
+
+async def test_lava_asks_for_the_offer_id_when_a_product_has_several_matching_offers():
+    from app.services.payments.lavatop import resolve_offer_id
+
+    product = "843f7652-0494-41cb-b035-62f39380576a"
+    prices = [
+        {"product_id": product, "offer_id": f"o{n}", "product": "P", "currency": "RUB", "amount": 100.0,
+         "periodicity": "ONE_TIME"}
+        for n in (1, 2)
+    ]
+    with pytest.raises(ProviderError, match="несколько офферов"):
+        resolve_offer_id(product, prices, "RUB", "ONE_TIME")
+
+
 # ===================================================================== ioka
 
 IOKA = {"client_id": "cid", "client_secret": "sec"}

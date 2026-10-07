@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 
 import httpx
@@ -91,6 +92,7 @@ async def offer_prices(api_key: str) -> list[dict]:
             for price in offer.get("prices") or []:
                 out.append(
                     {
+                        "product_id": data.get("id"),
                         "offer_id": offer["id"],
                         "product": data.get("title"),
                         "currency": price["currency"],
@@ -99,6 +101,37 @@ async def offer_prices(api_key: str) -> list[dict]:
                     }
                 )
     return out
+
+
+_UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+def resolve_offer_id(raw: str, prices: list[dict], currency: str, periodicity: str) -> str:
+    """То, что вставили в поле, — offerId, id товара или ссылка на страницу товара в кабинете
+    (`app.lava.top/products/<id>/content`). Находим сам оффер.
+
+    id товара не годится для счёта, а владельцу его проще всего найти: он виден в адресе страницы.
+    Если у товара один оффер с нужной валютой и периодом — берём его; если несколько — просим
+    указать offerId. Каталог недоступен (`prices` пуст) — оставляем как есть: вставленное пойдёт
+    дальше и lava.top сама скажет, что не так."""
+    found = _UUID.search(raw or "")
+    value = found.group(0).lower() if found else (raw or "").strip()
+    if not prices:
+        return value
+    if any(str(p["offer_id"]).lower() == value for p in prices):
+        return next(str(p["offer_id"]) for p in prices if str(p["offer_id"]).lower() == value)
+    own = [p for p in prices if str(p.get("product_id") or "").lower() == value]
+    if not own:
+        return value
+    fitting = sorted({str(p["offer_id"]) for p in own if p["currency"] == currency and p["periodicity"] == periodicity})
+    if len(fitting) == 1:
+        return fitting[0]
+    if not fitting:
+        have = ", ".join(sorted({f"{p['currency']}/{p['periodicity']}" for p in own}))
+        raise ProviderError(f"lava.top: у товара нет оффера с ценой {currency}/{periodicity}. Есть: {have}")
+    raise ProviderError(
+        "lava.top: у товара несколько офферов с такой ценой, укажи offerId вручную: " + ", ".join(fitting)
+    )
 
 
 class LavaTopProvider(ProviderDefaults):
@@ -124,7 +157,7 @@ class LavaTopProvider(ProviderDefaults):
         CredentialField(
             "offer_id",
             "offerId товара в Lava",
-            "UUID оффера: ЛК lava.top → товар → нужный тариф",
+            "UUID оффера или ссылка на страницу товара в lava.top (app.lava.top/products/…): оффер найдём сами",
             secret=False,
         ),
         CredentialField(
@@ -153,8 +186,14 @@ class LavaTopProvider(ProviderDefaults):
             raise ProviderError("lava.top: не заполнена почта для чеков")
 
         periodicity = _periodicity(request.extra)
+        try:
+            prices = await offer_prices((request.credentials.get("api_key") or "").strip())
+        except (httpx.HTTPError, ValueError, KeyError):
+            logger.warning("lava.top: каталог офферов недоступен, проверка периода пропущена")
+            prices = []
+        offer_id = resolve_offer_id(offer_id, prices, request.currency.upper(), periodicity)
         await self._check_offer_price(
-            request.credentials, offer_id, request.currency.upper(), periodicity, request.amount_minor
+            request.credentials, offer_id, request.currency.upper(), periodicity, request.amount_minor, prices=prices
         )
         body = {
             "email": email,
@@ -204,17 +243,23 @@ class LavaTopProvider(ProviderDefaults):
 
     @staticmethod
     async def _check_offer_price(
-        credentials: dict[str, str], offer_id: str, currency: str, periodicity: str, amount_minor: int | None = None
+        credentials: dict[str, str],
+        offer_id: str,
+        currency: str,
+        periodicity: str,
+        amount_minor: int | None = None,
+        prices: list[dict] | None = None,
     ) -> None:
         """У оффера должна быть цена именно в этой валюте и с этим периодом, и равная цене в блоке —
         иначе Lava вернёт невнятную ошибку (или возьмёт другую сумму) уже у покупателя. Цену берём из
         каталога (`amount` — число с копейками), а не из ответа на создание счёта, где сумма целая.
         Если каталог недоступен, проверку пропускаем: оплата из-за проверки ломаться не должна."""
-        try:
-            prices = await offer_prices((credentials.get("api_key") or "").strip())
-        except (httpx.HTTPError, ValueError, KeyError):
-            logger.warning("lava.top: каталог офферов недоступен, проверка периода пропущена")
-            return
+        if prices is None:
+            try:
+                prices = await offer_prices((credentials.get("api_key") or "").strip())
+            except (httpx.HTTPError, ValueError, KeyError):
+                logger.warning("lava.top: каталог офферов недоступен, проверка периода пропущена")
+                return
         mine = [p for p in prices if p["offer_id"] == offer_id]
         if not mine:
             return
