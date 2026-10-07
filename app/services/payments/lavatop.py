@@ -204,6 +204,10 @@ class LavaTopProvider(ProviderDefaults):
         email = (request.credentials.get("buyer_email") or "").strip()
         if not email:
             raise ProviderError("lava.top: не заполнена почта для чеков")
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s.]+", email):
+            raise ProviderError(
+                f"lava.top: «Почта для чеков» не похожа на адрес электронной почты ({email[:40]}): нужен вид name@gmail.com"
+            )
 
         periodicity = _periodicity(request.extra)
         try:
@@ -246,7 +250,15 @@ class LavaTopProvider(ProviderDefaults):
             response = await client.post(f"{_BASE}/api/v3/invoice", json=body, headers=headers)
         if response.status_code >= 400:
             detail = _error(response)
-            if "not found" in detail.lower():
+            low = detail.lower()
+            if "incorrect email" in low:
+                detail += (
+                    ". Проверь «Почту для чеков» в настройках кассы: нужен обычный адрес вида name@gmail.com, "
+                    "без пробелов; если не помогает, укажи другой адрес"
+                )
+            elif "too small" in low:
+                detail += ". Сумма меньше минимальной для lava.top: подними цену в блоке оплаты"
+            if "not found" in low:
                 detail += (
                     ". Проверь, что API-ключ из того же аккаунта, где лежит товар, что у товара есть оффер "
                     "с ценой и что в поле указан offerId (или ссылка на страницу товара)"

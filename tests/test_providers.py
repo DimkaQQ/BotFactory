@@ -704,3 +704,23 @@ def test_every_default_offered_slug_is_a_real_provider():
     default = {s.strip() for s in Settings.model_fields["offered_payment_providers"].default.split(",")}
     assert default <= set(PROVIDERS), sorted(default - set(PROVIDERS))
     assert "stars" in default
+
+
+async def test_lavatop_refuses_a_malformed_receipt_email_before_calling_the_api():
+    with pytest.raises(ProviderError, match="не похожа на адрес"):
+        await get_provider("lavatop").create_checkout(
+            checkout_request({"api_key": "k", "buyer_email": "не почта"}, extra={"offer_id": "offer-uuid"})
+        )
+
+
+async def test_lavatop_explains_the_two_most_common_refusals(mock_http):
+    for reply, hint in (
+        ("Incorrect email to purchase", "Почту для чеков"),
+        ("The amount is too small to create an invoice. Creation is prohibited", "минимальной"),
+    ):
+        with mock_http(lambda request, reply=reply: httpx.Response(400, json={"error": reply})):
+            with pytest.raises(ProviderError) as caught:
+                await get_provider("lavatop").create_checkout(
+                    checkout_request(LAVA_CREDS, extra={"offer_id": "offer-uuid"})
+                )
+        assert reply in str(caught.value) and hint in str(caught.value)
