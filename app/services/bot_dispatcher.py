@@ -45,6 +45,7 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
     URLInputFile,
 )
 from sqlalchemy import select
@@ -129,6 +130,8 @@ def _button_has_branches(content: dict) -> bool:
     past, and the node it was wired to became unreachable — while the canvas
     happily drew the arrow.
     """
+    if content.get("keyboard") == "remove":
+        return False
     return any(
         (button.get("target_block_id") or "").strip() and not _is_url_button(button)
         for button in content.get("buttons") or []
@@ -156,7 +159,12 @@ def _build_reply_keyboard(content: dict) -> ReplyKeyboardMarkup | None:
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, is_persistent=True)
 
 
-def _build_keyboard(block_id: uuid.UUID, content: dict) -> InlineKeyboardMarkup | ReplyKeyboardMarkup | None:
+def _build_keyboard(
+    block_id: uuid.UUID, content: dict
+) -> InlineKeyboardMarkup | ReplyKeyboardMarkup | ReplyKeyboardRemove | None:
+    if content.get("keyboard") == "remove":
+        # Убрать быстрые кнопки, оставшиеся у покупателя от прежнего блока.
+        return ReplyKeyboardRemove()
     if content.get("keyboard") == "reply":
         return _build_reply_keyboard(content)
     buttons = content.get("buttons") or []
@@ -724,7 +732,7 @@ async def _send_block(
         # «Выдача» — so the shop's own guide came out as an error instead of
         # a message, after the buyer had already paid. The keyboard rides on
         # the last piece, where it belongs.
-        chunks = _split_for_telegram(text or "…")
+        chunks = _split_for_telegram(text or ("Кнопки убраны" if content.get("keyboard") == "remove" else "…"))
         for piece in chunks[:-1]:
             await bot.send_message(chat_id, piece)
         await bot.send_message(chat_id, chunks[-1], reply_markup=keyboard)

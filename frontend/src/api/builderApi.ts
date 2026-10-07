@@ -24,7 +24,7 @@ export interface BlockContent {
   media_type?: string | null;
   buttons?: ButtonAction[];
   /** Кнопки блока: под сообщением (по умолчанию) или быстрые внизу экрана. */
-  keyboard?: "inline" | "reply";
+  keyboard?: "inline" | "reply" | "remove";
   question?: string;
   options?: string[];
   anonymous?: boolean;

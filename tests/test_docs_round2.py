@@ -647,3 +647,14 @@ def test_document_input_only_downloads_from_own_server(monkeypatch):
     assert _document_input(evil) == evil
     own = "https://bot.example/api/media/1/" + "a" * 32 + "-x.pdf"
     assert isinstance(_document_input(own), URLInputFile)
+
+
+def test_remove_mode_clears_the_reply_keyboard():
+    import uuid
+
+    from aiogram.types import ReplyKeyboardRemove
+
+    from app.services.bot_dispatcher import _build_keyboard
+
+    kb = _build_keyboard(uuid.uuid4(), {"keyboard": "remove", "text": "Меню закрыто", "buttons": [{"label": "A"}]})
+    assert isinstance(kb, ReplyKeyboardRemove)

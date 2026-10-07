@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-import { type Bot, ApiError, builderApi } from "../api/builderApi";
+import { type Bot, type BotBlock, ApiError, builderApi } from "../api/builderApi";
 import { confirmDialog } from "../confirm";
 import { openExternal } from "../hooks/useTelegramWebApp";
 import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
@@ -114,7 +114,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       // Either way the step perpendicular to the flow after a buttons block
       // makes its branch read as a branch instead of a loop back.
       const acrossTheWidth = window.innerWidth >= 960;
-      const created = [];
+      const created: BotBlock[] = [];
       // Clear of the "▶ Старт" pseudo-node, which sits at (40, 40).
       let x = 80;
       let y = 170;
@@ -140,7 +140,9 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       // of disconnected blocks would send nothing but its first message —
       // and it's also how someone learns what the arrows are for: the first
       // bot they open already shows a working one.
+      const firstButtons = template.links ? template.blocks.findIndex((b) => b.block_type === "buttons") : -1;
       for (let i = 0; i < created.length - 1; i++) {
+        if (template.links && firstButtons !== -1 && i >= firstButtons) break;
         const current = created[i];
         const next = created[i + 1];
         const buttons = current.content.buttons ?? [];
@@ -157,6 +159,15 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
         } else {
           await builderApi.updateBlock(bot.id, current.id, { next_block_id: next.id });
         }
+      }
+      if (template.links && firstButtons !== -1) {
+        // Разводка по кнопкам: каждая ведёт к своему блоку.
+        const source = created[firstButtons];
+        const buttons = (source.content.buttons ?? []).map((b, index) => {
+          const link = template.links!.find((l) => l.from === firstButtons && l.button === index);
+          return link ? { ...b, target_block_id: created[link.to].id } : b;
+        });
+        await builderApi.updateBlock(bot.id, source.id, { content: { ...source.content, buttons } });
       }
       setPickerOpen(false);
       onOpen(bot.id);

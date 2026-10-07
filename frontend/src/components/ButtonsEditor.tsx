@@ -48,7 +48,9 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
     onChange({ ...content, buttons: [...buttons, emptyButton()] });
   }
 
-  const style = content.keyboard === "reply" ? "reply" : "inline";
+  const style = content.keyboard === "reply" ? "reply" : content.keyboard === "remove" ? "remove" : "inline";
+  const shown = buttons.map((b) => (b.label || "").trim()).filter(Boolean);
+  const sample = shown.length > 0 ? shown : ["Кнопка 1", "Кнопка 2", "Кнопка 3"];
 
   return (
     <div className="buttons-editor" onClick={(e) => e.stopPropagation()}>
@@ -74,6 +76,48 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
           <span>Кнопки вместо клавиатуры, всегда под рукой. Подписи делай разными.</span>
         </button>
       </div>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={style === "remove"}
+        className={`payment-settings__other${style === "remove" ? " payment-settings__other--active" : ""}`}
+        onClick={() => onChange({ ...content, keyboard: "remove" })}
+      >
+        <strong>⌫ Убрать быстрые кнопки</strong>
+        <span>
+          Нужно, если вы ставили быстрые кнопки внизу, а дальше хотите кнопки под сообщением или чистый чат:
+          у покупателя они сами не пропадут. Поставьте такой блок на их пути, и бот их уберёт.
+        </span>
+      </button>
+
+      <div className={`kb-demo kb-demo--${style}`} aria-hidden="true">
+        <p className="kb-demo__caption">Так это увидит покупатель в Telegram</p>
+        <div className="kb-demo__phone">
+          <div className="kb-demo__bubble">{(content.text || "").trim() || "Сообщение бота"}</div>
+          {style === "inline" && (
+            <div className="kb-demo__inline">
+              {sample.map((label, i) => (
+                <span key={i} className="kb-demo__pill">
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+          {style === "reply" && (
+            <div className="kb-demo__keyboard">
+              {sample.map((label, i) => (
+                <span key={i} className="kb-demo__key">
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+          {style === "remove" && <p className="kb-demo__empty">Клавиатура внизу исчезнет — остаётся обычное поле ввода.</p>}
+        </div>
+      </div>
+
+      {style !== "remove" && (
+        <>
       {buttons.map((button, index) => (
         <ButtonRow
           key={index}
@@ -88,6 +132,8 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
       <button type="button" className="buttons-editor__add" onClick={addButton}>
         + Добавить кнопку
       </button>
+        </>
+      )}
     </div>
   );
 }

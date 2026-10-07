@@ -50,7 +50,7 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
   const { onEdit, onDelete } = useFlowActions();
   const def = BLOCK_TYPE_BY_ID[block.block_type];
   const isButtons = block.block_type === "buttons";
-  const buttons = isButtons ? block.content.buttons ?? [] : [];
+  const buttons = isButtons && block.content.keyboard !== "remove" ? block.content.buttons ?? [] : [];
   const hasBranch = buttons.some((b) => (b.target_block_id || "").trim());
   const isEmpty = isButtons
     ? !buttons.some((b) => b.label.trim() || b.action_value.trim()) && !block.content.text?.trim()

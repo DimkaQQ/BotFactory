@@ -26,7 +26,7 @@ function typingDelayMs(text: string): number {
  * cannot branch on it and walks straight past. A preview that stopped there
  * would offer a path the live bot can never take. */
 function hasBranches(block: BotBlock): boolean {
-  if (block.block_type !== "buttons") return false;
+  if (block.block_type !== "buttons" || block.content.keyboard === "remove") return false;
   return (block.content.buttons ?? []).some(
     (b) => (b.target_block_id || "").trim() && b.action_type !== "url",
   );
@@ -127,7 +127,11 @@ export function LivePreview({ bot, botName, onClose }: Props) {
 
   // Быстрые кнопки живут внизу экрана, а не в сообщении, и остаются, пока их
   // не заменит другая клавиатура — как в Telegram.
-  const replyBlock = [...revealed].reverse().find((b) => b.block_type === "buttons" && b.content.keyboard === "reply") ?? null;
+  const lastKeyboardBlock =
+    [...revealed]
+      .reverse()
+      .find((b) => b.block_type === "buttons" && (b.content.keyboard === "reply" || b.content.keyboard === "remove")) ?? null;
+  const replyBlock = lastKeyboardBlock?.content.keyboard === "reply" ? lastKeyboardBlock : null;
 
   function handleReplyPick(block: BotBlock, index: number) {
     const button = block.content.buttons?.[index];
@@ -302,7 +306,7 @@ function PreviewBlock({
               <div className="block-preview__media block-preview__media--video live-preview__media">▶</div>
             )}
             {content.text && <p className="chat-bubble__text">{content.text}</p>}
-            {(content.buttons ?? []).length > 0 && content.keyboard !== "reply" && (
+            {(content.buttons ?? []).length > 0 && content.keyboard !== "reply" && content.keyboard !== "remove" && (
               <div className="chat-buttons">
                 <div className="chat-buttons__preview">
                   {content.buttons!.map((btn, i) =>

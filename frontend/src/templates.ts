@@ -13,6 +13,10 @@ export interface BotTemplate {
   accent: string;
   suggestedName: string;
   blocks: { block_type: BlockType; content: BlockContent }[];
+  /** Своя разводка вместо простой цепочки: нажатие кнопки `button` блока `from`
+   * ведёт к блоку `to` (номера — позиции в `blocks`). Блоки до первого блока
+   * кнопок соединяются по порядку. */
+  links?: { from: number; button: number; to: number }[];
 }
 
 /** "5 блоков" / "1 блок" / "3 блока" — Russian plural agreement, used on
@@ -194,6 +198,37 @@ export const BOT_TEMPLATES: BotTemplate[] = [
           buttons: [{ label: "Наш сайт / меню", action_type: "url", action_value: "" }],
         },
       },
+    ],
+  },
+  {
+    id: "quick-menu",
+    accent: "buttons",
+    icon: "⌨️",
+    label: "Меню с быстрыми кнопками",
+    pitch: "Кафе, салон, магазин: кнопки внизу экрана — цены, отзывы, адрес. Хороший пример, как это выглядит",
+    suggestedName: "Меню с быстрыми кнопками",
+    blocks: [
+      { block_type: "welcome", content: { text: "Привет! Выбери внизу, что показать 👇" } },
+      {
+        block_type: "buttons",
+        content: {
+          keyboard: "reply",
+          text: "Что тебя интересует?",
+          buttons: [
+            { label: "💰 Цены", action_type: "text", action_value: "" },
+            { label: "⭐ Отзывы", action_type: "text", action_value: "" },
+            { label: "📍 Как добраться", action_type: "text", action_value: "" },
+          ],
+        },
+      },
+      { block_type: "description", content: { text: "[Цены: например, стрижка — 1500 ₽, окрашивание — 4000 ₽.]" } },
+      { block_type: "description", content: { text: "[Отзывы клиентов: вставь настоящие отзывы со своего разрешения.]" } },
+      { block_type: "description", content: { text: "[Адрес и часы работы: ул. Примерная, 1, ежедневно 10:00–21:00.]" } },
+    ],
+    links: [
+      { from: 1, button: 0, to: 2 },
+      { from: 1, button: 1, to: 3 },
+      { from: 1, button: 2, to: 4 },
     ],
   },
   {
