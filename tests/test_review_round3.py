@@ -256,3 +256,15 @@ async def test_someone_elses_contact_card_is_not_taken_as_my_number(db, owner, m
     )
     await db.refresh(sub)
     assert sub.phone == "+79990001122"
+
+
+def test_a_schedule_with_no_working_days_is_closed_not_weekdays():
+    from datetime import date
+
+    from app.services import booking as bk
+
+    closed = bk.schedule_of({"days": [], "start": "10:00", "end": "12:00", "tz": "UTC"})
+    assert closed.days == () and bk.day_slots(closed, date(2026, 10, 12)) == []
+    # не задано вовсе (или записано не списком) — по-прежнему будни
+    for content in ({}, {"days": None}, {"days": 3}):
+        assert bk.schedule_of(content).days == (0, 1, 2, 3, 4)

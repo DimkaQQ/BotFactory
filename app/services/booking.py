@@ -56,8 +56,9 @@ def schedule_of(content: dict | None) -> Schedule:
     content = content or {}
     raw_days = content.get("days")
     if not isinstance(raw_days, (list, tuple)):
-        raw_days = [0, 1, 2, 3, 4]  # блок правят руками: не список — как «не задано», а не сбой диалога
-    days = tuple(sorted({int(d) for d in raw_days if str(d).isdigit() and 0 <= int(d) <= 6})) or (0, 1, 2, 3, 4)
+        raw_days = [0, 1, 2, 3, 4]  # не задано (или записано не списком): будни, а не сбой диалога
+    # Список без единого дня — это «запись закрыта», а не «будни»: владелец снял все галочки.
+    days = tuple(sorted({int(d) for d in raw_days if str(d).isdigit() and 0 <= int(d) <= 6}))
     tz_name = str(content.get("tz") or DEFAULT_TZ)
     try:
         tz = ZoneInfo(tz_name)

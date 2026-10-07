@@ -17,6 +17,16 @@ const TZ = [
   ["UTC", "UTC"],
 ] as const;
 
+function minutesOf(value: string | undefined, fallback: number): number {
+  const [h, m] = (value ?? "").split(":").map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : fallback;
+}
+
+/** Сколько минут в рабочем дне; отрицательное — конец раньше начала. */
+function windowMinutes(content: BlockContent): number {
+  return minutesOf(content.end, 19 * 60) - minutesOf(content.start, 10 * 60);
+}
+
 /** Расписание записи: рабочие дни и часы, длина слота, горизонт, часовой пояс. */
 export function BookingEditor({ content, onChange }: Props) {
   const days = content.days ?? [0, 1, 2, 3, 4];
@@ -53,6 +63,12 @@ export function BookingEditor({ content, onChange }: Props) {
           </label>
         ))}
       </div>
+
+      {days.length === 0 && (
+        <p className="buttons-editor__warning" role="status">
+          ⚠️ Не выбрано ни одного рабочего дня — запись закрыта, клиенты увидят «Свободного времени пока нет».
+        </p>
+      )}
 
       <div className="booking-editor__grid">
         <label className="buttons-editor__field">
@@ -130,6 +146,11 @@ export function BookingEditor({ content, onChange }: Props) {
           </select>
         </label>
       </div>
+      {days.length > 0 && windowMinutes(content) < (content.slot_minutes ?? 60) && (
+        <p className="buttons-editor__warning" role="status">
+          ⚠️ В рабочие часы не помещается ни одной записи такой длины — проверь начало, конец и длину записи.
+        </p>
+      )}
       <p className="app-hint">
         Календарь один на бота: два блока «Запись» делят одно время. Закрыть перерыв или выходной можно в разделе
         «Клиенты и записи» → «Календарь».
@@ -144,7 +165,7 @@ export function ContactEditor({ content, onChange }: Props) {
   return (
     <div className="booking-editor" onClick={(e) => e.stopPropagation()}>
       <p className="payment-settings__hint">
-        Имя и @username бот берёт из Telegram сам, клиенту ничего вводить не нужно. Поставьте галочки только на то,
+        Имя и @username бот берёт из Telegram сам, клиенту ничего вводить не нужно. Поставь галочки только на то,
         что нужно дополнительно. Уже оставленное клиентом второй раз не спрашивается.
       </p>
       <label className="payment-settings__test">

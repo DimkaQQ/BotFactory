@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   type Bot,
@@ -14,6 +14,7 @@ import {
 import { confirmDialog } from "../confirm";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
+import { plural } from "../plural";
 
 interface Props {
   bots: Bot[];
@@ -174,7 +175,7 @@ function ClientsTab({ bots }: { bots: Bot[] }) {
             </span>
           </div>
           <div className="overview-panel__side">
-            <span>{c.bookings ? `${c.bookings} запис.` : ""}</span>
+            <span>{c.bookings ? `${c.bookings} ${plural(c.bookings, ["запись", "записи", "записей"])}` : ""}</span>
             <span className="overview-panel__sub">
               {(c.orders ?? []).map((o) => `${formatAmount(o.total_minor)} ${unit(o.currency)}`).join(" · ")}
             </span>
@@ -297,12 +298,18 @@ function CalendarTab({ bots }: { bots: Bot[] }) {
   const [selected, setSelected] = useState<CalendarSlot | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Ответ запоздавшего запроса (быстро сменили бот или неделю) не должен затирать свежий.
+  const latest = useRef(0);
   const load = useCallback(async () => {
     if (!botId) return;
+    const ticket = ++latest.current;
     try {
-      setView(await builderApi.calendar(botId, start, 7));
+      const data = await builderApi.calendar(botId, start, 7);
+      if (ticket !== latest.current) return;
+      setView(data);
       setError(null);
     } catch (err) {
+      if (ticket !== latest.current) return;
       setError(err instanceof ApiError ? err.message : "Не удалось загрузить календарь");
     }
   }, [botId, start]);
