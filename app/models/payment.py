@@ -52,7 +52,7 @@ class Payment(Base):
 
     kind: Mapped[PaymentKind] = mapped_column(SAEnum(PaymentKind, name="payment_kind", native_enum=False), nullable=False)
     status: Mapped[PaymentStatus] = mapped_column(
-        SAEnum(PaymentStatus, name="payment_status", native_enum=False), nullable=False, default=PaymentStatus.pending
+        SAEnum(PaymentStatus, name="payment_status", native_enum=False), nullable=False, default=PaymentStatus.pending, index=True
     )
 
     provider: Mapped[str] = mapped_column(String(32), nullable=False)

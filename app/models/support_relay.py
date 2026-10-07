@@ -19,7 +19,8 @@ class SupportRelay(Base):
 
     admin_message_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     user_chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # В базе колонка допускает NULL (миграция 0014); модель приведена к ней, без разрушающей миграции.
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=True)
     #: Текст сообщения человека (подпись или пометка о вложении) — чтобы ответ поддержки
     #: уходил одним сообщением вместе с вопросами. Только у копий его сообщений.
     question_text: Mapped[str | None] = mapped_column(Text, nullable=True)

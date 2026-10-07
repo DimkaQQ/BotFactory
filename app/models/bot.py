@@ -64,7 +64,7 @@ class Bot(Base):
     # monthly and is left alone. A date in the past does *not* mean the bot
     # is off: the grace period is counted from here, and only
     # `platform_billing` decides what that adds up to.
-    paid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     # Пауза, которую владелец включает сам (кнопкой в мета-боте): бот не
     # начинает новых диалогов, но оплаты, возвраты, /stop и выдача уже
