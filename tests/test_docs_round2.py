@@ -132,6 +132,41 @@ async def test_lava_asks_for_the_offer_id_when_a_product_has_several_matching_of
         resolve_offer_id(product, prices, "RUB", "ONE_TIME")
 
 
+async def test_lava_catalogue_asks_for_hidden_products_and_follows_the_pages():
+    """Товар, который продаётся только по ссылке, скрыт, а по умолчанию lava.top отдаёт лишь видимые;
+    лента к тому же постраничная — оффер со второй страницы тоже должен найтись."""
+    from app.services.payments import lavatop
+
+    seen: list[httpx.URL] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url)
+        if "beforeCreatedAt" in str(request.url):
+            body = {"items": [{"type": "PRODUCT", "data": {"id": "p2", "title": "Второй", "offers": [
+                {"id": "o2", "prices": [{"currency": "RUB", "amount": 50, "periodicity": "ONE_TIME"}]}]}}],
+                    "nextPage": None}
+        else:
+            body = {"items": [{"type": "PRODUCT", "data": {"id": "p1", "title": "Первый", "offers": [
+                {"id": "o1", "prices": [{"currency": "RUB", "amount": 10, "periodicity": "ONE_TIME"}]}]}}],
+                    "nextPage": "https://gate.lava.top/api/v2/products?beforeCreatedAt=2026-01-01T00:00:00Z"}
+        return httpx.Response(200, json=body)
+
+    real_client = httpx.AsyncClient
+
+    def client_factory(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(*args, **kwargs)
+
+    import unittest.mock as mock
+
+    with mock.patch.object(lavatop.httpx, "AsyncClient", client_factory):
+        prices = await lavatop.offer_prices("key")
+
+    assert seen[0].params["feedVisibility"] == "ALL"
+    assert {p["offer_id"] for p in prices} == {"o1", "o2"}
+    assert {p["product_id"] for p in prices} == {"p1", "p2"}
+
+
 # ===================================================================== ioka
 
 IOKA = {"client_id": "cid", "client_secret": "sec"}

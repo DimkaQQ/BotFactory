@@ -75,18 +75,35 @@ def _periodicity(extra: dict) -> str:
 
 logger = logging.getLogger(__name__)
 
+#: Сколько страниц каталога читаем за один платёж: лента постраничная, а счёт ждёт покупатель.
+_MAX_CATALOGUE_PAGES = 10
+
 
 async def offer_prices(api_key: str) -> list[dict]:
     """Все цены офферов аккаунта — для выбора тарифа в конструкторе:
     [{offer_id, product, currency, amount, periodicity}]. `periodicity` берём как есть,
     а не вычисляем по числу дней: у оффера может быть только то, что завёл владелец."""
-    async with httpx.AsyncClient(
-        base_url=_BASE, headers={"X-Api-Key": api_key}, timeout=30
-    ) as client:
-        response = await client.get("/api/v2/products", params={"showAllSubscriptionPeriods": "true"})
-    response.raise_for_status()
+    # По умолчанию lava.top отдаёт только ВИДИМЫЕ товары (`feedVisibility=ONLY_VISIBLE`), а товар,
+    # который продаётся только по ссылке или через API, обычно скрыт, поэтому просим все. Лента
+    # постраничная: идём по `nextPage`, но не бесконечно.
+    items: list[dict] = []
+    async with httpx.AsyncClient(base_url=_BASE, headers={"X-Api-Key": api_key}, timeout=30) as client:
+        response = await client.get(
+            "/api/v2/products", params={"showAllSubscriptionPeriods": "true", "feedVisibility": "ALL"}
+        )
+        response.raise_for_status()
+        payload = response.json()
+        items += payload.get("items", [])
+        for _ in range(_MAX_CATALOGUE_PAGES - 1):
+            next_page = payload.get("nextPage")
+            if not next_page:
+                break
+            response = await client.get(next_page)
+            response.raise_for_status()
+            payload = response.json()
+            items += payload.get("items", [])
     out = []
-    for item in response.json().get("items", []):
+    for item in items:
         data = item.get("data") or {}
         for offer in data.get("offers") or []:
             for price in offer.get("prices") or []:
@@ -190,11 +207,12 @@ class LavaTopProvider(ProviderDefaults):
             prices = await offer_prices((request.credentials.get("api_key") or "").strip())
         except (httpx.HTTPError, ValueError, KeyError):
             logger.warning("lava.top: каталог офферов недоступен, проверка периода пропущена")
-            prices = []
-        offer_id = resolve_offer_id(offer_id, prices, request.currency.upper(), periodicity)
-        await self._check_offer_price(
-            request.credentials, offer_id, request.currency.upper(), periodicity, request.amount_minor, prices=prices
-        )
+            prices = None
+        offer_id = resolve_offer_id(offer_id, prices or [], request.currency.upper(), periodicity)
+        if prices is not None:
+            await self._check_offer_price(
+                request.credentials, offer_id, request.currency.upper(), periodicity, request.amount_minor, prices=prices
+            )
         body = {
             "email": email,
             "offerId": offer_id,
@@ -220,7 +238,13 @@ class LavaTopProvider(ProviderDefaults):
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(f"{_BASE}/api/v3/invoice", json=body, headers=headers)
         if response.status_code >= 400:
-            raise ProviderError(f"lava.top: {_error(response)}")
+            detail = _error(response)
+            if "not found" in detail.lower():
+                detail += (
+                    ". Проверь, что API-ключ из того же аккаунта, где лежит товар, что у товара есть оффер "
+                    "с ценой и что в поле указан offerId (или ссылка на страницу товара)"
+                )
+            raise ProviderError(f"lava.top: {detail}")
 
         payload = response.json()
         url = payload.get("paymentUrl")
