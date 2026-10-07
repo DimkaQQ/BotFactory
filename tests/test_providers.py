@@ -691,3 +691,14 @@ def test_catalogue_offers_only_the_configured_providers(monkeypatch):
 
     monkeypatch.setattr(get_settings(), "offered_payment_providers", "*")
     assert {p["slug"] for p in describe_providers(offered_only=True)} == set(PROVIDERS)
+
+
+def test_every_default_offered_slug_is_a_real_provider():
+    """Опечатка в списке касс по умолчанию молча прятала кассу (так `telegram_stars` вместо `stars`
+    убрал звёзды из каталога): каждый slug в OFFERED_PAYMENT_PROVIDERS должен существовать."""
+    from app.config import Settings
+    from app.services.payments import PROVIDERS
+
+    default = {s.strip() for s in Settings.model_fields["offered_payment_providers"].default.split(",")}
+    assert default <= set(PROVIDERS), sorted(default - set(PROVIDERS))
+    assert "stars" in default

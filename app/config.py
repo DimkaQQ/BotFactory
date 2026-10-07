@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     # остаются в реестре и принимают вебхуки уже подключённых ботов, скрыто
     # только предложение новым выбором. На старте — только то, что можно
     # проверить: у остальных нет тестового доступа или нужен договор с юрлицом.
-    offered_payment_providers: str = "telegram_stars,yookassa,cloudpayments,prodamus,robokassa,paymaster,lavatop,ioka,stripe,cryptobot,link,test"
+    offered_payment_providers: str = "stars,yookassa,cloudpayments,prodamus,robokassa,paymaster,lavatop,ioka,stripe,cryptobot,link,test"
 
     # ---- Пределы на одного клиента ----
     # Регистрация бесплатна и открыта всякому, у кого есть Telegram, а
