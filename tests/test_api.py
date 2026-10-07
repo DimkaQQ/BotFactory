@@ -405,3 +405,27 @@ async def test_health_says_ok_only_when_the_database_answers(api, monkeypatch):
     # database is down".
     assert sick.status_code == 503
     assert sick.json()["database"] == "unreachable"
+
+
+async def test_public_config_shows_the_launch_offer_only_while_it_runs(api, monkeypatch):
+    """Плашка акции — только пока срок не прошёл и указана цена «потом»."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    future = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+    past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+    monkeypatch.setattr(settings, "launch_offer_ends_at", future, raising=False)
+    monkeypatch.setattr(settings, "launch_offer_regular_price", "$99", raising=False)
+    body = (await api.get("/api/config")).json()
+    assert body["launch_offer_ends_at"] and body["launch_offer_regular_price"] == "$99"
+
+    monkeypatch.setattr(settings, "launch_offer_ends_at", past, raising=False)
+    body = (await api.get("/api/config")).json()
+    assert body["launch_offer_ends_at"] == "" and body["launch_offer_regular_price"] == ""
+
+    monkeypatch.setattr(settings, "launch_offer_ends_at", future, raising=False)
+    monkeypatch.setattr(settings, "launch_offer_regular_price", "", raising=False)
+    assert (await api.get("/api/config")).json()["launch_offer_ends_at"] == ""

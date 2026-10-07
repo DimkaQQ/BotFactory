@@ -12,6 +12,7 @@ import { BLOCK_TYPES } from "../blockTypes";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
 import { HeroMockup } from "./HeroMockup";
 import { LandingDemo } from "./LandingDemo";
+import { LaunchOffer } from "./LaunchOffer";
 import { PaybackCalculator } from "./PaybackCalculator";
 import { SiteFooter } from "./SiteFooter";
 import { ThemeToggle } from "./ThemeToggle";
@@ -616,6 +617,9 @@ export function LoginScreen({ onLoggedIn }: Props) {
               : "Собирать, сохранять, проверять и запускать бота можно без оплаты. Если условия изменятся, цена будет видна на кнопке публикации до того, как что-то спишется."}
           </p>
         </div>
+        {pricing.length > 0 && config?.launch_offer_ends_at && config.launch_offer_regular_price ? (
+          <LaunchOffer endsAt={config.launch_offer_ends_at} regularPrice={config.launch_offer_regular_price} />
+        ) : null}
         {pricing.length > 0 && (
           <div className="landing-pricing">
             {pricing.map((price) => (

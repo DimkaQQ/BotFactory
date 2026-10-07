@@ -431,6 +431,9 @@ export interface PublicConfig {
    * что спишется на кнопке публикации. */
   launch_usd?: number | null;
   renewal_usd?: number | null;
+  /** Акция первых клиентов: момент окончания (ISO, UTC) и цена «потом». Пусто — акции нет. */
+  launch_offer_ends_at?: string;
+  launch_offer_regular_price?: string;
   pricing?: { method: string; launch: string; renewal: string; who?: string }[];
   renewal_period_days?: number;
   renewal_grace_days?: number;

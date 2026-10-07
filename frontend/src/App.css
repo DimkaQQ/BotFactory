@@ -7289,3 +7289,35 @@ details.live-problems > summary::-webkit-details-marker {
   line-height: 1.4;
   color: var(--text-secondary);
 }
+
+/* Акция первых клиентов на лендинге */
+.landing-offer {
+  max-width: 720px;
+  margin: 0 auto 24px;
+  padding: 16px 20px;
+  border: 1px solid var(--accent, #4f46e5);
+  border-radius: 14px;
+  text-align: center;
+  background: color-mix(in srgb, var(--accent, #4f46e5) 8%, transparent);
+}
+
+.landing-offer__title {
+  margin: 0 0 4px;
+  font-weight: 700;
+}
+
+.landing-offer__text {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+}
+
+.landing-offer__timer {
+  margin: 0;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 20px;
+}

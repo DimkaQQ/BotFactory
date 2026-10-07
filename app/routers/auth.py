@@ -73,12 +73,36 @@ class PublicConfig(BaseModel):
     #: калькулятора окупаемости на лендинге. None — считать нечего.
     launch_usd: float | None = None
     renewal_usd: float | None = None
+    #: Акция первых клиентов: момент окончания (ISO 8601, UTC) и цена «потом».
+    #: Пусто, если акции нет или срок прошёл — плашки на лендинге тогда нет.
+    launch_offer_ends_at: str = ""
+    launch_offer_regular_price: str = ""
 
 
 #: Not acquirers, and listing them as such would be a lie on a sales page.
 #: "test" hands goods over without money, and "link" is a human confirming a
 #: transfer by hand.
 _NOT_A_GATEWAY = frozenset({"test", "link"})
+
+
+def _launch_offer(settings) -> tuple[str, str]:
+    """Акция показывается, только пока срок не прошёл и указана цена «потом»:
+    плашка без срока или без обещанной цены — это пустое обещание."""
+    from datetime import datetime, timezone
+
+    raw = (settings.launch_offer_ends_at or "").strip()
+    regular = (settings.launch_offer_regular_price or "").strip()
+    if not raw or not regular:
+        return "", ""
+    try:
+        ends = datetime.fromisoformat(raw)
+    except ValueError:
+        return "", ""
+    if ends.tzinfo is None:
+        ends = ends.replace(tzinfo=timezone.utc)
+    if ends <= datetime.now(timezone.utc):
+        return "", ""
+    return ends.astimezone(timezone.utc).isoformat(), regular
 
 
 @router.get("/config", response_model=PublicConfig)
@@ -111,7 +135,10 @@ async def get_public_config() -> PublicConfig:
         for m in methods
     ]
     usd = next((m for m in methods if m.currency in ("USD", "USDT")), None)
+    offer_ends, offer_regular = _launch_offer(settings)
     return PublicConfig(
+        launch_offer_ends_at=offer_ends,
+        launch_offer_regular_price=offer_regular,
         launch_usd=usd.price_minor / 100 if usd else None,
         renewal_usd=usd.renewal_price_minor / 100 if usd and usd.renewal_price_minor > 0 else None,
         meta_bot_username=settings.meta_bot_username,
