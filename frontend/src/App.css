@@ -4612,14 +4612,6 @@
   text-align: center;
 }
 
-.theme-toggle__auto {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-}
-
 /* On the landing there is no header to sit in. */
 .theme-toggle--floating {
   position: fixed;
@@ -4980,8 +4972,7 @@
 /* Below this the bar cannot hold the long label, the theme control's "авто"
    badge and a readable "← Мои боты" at once — measured, not guessed. */
 @media (max-width: 599px) {
-  .bot-payments-button__long,
-  .theme-toggle__auto {
+  .bot-payments-button__long {
     display: none;
   }
 
@@ -5583,42 +5574,21 @@
    claim a gateway the code does not have. */
 
 .landing-gateways {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--sp-3);
-}
-
-.landing-gateway-group {
-  padding: var(--sp-4);
-  border-radius: var(--radius-lg);
-  background: var(--tg-bg);
-  border: 1px solid var(--tg-separator);
-  box-shadow: var(--shadow-card);
-}
-
-.landing-gateway-group__title {
-  margin: 0 0 var(--sp-3);
-  font-size: 12.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-tertiary);
-}
-
-.landing-gateway-group__list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: var(--sp-2);
 }
 
-.landing-gateway-group__list li {
-  padding: 5px 10px;
+.landing-gateways li {
+  padding: 8px 14px;
   border-radius: var(--radius-md);
   background: var(--tg-secondary-bg);
-  font-size: 13px;
+  border: 1px solid var(--tg-separator);
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -5696,9 +5666,6 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .landing-gateways {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (min-width: 960px) {
@@ -5729,9 +5696,6 @@
     flex: 1 1 320px;
   }
 
-  .landing-gateways {
-    grid-template-columns: repeat(4, 1fr);
-  }
 }
 
 /* Разовая покупка или повторяемая — выбор, который решает, получит ли
@@ -7112,9 +7076,6 @@ html {
 }
 
 @media (min-width: 960px) {
-  .landing-gateways {
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  }
 }
 
 @media (max-width: 719px) {
@@ -7320,4 +7281,17 @@ details.live-problems > summary::-webkit-details-marker {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 20px;
+}
+
+/* Виджет входа Telegram — iframe: в тёмной теме браузер красит его подложку
+   в светлый цвет по углам. Фиксируем светлую схему внутри и обрезаем края. */
+.login-widget {
+  display: flex;
+  justify-content: center;
+}
+
+.login-widget iframe {
+  color-scheme: light;
+  background: transparent;
+  border-radius: 12px;
 }

@@ -321,10 +321,9 @@ export function LoginScreen({ onLoggedIn }: Props) {
   // twelve is worse than no number.
   const pricing = config?.pricing ?? [];
 
-  const gatewayCount =
-    config?.payment_regions?.reduce((total, region) => total + region.gateways.length, 0) ||
-    config?.gateway_count ||
-    0;
+  // Плоский список без деления по странам: просто какие кассы есть.
+  const gatewayNames = Array.from(new Set(config?.payment_regions?.flatMap((region) => region.gateways) ?? []));
+  const gatewayCount = gatewayNames.length || config?.gateway_count || 0;
 
   return (
     <div className="screen screen--login">
@@ -530,7 +529,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
           into the product, and an API that answers without these fields —
           an older deployment, a cached response — used to take the whole
           landing down with it, login widget included. */}
-      {config?.payment_regions?.length ? (
+      {gatewayNames.length ? (
         <section className="landing-section" id="pay">
           <div className="landing-section__head">
             <p className="landing-section__eyebrow">Приём оплаты</p>
@@ -542,18 +541,11 @@ export function LoginScreen({ onLoggedIn }: Props) {
               касаемся — бот только выставляет счёт и ждёт, когда касса подтвердит оплату.
             </p>
           </div>
-          <div className="landing-gateways">
-            {config.payment_regions.map((region) => (
-              <div key={region.slug} className="landing-gateway-group">
-                <p className="landing-gateway-group__title">{region.title}</p>
-                <ul className="landing-gateway-group__list">
-                  {region.gateways.map((name) => (
-                    <li key={name}>{name}</li>
-                  ))}
-                </ul>
-              </div>
+          <ul className="landing-gateways">
+            {gatewayNames.map((name) => (
+              <li key={name}>{name}</li>
             ))}
-          </div>
+          </ul>
           <p className="landing-gateways__note">
             Своей кассы и компании ещё нет? Telegram Stars и Crypto Bot работают без юрлица и без эквайринга —
             начать можно сегодня, а подключить банк потом.

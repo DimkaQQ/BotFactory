@@ -21,17 +21,18 @@
          run synchronously, ahead of everything. -->
     <script>
       (function () {
-        var theme = "light";
+        var theme = "dark";
         try {
           var stored = localStorage.getItem("bf_theme");
           var tg = window.Telegram && window.Telegram.WebApp;
           theme =
             stored === "light" || stored === "dark"
               ? stored
-              : (tg && tg.colorScheme) ||
-                (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+              : tg && tg.colorScheme === "light"
+                ? "light"
+                : "dark";
         } catch (e) {
-          /* Private-mode localStorage, ancient matchMedia — light is a safe floor. */
+          /* Private-mode localStorage — тёмная тема по умолчанию. */
         }
         document.documentElement.setAttribute("data-theme", theme);
       })();

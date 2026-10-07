@@ -16,30 +16,33 @@
  * `colorScheme` as the system signal when it is available.
  */
 
-export type ThemePref = "system" | "light" | "dark";
+export type ThemePref = "light" | "dark";
 export type Theme = "light" | "dark";
 
 const STORAGE_KEY = "bf_theme";
 
-/** Keep in sync with the inline bootstrap in index.html. */
-function systemTheme(): Theme {
+/**
+ * Тема по умолчанию — тёмная (режима «как в системе» больше нет: он
+ * срабатывал нестабильно). Внутри Telegram берём его схему, если человек
+ * ничего не выбирал. Держать в согласии со скриптом в index.html.
+ */
+function defaultTheme(): Theme {
   const injected = window.Telegram?.WebApp?.colorScheme;
-  if (injected === "light" || injected === "dark") return injected;
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return injected === "light" ? "light" : "dark";
 }
 
 export function readPref(): ThemePref {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark" || stored === "system") return stored;
+    if (stored === "light" || stored === "dark") return stored;
   } catch {
-    /* Safari in private mode throws on localStorage — fall through to system. */
+    /* Safari in private mode throws on localStorage — fall through to default. */
   }
-  return "system";
+  return defaultTheme();
 }
 
 export function resolve(pref: ThemePref): Theme {
-  return pref === "system" ? systemTheme() : pref;
+  return pref;
 }
 
 export function apply(pref: ThemePref) {
@@ -52,25 +55,9 @@ export function apply(pref: ThemePref) {
 
 export function writePref(pref: ThemePref) {
   try {
-    if (pref === "system") localStorage.removeItem(STORAGE_KEY);
-    else localStorage.setItem(STORAGE_KEY, pref);
+    localStorage.setItem(STORAGE_KEY, pref);
   } catch {
     /* Preference simply does not persist; the session still switches. */
   }
   apply(pref);
-}
-
-/**
- * Notify when the *system* theme changes, so a viewer on "system" follows
- * along without a reload. Returns an unsubscribe function.
- */
-export function onSystemChange(cb: () => void): () => void {
-  const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
-  mq?.addEventListener?.("change", cb);
-  const webApp = window.Telegram?.WebApp;
-  webApp?.onEvent?.("themeChanged", cb);
-  return () => {
-    mq?.removeEventListener?.("change", cb);
-    webApp?.offEvent?.("themeChanged", cb);
-  };
 }
