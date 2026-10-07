@@ -44,6 +44,9 @@ export function SalesOverviewPanel({ bots, onClose }: Props) {
   const [botId, setBotId] = useState<string>("all");
   const [days, setDays] = useState(30);
   const [orders, setOrders] = useState<Row[] | null>(null);
+  // Итоги по всем заказам из базы (по валютам): в списке только последние 100 на бота, и сумма по
+  // нему занижала бы выручку занятого магазина.
+  const [serverTotals, setServerTotals] = useState<[string, { count: number; total: number }][]>([]);
   const [clicks, setClicks] = useState<ClickRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +65,14 @@ export function SalesOverviewPanel({ bots, onClose }: Props) {
           Promise.all(selected.map((b) => builderApi.buttonStats(b.id, days))),
         ]);
         if (cancelled) return;
+        const merged = new Map<string, { count: number; total: number }>();
+        for (const report of orderReports) {
+          for (const t of report.totals) {
+            const cur = merged.get(t.currency) ?? { count: 0, total: 0 };
+            merged.set(t.currency, { count: cur.count + t.count, total: cur.total + t.total_minor });
+          }
+        }
+        setServerTotals([...merged.entries()]);
         setOrders(
           orderReports
             .flatMap((report, i) => report.orders.map((o) => ({ ...o, botName: nameOf(selected[i]) })))
@@ -82,15 +93,7 @@ export function SalesOverviewPanel({ bots, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [botId, days, bots]);
 
-  const totals = useMemo(() => {
-    const byCurrency = new Map<string, { count: number; total: number }>();
-    for (const o of orders ?? []) {
-      if (o.status !== "paid") continue;
-      const cur = byCurrency.get(o.currency) ?? { count: 0, total: 0 };
-      byCurrency.set(o.currency, { count: cur.count + 1, total: cur.total + o.amount_minor });
-    }
-    return [...byCurrency.entries()];
-  }, [orders]);
+  const totals = serverTotals;
 
   const maxClicks = Math.max(1, ...(clicks ?? []).map((c) => c.clicks));
 

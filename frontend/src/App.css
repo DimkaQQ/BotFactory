@@ -7646,8 +7646,15 @@ details.live-problems > summary::-webkit-details-marker {
   .calendar__nav button,
   .chat-buttons__pill--tappable,
   .live-preview__skip,
-  .live-preview__key {
+  .live-preview__key,
+  .landing-nav__cta {
     min-width: 44px;
+    min-height: 44px;
+  }
+
+  .landing-nav__brand {
+    display: inline-flex;
+    align-items: center;
     min-height: 44px;
   }
 
