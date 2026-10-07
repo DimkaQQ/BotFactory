@@ -513,7 +513,12 @@ class TBankProvider(ProviderDefaults):
         if status in _PAID:
             amount = parsed.get("Amount")
             # GetState reports kopecks, the same unit we asked to charge.
-            if amount is not None and int(amount) != amount_minor:
+            # Нет суммы в ответе банка — сверить нечего, а значит и платить «оплачено» нельзя.
+            try:
+                same = amount is not None and int(amount) == amount_minor
+            except (TypeError, ValueError):
+                same = False
+            if not same:
                 raise ProviderError(f"Т-Банк: сумма не совпадает (в банке {amount})")
             return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(remote_id), meta=notes)
         if status in _REFUNDED:

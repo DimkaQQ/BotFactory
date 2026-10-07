@@ -242,7 +242,11 @@ class CryptoBotProvider(ProviderDefaults):
 
         if status == "paid":
             paid = invoice.get("amount")
-            if paid is not None and abs(float(paid) - amount_minor / 100) > 0.0000001:
+            try:
+                same = paid is not None and abs(float(paid) - amount_minor / 100) <= 0.0000001
+            except (TypeError, ValueError):
+                same = False
+            if not same:
                 raise ProviderError(f"Crypto Bot: сумма не совпадает (оплачено {paid})")
             # Crypto Bot calls it an asset, not a currency, but it is the same
             # question: 990 USDT and 990 TON are very different sales.

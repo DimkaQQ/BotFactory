@@ -388,16 +388,27 @@ class LavaTopProvider(ProviderDefaults):
         # payment is refused by `mark_paid` and skipped by «Я оплатил», so
         # the buyer pays at Lava and can never be delivered to. Refunds now
         # go through the same re-read as everything else.
-        contract = str(event.get("contractId") or "") or provider_payment_id
-        if not contract:
-            raise ProviderError("lava.top: в уведомлении нет contractId")
         kind = str(event.get("eventType") or "")
         parent = str(event.get("parentContractId") or "")
+        # Тело уведомления не подписано: платёж найден по метке в нём, а читать нужно
+        # СВОЙ счёт (id сохранён при создании). Иначе чужой оплаченный счёт из того же
+        # магазина с такой же ценой «оплатил бы» любой наш заказ. Исключение — продление
+        # подписки: у него новый contractId под сохранённым родителем.
+        if (parent and kind.startswith("subscription.recurring.payment")) or not provider_payment_id:
+            contract = str(event.get("contractId") or "") or provider_payment_id
+        else:
+            contract = provider_payment_id
+        if not contract:
+            raise ProviderError("lava.top: в уведомлении нет contractId")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", contract):
+            raise ProviderError("lava.top: неверный идентификатор счёта")
 
         if kind == "subscription.cancelled":
             # Подписчик отменил подписку на стороне lava.top: оплаченный период он дослушивает, дальше
             # списаний не будет. Телу уведомления не верим — спрашиваем у lava.top, отменена ли она.
             first = parent or provider_payment_id or contract
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", first):
+                raise ProviderError("lava.top: неверный идентификатор подписки")
             if await self._subscription_cancelled(credentials, first):
                 return WebhookResult(
                     status=PaymentStatus.pending,

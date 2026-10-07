@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hmac
 import json
 import time
 import uuid
@@ -465,7 +466,7 @@ def _authorised(headers: dict[str, str], key: str) -> bool:
     except (binascii.Error, UnicodeDecodeError, ValueError):
         return False
     login, _, password = decoded.partition(":")
-    return login == "Paycom" and password == key
+    return hmac.compare_digest(login.encode(), b"Paycom") and hmac.compare_digest(password.encode(), key.encode())
 
 
 def _parse(raw_body: bytes) -> dict:

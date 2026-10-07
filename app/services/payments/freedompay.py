@@ -379,7 +379,7 @@ class FreedomPayProvider(ProviderDefaults):
         amount = _number(state.get("pg_amount"))
         refunded = _number(state.get("pg_refund_amount"))
         if status == "success":
-            if amount is not None and abs(amount - amount_minor / 100) > 0.009:
+            if amount is None or abs(amount - amount_minor / 100) > 0.009:
                 raise ProviderError(f"Freedom Pay: сумма не совпадает (в платеже {amount})")
             same_currency(self.title, state.get("pg_currency"), currency)
             if refunded and amount and refunded >= amount:

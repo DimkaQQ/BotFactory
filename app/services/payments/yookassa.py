@@ -275,8 +275,12 @@ class YooKassaProvider(ProviderDefaults):
             return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=str(remote_id))
         if status == "succeeded" and payment.get("paid"):
             value = (payment.get("amount") or {}).get("value", "")
-            if value and abs(float(value) - amount_minor / 100) > 0.009:
-                raise ProviderError(f"ЮKassa: сумма не совпадает (в кассе {value})")
+            try:
+                same = bool(value) and abs(float(value) - amount_minor / 100) <= 0.009
+            except (TypeError, ValueError):
+                same = False
+            if not same:
+                raise ProviderError(f"ЮKassa: сумма не совпадает (в кассе {value or 'не указана'})")
             same_currency(self.title, (payment.get("amount") or {}).get("currency"), currency)
             method = payment.get("payment_method") or {}
             notes = {}

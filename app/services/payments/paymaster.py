@@ -238,7 +238,11 @@ class PayMasterProvider(ProviderDefaults):
         status = str(payment.get("status", "")).lower()
         if status in _SETTLED:
             value = (payment.get("amount") or {}).get("value")
-            if value is not None and abs(float(value) - amount_minor / 100) > 0.009:
+            try:
+                same = value is not None and abs(float(value) - amount_minor / 100) <= 0.009
+            except (TypeError, ValueError):
+                same = False
+            if not same:
                 raise ProviderError(f"PayMaster: сумма не совпадает (у провайдера {value})")
             same_currency(self.title, (payment.get("amount") or {}).get("currency"), currency)
             token = self._token_id(payment)

@@ -2,7 +2,7 @@
 
 The signature is the whole integration, and it is exacting: strip the
 signature key, sort every level of the structure by key, render every scalar
-as a string, JSON-encode (кириллица как есть, «/» экранируется как «\/» — канон Prodamus) and without
+as a string, JSON-encode (кириллица как есть, «/» экранируется как «\\/» — канон Prodamus) and without
 spaces, then HMAC-SHA256 with the shop's secret. Both directions use it —
 the outgoing link carries `signature`, the callback carries `Sign` — so the
 same serialiser has to produce byte-identical output from a dict we built
@@ -302,8 +302,12 @@ class ProdamusProvider(ProviderDefaults):
                 },
             )
 
-        if paid and abs(float(paid) - amount_minor / 100) > 0.009:
-            raise ProviderError(f"Prodamus: сумма не совпадает (пришло {paid})")
+        try:
+            same = bool(paid) and abs(float(paid) - amount_minor / 100) <= 0.009
+        except ValueError:
+            same = False
+        if not same:
+            raise ProviderError(f"Prodamus: сумма не совпадает (пришло {paid or 'ничего'})")
 
         return WebhookResult(
             status=PaymentStatus.paid,

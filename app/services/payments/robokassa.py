@@ -301,12 +301,13 @@ class RobokassaProvider(ProviderDefaults):
         state = find("State/Code")
         if state == "100":
             out_sum = find("Info/OutSum")
-            if out_sum:
-                try:
-                    if abs(float(out_sum.replace(",", ".")) - amount_minor / 100) > 0.009:
-                        raise ProviderError(f"Robokassa: сумма не совпадает (в операции {out_sum})")
-                except ValueError:
-                    pass
+            # Нет суммы или она не разбирается — сверить нечего, «оплачено» не засчитываем.
+            try:
+                same = bool(out_sum) and abs(float(out_sum.replace(",", ".")) - amount_minor / 100) <= 0.009
+            except ValueError:
+                same = False
+            if not same:
+                raise ProviderError(f"Robokassa: сумма не совпадает (в операции {out_sum or 'не указана'})")
             return WebhookResult(
                 status=PaymentStatus.paid,
                 provider_payment_id=str(invoice_no),

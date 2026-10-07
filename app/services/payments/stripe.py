@@ -215,7 +215,11 @@ class StripeProvider(ProviderDefaults):
             charged = obj.get("amount_total")
             charged_currency = (obj.get("currency") or "").upper()
             expected = amount_minor // 100 if charged_currency in _ZERO_DECIMAL else amount_minor
-            if charged is not None and int(charged) != expected:
+            try:
+                same = charged is not None and int(charged) == expected
+            except (TypeError, ValueError):
+                same = False
+            if not same:
                 raise ProviderError(f"Stripe: сумма не совпадает (оплачено {charged}, ожидалось {expected})")
             same_currency(self.title, charged_currency, currency)
             status = PaymentStatus.paid
