@@ -32,7 +32,7 @@ _recent: dict[str, list[float]] = {}
 
 
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("cf-connecting-ip") or request.headers.get("x-real-ip") or ""
+    forwarded = request.headers.get("x-real-ip") or ""
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"

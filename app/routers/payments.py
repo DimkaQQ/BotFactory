@@ -236,6 +236,16 @@ async def test_payment_page(payment_id: uuid.UUID, db: AsyncSession = Depends(ge
     if not is_test:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Тестовая оплата выключена")
 
+    # У бота сейчас должна быть выбрана именно тестовая касса: забытый счёт
+    # нельзя «оплатить» после смены кассы.
+    from app.models.bot import Bot
+
+    owner_bot = (await db.execute(select(Bot).where(Bot.id == payment.bot_id))).scalar_one_or_none()
+    from app.models.payment import PaymentKind
+
+    if payment.kind == PaymentKind.order and (owner_bot is None or owner_bot.payment_provider != "test"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Тестовая оплата выключена")
+
     provider = payment_providers.get_provider("test")
     verified = await provider.verify_webhook(
         headers={},

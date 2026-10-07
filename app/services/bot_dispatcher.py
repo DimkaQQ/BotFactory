@@ -787,9 +787,15 @@ def _document_input(url: str):
     uuid нужен, чтобы адрес нельзя было угадать. Покупателю он ни к чему —
     в чате он видел `1c83965d…-guide.pdf`. Для своих файлов отдаём Telegram имя
     без префикса; чужие ссылки и file_id остаются как есть."""
-    if not isinstance(url, str) or "/api/media/" not in url:
-        return url
     from urllib.parse import unquote, urlparse
+
+    from app.config import get_settings
+
+    # Скачивать сами мы можем только свой же сервер: иначе блок с чужим адресом
+    # и редиректом заставил бы наш сервер ходить по внутренним адресам (SSRF).
+    own_prefix = get_settings().public_base_url.rstrip("/") + "/api/media/"
+    if not isinstance(url, str) or not url.startswith(own_prefix):
+        return url
 
     name = unquote(urlparse(url).path.rsplit("/", 1)[-1])
     match = _UPLOAD_HASH_PREFIX.match(name)
@@ -1060,8 +1066,29 @@ async def _handle_reply_button(
                 target_id = uuid.UUID(target_raw)
             except ValueError:
                 continue
+            # Текст набрать может кто угодно, в отличие от инлайн-кнопки: не пускаем
+            # к выдаче в обход оплаты. Вести нужно на блок оплаты — купивший
+            # получит купленное повторно, остальным предложат купить.
+            if await _reaches_delivery_before_payment(db, bot_id, target_id):
+                logger.warning("Bot %s: reply button %r leads to delivery without payment — ignored", bot_id, label)
+                continue
             await walk_chain(bot, chat_id, target_id, bot_id, db, telegram_user_id=sender_id)
             return True
+    return False
+
+
+async def _reaches_delivery_before_payment(db: AsyncSession, bot_id: uuid.UUID, start_id: uuid.UUID) -> bool:
+    rows = (await db.execute(select(BotBlock).where(BotBlock.bot_id == bot_id))).scalars().all()
+    by_id = {block.id: block for block in rows}
+    current = by_id.get(start_id)
+    seen: set[uuid.UUID] = set()
+    while current is not None and current.id not in seen:
+        seen.add(current.id)
+        if current.block_type == BlockType.payment:
+            return False
+        if current.block_type == BlockType.delivery:
+            return True
+        current = by_id.get(current.next_block_id) if current.next_block_id else None
     return False
 
 

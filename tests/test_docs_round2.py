@@ -599,11 +599,13 @@ async def test_yookassa_partial_refund_keeps_payment_paid(mock_http):
         assert (await get_provider("yookassa").check_status(**kwargs)).status == PaymentStatus.refunded
 
 
-def test_document_input_hides_upload_hash_prefix():
+def test_document_input_hides_upload_hash_prefix(monkeypatch):
     from aiogram.types import URLInputFile
 
+    from app.config import get_settings
     from app.services.bot_dispatcher import _document_input
 
+    monkeypatch.setattr(get_settings(), "public_base_url", "https://bot.example", raising=False)
     own = "https://bot.example/api/media/1/" + "a" * 32 + "-guide.pdf"
     out = _document_input(own)
     assert isinstance(out, URLInputFile) and out.filename == "guide.pdf"
@@ -632,3 +634,16 @@ def test_reply_keyboard_built_for_quick_buttons():
     assert isinstance(kb, ReplyKeyboardMarkup)
     assert [[b.text for b in row] for row in kb.keyboard] == [["Цена", "Отзывы"], ["Очень длинная подпись кнопки номер три"]]
     assert _build_keyboard(uuid.uuid4(), {"buttons": [{"label": "A", "action_type": "text"}]}).inline_keyboard
+
+
+def test_document_input_only_downloads_from_own_server(monkeypatch):
+    from aiogram.types import URLInputFile
+
+    from app.config import get_settings
+    from app.services.bot_dispatcher import _document_input
+
+    monkeypatch.setattr(get_settings(), "public_base_url", "https://bot.example", raising=False)
+    evil = "https://evil.example/" + "a" * 32 + "-x.pdf?/api/media/"
+    assert _document_input(evil) == evil
+    own = "https://bot.example/api/media/1/" + "a" * 32 + "-x.pdf"
+    assert isinstance(_document_input(own), URLInputFile)
