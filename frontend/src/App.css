@@ -7388,3 +7388,120 @@ details.live-problems > summary::-webkit-details-marker {
     padding-bottom: calc(var(--sp-8, 48px) + env(safe-area-inset-bottom));
   }
 }
+
+/* ---------- Настройка оплаты: понятный выбор ---------- */
+.payment-settings__status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--sp-4);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--tg-secondary-bg);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.payment-settings__status--on {
+  background: color-mix(in srgb, var(--accent-success) 12%, var(--tg-bg));
+}
+
+.payment-settings__status strong {
+  color: var(--text-primary);
+}
+
+.payment-settings__providers {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-2);
+}
+
+.payment-settings__provider {
+  align-items: flex-start;
+  text-align: left;
+  min-height: 52px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.payment-settings__provider-note {
+  font-size: 12px;
+}
+
+.payment-settings__other {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  margin-top: var(--sp-2);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.payment-settings__other span {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.payment-settings__other--active {
+  border-color: var(--tg-button);
+  background: color-mix(in srgb, var(--tg-button) 10%, var(--tg-bg));
+}
+
+.payment-settings__demo {
+  margin-top: var(--sp-3);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.payment-settings__demo summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+
+.payment-settings__modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+}
+
+.payment-settings__mode {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.payment-settings__mode span {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.payment-settings__mode--active {
+  border-color: var(--tg-button);
+  background: color-mix(in srgb, var(--tg-button) 10%, var(--tg-bg));
+}
+
+@media (max-width: 420px) {
+  .payment-settings__modes {
+    grid-template-columns: 1fr;
+  }
+}

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 
 import {
   type PaymentProviderInfo,
-  type PaymentRegion,
   type PaymentSettings,
   ApiError,
   builderApi,
@@ -51,7 +50,6 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
   const { panelRef, handleProps: dragProps } = useDraggablePanel();
 
   const [providers, setProviders] = useState<PaymentProviderInfo[] | null>(null);
-  const [regions, setRegions] = useState<PaymentRegion[]>([]);
   const [subscriptionsEnabled, setSubscriptionsEnabled] = useState(false);
   const [settings, setSettings] = useState<PaymentSettings | null>(null);
   const [slug, setSlug] = useState<string>("");
@@ -69,7 +67,6 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
           builderApi.getPaymentSettings(botId),
         ]);
         setProviders(list.providers);
-        setRegions(list.regions ?? []);
         setSubscriptionsEnabled(Boolean(list.subscriptions_enabled));
         setSettings(current);
         setSlug(current.provider ?? "");
@@ -82,16 +79,13 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
 
   const active = providers?.find((p) => p.slug === slug) ?? null;
 
-  // Nineteen gateways in one flat grid is a wall to scan, and the only
-  // question anyone brings here is "which of these works for my country".
-  // Sections come from the server (see payments/__init__.py) and are dropped
-  // when empty, so this stays correct as gateways are added or moved.
-  const grouped = (regions.length ? regions : [{ slug: "global", title: "" }])
-    .map((region) => ({
-      ...region,
-      items: (providers ?? []).filter((p) => (p.region || "global") === region.slug),
-    }))
-    .filter((group) => group.items.length > 0);
+  // Кассы одним списком: «Оплата по ссылке» и «Демо» — не кассы, они вынесены
+  // отдельно, чтобы не путать выбор.
+  const realProviders = (providers ?? []).filter((p) => p.slug !== "test" && p.slug !== "link");
+  const linkProvider = (providers ?? []).find((p) => p.slug === "link") ?? null;
+  const testProvider = (providers ?? []).find((p) => p.slug === "test") ?? null;
+  const connected = settings?.provider ? providers?.find((p) => p.slug === settings.provider) : null;
+
   async function handleSave() {
     setSaving(true);
     setError(null);
@@ -141,60 +135,99 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                 ждём подтверждение.
               </p>
 
+              <div className={`payment-settings__status${connected ? " payment-settings__status--on" : ""}`}>
+                {connected ? (
+                  <>
+                    <strong>Сейчас: {connected.title}</strong>
+                    <span>
+                      {connected.slug === "test"
+                        ? "демо — деньги не принимаются"
+                        : connected.has_test_mode
+                          ? settings?.is_test
+                            ? "🧪 тестовый режим — деньги не списываются"
+                            : "💰 боевой режим — настоящие деньги"
+                          : "подключено"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <strong>Сейчас: оплата не подключена</strong>
+                    <span>бот ничего не продаёт, пока ты не выберешь кассу</span>
+                  </>
+                )}
+              </div>
+
               <div className="buttons-editor__field">
-                <h3 className="payment-settings__heading">Платёжная система</h3>
+                <h3 className="payment-settings__heading">1. Выбери, куда получать деньги</h3>
                 {subscriptionsEnabled && (
                   <p className="app-hint payment-settings__recurring-legend">
                     🔁 — умеет списывать подписку сама. У остальных бот присылает новый счёт каждый период.
                   </p>
                 )}
-                {grouped.map((group) => (
-                  <div key={group.slug} className="payment-settings__region">
-                    {group.title && <p className="payment-settings__region-title">{group.title}</p>}
-                    <div className="payment-settings__providers">
-                      {group.items.map((provider) => (
-                        <button
-                          key={provider.slug}
-                          type="button"
-                          className={`payment-settings__provider ${slug === provider.slug ? "payment-settings__provider--active" : ""}${
-                            provider.slug === "test" ? " payment-settings__provider--test" : ""
-                          }`}
-                          onClick={() => setSlug(provider.slug)}
-                        >
-                          <span className="payment-settings__provider-title">
-                            {provider.title}
-                            {subscriptionsEnabled && provider.recurring !== "none" && (
-                              <span
-                                className="payment-settings__recurring"
-                                title={
-                                  provider.recurring === "gateway"
-                                    ? "Ведёт подписку сама: списывает следующий период без участия покупателя"
-                                    : "Автосписание: первая оплата сохраняет карту, дальше бот списывает сам"
-                                }
-                              >
-                                {" "}🔁
-                              </span>
-                            )}
-                          </span>
-                          {SHORT[provider.slug] && (
-                            <span className="payment-settings__provider-note">{SHORT[provider.slug]}</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                <div className="payment-settings__providers">
+                  {realProviders.map((provider) => (
+                    <button
+                      key={provider.slug}
+                      type="button"
+                      className={`payment-settings__provider ${slug === provider.slug ? "payment-settings__provider--active" : ""}`}
+                      onClick={() => setSlug(provider.slug)}
+                    >
+                      <span className="payment-settings__provider-title">
+                        {provider.title}
+                        {subscriptionsEnabled && provider.recurring !== "none" && (
+                          <span className="payment-settings__recurring"> 🔁</span>
+                        )}
+                      </span>
+                      {SHORT[provider.slug] && (
+                        <span className="payment-settings__provider-note">{SHORT[provider.slug]}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {linkProvider && (
+                  <button
+                    type="button"
+                    className={`payment-settings__other ${slug === "link" ? "payment-settings__other--active" : ""}`}
+                    onClick={() => setSlug("link")}
+                  >
+                    <strong>🔗 Своя ссылка на оплату</strong>
+                    <span>
+                      Нет подключённой кассы? Бот пришлёт покупателю твою ссылку (например, на перевод по номеру
+                      карты), а ты сам подтвердишь оплату — деньги он получит только после этого.
+                    </span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  className={`payment-settings__none ${slug === "" ? "payment-settings__none--active" : ""}`}
+                  className={`payment-settings__other ${slug === "" ? "payment-settings__other--active" : ""}`}
                   onClick={() => setSlug("")}
                 >
-                  Без оплаты — бот ничего не продаёт
+                  <strong>➖ Пока без оплаты</strong>
+                  <span>Бот только общается и раздаёт бесплатное. Блок «Оплата» в сценарии не сработает.</span>
                 </button>
+
+                {testProvider && (
+                  <details className="payment-settings__demo" open={slug === "test"}>
+                    <summary>Хочу только посмотреть, как выглядит оплата</summary>
+                    <button
+                      type="button"
+                      className={`payment-settings__other ${slug === "test" ? "payment-settings__other--active" : ""}`}
+                      onClick={() => setSlug("test")}
+                    >
+                      <strong>🧪 Демо-оплата</strong>
+                      <span>
+                        Это не касса: покупатель нажимает «оплатить» и сразу получает товар, деньги никуда не идут.
+                        Включай только чтобы проверить сценарий — перед запуском выбери настоящую кассу.
+                      </span>
+                    </button>
+                  </details>
+                )}
               </div>
 
               {active && (
                 <>
+                  <h3 className="payment-settings__heading">2. Данные из кабинета {active.title}</h3>
                   <p className="payment-settings__hint">{active.hint}</p>
 
                   {active.fields.map((field) => {
@@ -219,13 +252,31 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                   })}
 
                   {active.has_test_mode && (
-                    <label className="payment-settings__test">
-                      <input type="checkbox" checked={isTest} onChange={(e) => setIsTest(e.target.checked)} />
-                      <span>
-                        Тестовый режим — платежи не настоящие. Сними галочку, когда проверишь сценарий и будешь
-                        готов принимать деньги.
-                      </span>
-                    </label>
+                    <div className="buttons-editor__field">
+                      <h3 className="payment-settings__heading">3. Режим кассы</h3>
+                      <div className="payment-settings__modes" role="radiogroup" aria-label="Режим кассы">
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={isTest}
+                          className={`payment-settings__mode${isTest ? " payment-settings__mode--active" : ""}`}
+                          onClick={() => setIsTest(true)}
+                        >
+                          <strong>🧪 Тестовый</strong>
+                          <span>Деньги не списываются. Для проверки (нужны тестовые ключи кассы).</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={!isTest}
+                          className={`payment-settings__mode${!isTest ? " payment-settings__mode--active" : ""}`}
+                          onClick={() => setIsTest(false)}
+                        >
+                          <strong>💰 Боевой</strong>
+                          <span>Покупатели платят по-настоящему, деньги идут тебе. Нужны боевые ключи.</span>
+                        </button>
+                      </div>
+                    </div>
                   )}
 
                   {settings?.callback_base && !active.sends_own_callback_url && active.uses_callback && (
