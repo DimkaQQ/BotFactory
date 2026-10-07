@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { type PublicationInfo, ApiError, builderApi, formatAmount } from "../api/builderApi";
 import { openExternal } from "../hooks/useTelegramWebApp";
 import { BotFatherSteps } from "./BotFatherSteps";
+import { plural } from "../plural";
 
 interface Props {
   botId: string;
@@ -176,8 +177,8 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
           {info.renewal_price_minor > 0 && (
             <p className="paywall__terms">
               Дальше — {price(info.renewal_price_minor, info.currency)} за каждые{" "}
-              {info.renewal_period_days} дней работы. Первый период входит в эту оплату: следующий счёт придёт
-              через {info.renewal_period_days} дней, и бот напомнит заранее.
+              {info.renewal_period_days} {plural(info.renewal_period_days, ["день", "дня", "дней"])} работы. Первый период входит в эту оплату: следующий счёт придёт
+              через {info.renewal_period_days} {plural(info.renewal_period_days, ["день", "дня", "дней"])}, и бот напомнит заранее.
             </p>
           )}
         </div>
@@ -243,7 +244,7 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
             >
               <span className="paywall__method-title">
                 {method.title}
-                {method.provider === best && <span className="paywall__method-badge">Рекомендуем для вас</span>}
+                {method.provider === best && <span className="paywall__method-badge">Рекомендуем тебе</span>}
                 {method.how && <span className="paywall__method-how">{method.how}</span>}
                 {(method.who || METHOD_NOTE[method.provider]) && (
                   <span className="paywall__method-note">{method.who || METHOD_NOTE[method.provider]}</span>

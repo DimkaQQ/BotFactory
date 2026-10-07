@@ -11,6 +11,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import type { BlockType, BotBlock, BotWithBlocks, PaymentProviderInfo } from "../../api/builderApi";
+import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { useEscape } from "../../hooks/useEscape";
 import { blocksAfterPayment, reachableBlockIds } from "../../reachability";
 import { confirmDialog } from "../../confirm";
@@ -130,6 +131,8 @@ function Inner({
   const [notice, setNotice] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   useEscape(() => setSheetOpen(false), sheetOpen);
+  const addSheetRef = useRef<HTMLDivElement | null>(null);
+  useDialogA11y(addSheetRef, ".sheet__title", sheetOpen);
   // Пока открыт список блоков, фон не прокручивается: на телефоне палец,
   // листающий список, тянул за собой страницу под ним.
   useEffect(() => {
@@ -531,7 +534,7 @@ function Inner({
       {sheetOpen && (
         <>
           <div className="sheet-backdrop" onClick={() => setSheetOpen(false)} />
-          <div className="sheet">
+          <div className="sheet" ref={addSheetRef}>
             <p className="sheet__title">Что добавить?</p>
             <div className="block-chips">
               {BLOCK_TYPES.map(({ type, label, icon, accent, hint }) => (

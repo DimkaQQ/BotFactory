@@ -157,7 +157,7 @@ function ClientsTab({ bots }: { bots: Bot[] }) {
       {error && <p className="publish-form__error">{error}</p>}
       {rows === null && !error && <p className="app-hint">Загружаем…</p>}
       {rows?.length === 0 && (
-        <p className="app-hint">Пока никого нет. Клиенты появляются, когда пишут вашему боту.</p>
+        <p className="app-hint">Пока никого нет. Клиенты появляются, когда пишут твоему боту.</p>
       )}
       {rows?.map((c) => (
         <button
@@ -245,7 +245,7 @@ function CustomerCard({ botId, userId, onBack }: { botId: string; userId: number
             <input className="payment-editor__input" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </label>
           <label className="buttons-editor__field">
-            <span className="buttons-editor__field-label">Заметка (видите только вы)</span>
+            <span className="buttons-editor__field-label">Заметка (видишь только ты)</span>
             <textarea
               className="chat-bubble__textarea edit-panel__textarea"
               rows={3}
@@ -352,13 +352,13 @@ function CalendarTab({ bots }: { bots: Bot[] }) {
       {!view && !error && <p className="app-hint">Загружаем…</p>}
       {view && !view.configured && (
         <p className="app-hint">
-          В этом боте нет блока «Запись», показано расписание по умолчанию. Добавьте блок «Запись» в сценарий и
-          настройте дни и часы.
+          В этом боте нет блока «Запись», показано расписание по умолчанию. Добавь блок «Запись» в сценарий и
+          настрой дни и часы.
         </p>
       )}
       {view && (
         <p className="overview-panel__sub">
-          Время показано в поясе {view.tz}. Нажмите на время, чтобы закрыть его или отменить запись.
+          Время показано в поясе {view.tz}. Нажми на время, чтобы закрыть его или отменить запись.
         </p>
       )}
       {view?.days.map((day) => (

@@ -54,9 +54,10 @@ def _parse_time(value, default: time) -> time:
 
 def schedule_of(content: dict | None) -> Schedule:
     content = content or {}
-    days = tuple(
-        sorted({int(d) for d in (content.get("days") or [0, 1, 2, 3, 4]) if str(d).isdigit() and 0 <= int(d) <= 6})
-    ) or (0, 1, 2, 3, 4)
+    raw_days = content.get("days")
+    if not isinstance(raw_days, (list, tuple)):
+        raw_days = [0, 1, 2, 3, 4]  # блок правят руками: не список — как «не задано», а не сбой диалога
+    days = tuple(sorted({int(d) for d in raw_days if str(d).isdigit() and 0 <= int(d) <= 6})) or (0, 1, 2, 3, 4)
     tz_name = str(content.get("tz") or DEFAULT_TZ)
     try:
         tz = ZoneInfo(tz_name)

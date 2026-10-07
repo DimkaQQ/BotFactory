@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { type BillingState, ApiError, builderApi, formatAmount } from "../api/builderApi";
 import { openExternal } from "../hooks/useTelegramWebApp";
+import { plural } from "../plural";
 
 interface Props {
   botId: string;
@@ -144,7 +145,7 @@ export function BillingBanner({ botId, billing, onRenewed }: Props) {
         </div>
       ) : (
         <button type="button" className="publish-button" onClick={handleRenew} disabled={starting}>
-          {starting ? "Готовим счёт…" : `Продлить на ${billing.period_days} дней · ${price}`}
+          {starting ? "Готовим счёт…" : `Продлить на ${billing.period_days} ${plural(billing.period_days, ["день", "дня", "дней"])} · ${price}`}
         </button>
       )}
     </div>

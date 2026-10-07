@@ -25,26 +25,27 @@ class BotBlockOut(BaseModel):
 class BotBlockCreate(BaseModel):
     block_type: BlockType
     content: dict[str, Any] = Field(default_factory=dict)
-    order_index: int | None = None
-    position_x: float | None = None
-    position_y: float | None = None
+    # Границы: значения вне int4 Postgres отвечали бы 500, а не понятной ошибкой.
+    order_index: int | None = Field(default=None, ge=-1_000_000, le=1_000_000)
+    position_x: float | None = Field(default=None, allow_inf_nan=False, ge=-1e7, le=1e7)
+    position_y: float | None = Field(default=None, allow_inf_nan=False, ge=-1e7, le=1e7)
 
 
 class BotBlockUpdate(BaseModel):
     content: dict[str, Any] | None = None
-    order_index: int | None = None
+    order_index: int | None = Field(default=None, ge=-1_000_000, le=1_000_000)
     # Graph edges. A sentinel-free "not provided vs. explicitly cleared"
     # distinction matters here (clearing next_block_id — deleting an arrow —
     # is a real, common action, not the absence of one), so these use
     # model_fields_set in the router rather than "not None" checks.
     next_block_id: uuid.UUID | None = None
-    position_x: float | None = None
-    position_y: float | None = None
+    position_x: float | None = Field(default=None, allow_inf_nan=False, ge=-1e7, le=1e7)
+    position_y: float | None = Field(default=None, allow_inf_nan=False, ge=-1e7, le=1e7)
 
 
 class BlockOrderItem(BaseModel):
     id: uuid.UUID
-    order_index: int
+    order_index: int = Field(ge=-1_000_000, le=1_000_000)
 
 
 class BlockReorderRequest(BaseModel):

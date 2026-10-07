@@ -15,6 +15,7 @@ import {
 import { confirmDialog } from "../confirm";
 import { openExternal } from "../hooks/useTelegramWebApp";
 import { BLOCK_TYPE_BY_ID } from "../blockTypes";
+import { plural } from "../plural";
 import { loopedBlocks, orphanBlocks } from "../reachability";
 import { BillingBanner, paidUntilLabel } from "./BillingBanner";
 import { FlowCanvas } from "./flow/FlowCanvas";
@@ -853,7 +854,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         <details className="live-problems" role="status">
           <summary className="live-problems__title">
             ⚠ {publishProblems.length}{" "}
-            {bot.status === "active" ? "замечаний у бота в эфире — покупатели уже это видят" : "замечаний до следующего запуска"}
+            {bot.status === "active"
+              ? `${plural(publishProblems.length, ["замечание", "замечания", "замечаний"])} у бота в эфире — покупатели уже это видят`
+              : `${plural(publishProblems.length, ["замечание", "замечания", "замечаний"])} до следующего запуска`}
           </summary>
           <ul>
             {publishProblems.map((problem) => (

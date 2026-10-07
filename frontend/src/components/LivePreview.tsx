@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { type BotBlock, type BotWithBlocks, currencyUnit } from "../api/builderApi";
+import { useDialogA11y } from "../hooks/useDialogA11y";
 import { useEscape } from "../hooks/useEscape";
+import { scrollBehavior } from "../motion";
+import { fillPlaceholders, placeholderValues } from "../placeholders";
 
 interface Props {
   bot: BotWithBlocks;
@@ -47,7 +50,14 @@ function waitsForBuyer(block: BotBlock): string | null {
  * path, exactly like a real Telegram chat with this bot would. */
 export function LivePreview({ bot, botName, onClose }: Props) {
   useEscape(onClose);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogA11y(dialogRef, ".live-preview__title");
 
+  // Заготовки «[цена]» и «[название продукта]» бот подставляет сам — предпросмотр тоже.
+  const fill = useMemo(() => {
+    const { price, title } = placeholderValues(bot.blocks);
+    return (text: string) => fillPlaceholders(text, price, title).trim();
+  }, [bot.blocks]);
   const blocksById = useMemo(() => new Map(bot.blocks.map((b) => [b.id, b])), [bot.blocks]);
 
   const [revealed, setRevealed] = useState<BotBlock[]>([]);
@@ -134,7 +144,7 @@ export function LivePreview({ bot, botName, onClose }: Props) {
   }, [currentId, step]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: scrollBehavior() });
   }, [revealed, countdown]);
 
   function handlePick(block: BotBlock, index: number) {
@@ -190,7 +200,7 @@ export function LivePreview({ bot, botName, onClose }: Props) {
   return (
     <>
       <div className="sheet-backdrop" onClick={onClose} />
-      <div className="live-preview">
+      <div className="live-preview" ref={dialogRef}>
         <div className="live-preview__header">
           <span className="live-preview__title">▶ {botName || "Предпросмотр"}</span>
           <button type="button" className="live-preview__close" onClick={onClose} aria-label="Закрыть предпросмотр">
@@ -203,6 +213,7 @@ export function LivePreview({ bot, botName, onClose }: Props) {
             <PreviewBlock
               key={`${block.id}-${i}`}
               block={block}
+              fill={fill}
               isLast={i === lastBubbleIndex && !showTyping}
               interactive={i === revealed.length - 1 && waitingForTap && block.content.keyboard !== "reply"}
               onPick={(index) => handlePick(block, index)}
@@ -285,11 +296,13 @@ export function LivePreview({ bot, botName, onClose }: Props) {
 
 function PreviewBlock({
   block,
+  fill,
   isLast,
   interactive,
   onPick,
 }: {
   block: BotBlock;
+  fill: (text: string) => string;
   isLast: boolean;
   interactive: boolean;
   onPick: (index: number) => void;
@@ -308,7 +321,7 @@ function PreviewBlock({
         <div className="chat-row__avatar">{isLast && <span className="chat-avatar">🤖</span>}</div>
         <div className="chat-row__content">
           <div className="chat-bubble">
-            {content.text && <p className="chat-bubble__text">{content.text}</p>}
+            {(content.text || content.title) && <p className="chat-bubble__text">{fill(content.text || content.title || "")}</p>}
             <div className="chat-buttons">
               <div className="chat-buttons__preview">
                 <span className="chat-buttons__pill">💳 {label}</span>
@@ -378,7 +391,7 @@ function PreviewBlock({
             {content.media_file_id && block.block_type === "video" && (
               <div className="block-preview__media block-preview__media--video live-preview__media">▶</div>
             )}
-            {content.text && <p className="chat-bubble__text">{content.text}</p>}
+            {content.text && fill(content.text) && <p className="chat-bubble__text">{fill(content.text)}</p>}
             {(content.buttons ?? []).length > 0 && content.keyboard !== "reply" && content.keyboard !== "remove" && (
               <div className="chat-buttons">
                 <div className="chat-buttons__preview">

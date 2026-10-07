@@ -16,6 +16,8 @@ import { LaunchOffer } from "./LaunchOffer";
 import { PaybackCalculator } from "./PaybackCalculator";
 import { SiteFooter } from "./SiteFooter";
 import { ThemeToggle } from "./ThemeToggle";
+import { plural } from "../plural";
+import { scrollBehavior } from "../motion";
 
 interface Props {
   onLoggedIn: () => void;
@@ -257,7 +259,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
   }, []);
 
   function scrollToLogin() {
-    heroRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    heroRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
   }
 
   const legalLinks = {
@@ -537,7 +539,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
           <div className="landing-section__head">
             <p className="landing-section__eyebrow">Приём оплаты</p>
             <h2 className="landing-section__title">
-              Деньги идут тебе напрямую — {gatewayCount} касс на выбор
+              Деньги идут тебе напрямую — {gatewayCount} {plural(gatewayCount, ["касса", "кассы", "касс"])} на выбор
             </h2>
             <p className="landing-section__lead">
               Ключи от кассы твои, счёт твой, деньги падают тебе. Мы не посредник и денег твоих покупателей не
@@ -640,9 +642,9 @@ export function LoginScreen({ onLoggedIn }: Props) {
           />
         ) : null}
         <p className="landing-gateways__note">
-          Деньги ваших покупателей сюда не входят — они идут напрямую в вашу кассу, без нашей комиссии.
+          Деньги твоих покупателей сюда не входят — они идут напрямую в твою кассу, без нашей комиссии.
           {pricing.some((p) => p.renewal) && config?.renewal_grace_days
-            ? ` Не продлили вовремя — бот ещё ${config.renewal_grace_days} дн. работает, пока вам напоминают; ничего не удаляется.`
+            ? ` Не продлили вовремя — бот ещё ${config.renewal_grace_days} дн. работает, пока тебе напоминают; ничего не удаляется.`
             : ""}
         </p>
       </section>

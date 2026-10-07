@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { scrollBehavior } from "../motion";
 
 interface DemoChoice {
   label: string;
@@ -124,7 +125,7 @@ export function LandingDemo() {
   }, [finished, visible]);
 
   useEffect(() => {
-    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" });
+    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: scrollBehavior() });
   }, [messages, typing, awaiting]);
 
   const choices = awaiting ? SCRIPT[awaiting].choices ?? [] : [];

@@ -11,6 +11,7 @@ import {
 } from "../api/builderApi";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
+import { plural } from "../plural";
 
 interface Props {
   bots: Bot[];
@@ -217,7 +218,7 @@ export function SalesOverviewPanel({ bots, onClose }: Props) {
                     </span>
                   </div>
                   <div className="overview-panel__side">
-                    <span>{c.clicks} нажатий</span>
+                    <span>{c.clicks} {plural(c.clicks, ["нажатие", "нажатия", "нажатий"])}</span>
                     <span className="overview-panel__sub">{c.people} чел.</span>
                   </div>
                 </div>

@@ -166,7 +166,7 @@ async function errorDetail(response: Response): Promise<string> {
     if (typeof detail === "string" && detail.trim()) return detail;
     if (Array.isArray(detail)) {
       const first = detail.find((item) => item && typeof item.msg === "string");
-      if (first) return `Проверьте введённые данные: ${first.msg}`;
+      if (first) return `Проверь введённые данные: ${first.msg}`;
     }
   } catch {
     // response wasn't JSON — keep statusText
@@ -655,6 +655,7 @@ const CURRENCY_SYMBOL: Record<string, string> = {
   USD: "$",
   EUR: "€",
   KZT: "₸",
+  UZS: "сум",
   UAH: "₴",
   XTR: "⭐",
 };

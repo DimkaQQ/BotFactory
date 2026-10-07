@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
+import { useDialogA11y } from "./useDialogA11y";
+
 const STORAGE_KEY = "bf_panel_offset";
 const DESKTOP = "(min-width: 960px)";
 /** Сколько пикселей панели всегда остаётся на экране, чтобы её можно было
@@ -43,6 +45,8 @@ export function useDraggablePanel() {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const offset = useRef<Offset>({ x: 0, y: 0 });
   const drag = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null);
+
+  useDialogA11y(panelRef);
 
   const isDesktop = () => window.matchMedia(DESKTOP).matches;
 

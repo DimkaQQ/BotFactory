@@ -55,8 +55,15 @@ async def validate_bot_token(token: str) -> TelegramMe:
             "Не получилось связаться с Telegram, чтобы проверить токен. Попробуй ещё раз через минуту."
         ) from exc
 
-    data = response.json()
-    if not data.get("ok"):
+    try:
+        data = response.json()
+    except ValueError as exc:
+        # Прокси или сбой на их стороне отдали не JSON — это «не удалось проверить», а не 500.
+        raise InvalidBotToken(
+            "Не получилось связаться с Telegram, чтобы проверить токен. Попробуй ещё раз через минуту."
+        ) from exc
+    if not isinstance(data, dict) or not data.get("ok"):
+        data = data if isinstance(data, dict) else {}
         description = str(data.get("description", ""))
         if "unauthorized" in description.lower() or "not found" in description.lower():
             raise InvalidBotToken(

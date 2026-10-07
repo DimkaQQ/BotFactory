@@ -759,10 +759,6 @@
 /* Delete — a quick shrink-and-fade instead of the bubble just vanishing;
    the actual removal from state is delayed to match (see ChatCanvas's
    DELETE_ANIM_MS). */
-.chat-row--removing {
-  animation: bubble-out 0.22s var(--ease-smooth) forwards !important;
-  pointer-events: none;
-}
 
 @keyframes bubble-out {
   from {
@@ -813,11 +809,6 @@
   width: 100%;
 }
 
-.chat-bubble--editing {
-  cursor: text;
-  box-shadow: 0 0 0 2px var(--tg-button);
-}
-
 .chat-bubble--ghost {
   border: 1.5px dashed var(--tg-separator);
   background: transparent;
@@ -833,18 +824,6 @@
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.chat-bubble__text--placeholder {
-  color: var(--text-tertiary);
-  font-style: italic;
-}
-
-.chat-bubble__empty-warning {
-  margin: 4px 2px 0;
-  font-size: 12px;
-  color: var(--tg-destructive);
-  animation: save-status-in var(--dur-base) var(--ease-out);
 }
 
 .chat-bubble__textarea {
@@ -872,30 +851,6 @@
   outline: none;
 }
 
-.chat-bubble__delete {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  border-radius: 999px;
-  opacity: 0.55;
-  cursor: pointer;
-}
-
-.chat-bubble__delete:active {
-  opacity: 1;
-  background: color-mix(in srgb, var(--tg-destructive) 16%, transparent);
-  color: var(--tg-destructive);
-}
-
 /* Buttons attached under a bubble, styled like a real inline keyboard */
 
 .chat-buttons {
@@ -921,20 +876,6 @@
   font-weight: 500;
 }
 
-.chat-buttons__ghost {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 8px 14px;
-  border-radius: 12px;
-  background: transparent;
-  border: 1.5px dashed var(--tg-separator);
-  color: var(--tg-link);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
 /* Image/video bubble — a thumbnail above the caption, in both the read
    preview and (empty) placeholder states. */
 
@@ -952,43 +893,10 @@
   color: var(--text-tertiary);
 }
 
-.chat-bubble__media-thumb--video {
-  background: color-mix(in srgb, black 78%, var(--accent-video));
-  color: #fff;
-  font-size: 22px;
-}
-
-.chat-bubble__media-thumb--empty {
-  border: 1.5px dashed var(--tg-separator);
-  background: transparent;
-}
-
 /* Poll bubble read preview */
-
-.poll-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 6px;
-}
-
-.poll-preview__option {
-  padding: 7px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--tg-separator);
-  background: var(--tg-bg);
-  font-size: 13px;
-}
 
 /* Pause "block" — a slim system pill instead of a chat bubble, since it
    has no message content of its own. */
-
-.chat-row--delay {
-  /* Overrides .chat-row's 2-column avatar grid — a pause has no avatar
-     column, just one centered pill spanning the row. */
-  display: block;
-  margin-bottom: var(--sp-1);
-}
 
 .chat-delay {
   display: flex;
@@ -1004,27 +912,6 @@
   color: var(--text-tertiary);
   font-size: 12.5px;
   cursor: pointer;
-}
-
-.chat-delay--editing {
-  cursor: default;
-  border-style: solid;
-  border-color: var(--tg-button);
-  background: var(--tg-secondary-bg);
-}
-
-.chat-delay .chat-bubble__delete {
-  top: 2px;
-  right: 2px;
-}
-
-.chat-delay__icon {
-  font-size: 13px;
-}
-
-.chat-delay__control {
-  display: flex;
-  gap: 4px;
 }
 
 .chat-delay__preset {
@@ -1436,16 +1323,6 @@
 /* Hover flyout — a tiny looping animated mockup of the block you're
    pointing at, so picking a type isn't a guess from an icon alone. */
 
-.block-preview-flyout {
-  position: absolute;
-  left: calc(100% + 12px);
-  top: 0;
-  z-index: 5;
-  width: 240px;
-  animation: flyout-in 0.15s ease;
-  pointer-events: none;
-}
-
 @keyframes flyout-in {
   from {
     opacity: 0;
@@ -1455,23 +1332,6 @@
     opacity: 1;
     transform: translateX(0);
   }
-}
-
-.block-preview {
-  background: var(--tg-bg);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-3);
-  box-shadow: var(--shadow-elevated);
-  min-height: 84px;
-}
-
-.block-preview--delay {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-2);
-  text-align: center;
-  padding: var(--sp-4) var(--sp-3);
 }
 
 .block-preview__caption {
@@ -1536,13 +1396,6 @@
   }
 }
 
-.block-preview__row {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  animation: preview-bubble-cycle 2.6s ease-in-out infinite;
-}
-
 @keyframes preview-bubble-cycle {
   0%,
   22% {
@@ -1554,44 +1407,6 @@
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.block-preview__avatar {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--tg-button);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-}
-
-.block-preview__bubble {
-  flex: 1;
-  min-width: 0;
-  background: var(--tg-secondary-bg);
-  border-radius: 12px 12px 12px 4px;
-  padding: 8px 10px;
-}
-
-.block-preview__text {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.block-preview__lines {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.block-preview__line {
-  height: 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--tg-text) 14%, transparent);
 }
 
 .block-preview__media {
@@ -1620,20 +1435,6 @@
   100% {
     transform: scale(1);
   }
-}
-
-.block-preview__pill {
-  display: block;
-  margin-top: 6px;
-  text-align: center;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: var(--tg-bg);
-  border: 1px solid var(--tg-separator);
-  color: var(--tg-link);
-  font-size: 11px;
-  font-weight: 600;
-  animation: preview-slide-up 2.6s ease-in-out infinite;
 }
 
 @keyframes preview-slide-up {
@@ -2221,7 +2022,7 @@
    ========================================================================= */
 
 @media (hover: hover) and (pointer: fine) {
-  .chat-bubble:not(.chat-bubble--editing):not(.chat-bubble--ghost):hover {
+  .chat-bubble:not(.chat-bubble--ghost):hover {
     box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--tg-button) 35%, transparent), var(--shadow-card);
     transform: translateY(-1px);
   }
@@ -2252,7 +2053,6 @@
   }
 
   .bot-delete-button:hover,
-  .chat-bubble__delete:hover,
   .bot-card__delete:hover {
     background: color-mix(in srgb, var(--tg-destructive) 12%, transparent);
     color: var(--tg-destructive);
@@ -3496,21 +3296,6 @@
   color: var(--text-secondary);
 }
 
-.landing-footer__links {
-  margin-top: var(--sp-2);
-}
-
-.landing-footer__links a {
-  color: var(--text-secondary);
-  text-decoration: none;
-  border-bottom: 1px solid var(--tg-separator);
-}
-
-.landing-footer__links a:hover {
-  color: var(--tg-link);
-  border-bottom-color: currentColor;
-}
-
 .landing-footer--compact {
   margin-top: var(--sp-5);
   padding: var(--sp-4) var(--sp-3);
@@ -4414,10 +4199,6 @@
   resize: vertical;
 }
 
-.edit-panel__delay {
-  justify-content: flex-start;
-}
-
 .edit-panel__buttons {
   margin-top: var(--sp-4);
 }
@@ -4429,10 +4210,6 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-tertiary);
-}
-
-.edit-panel__hint {
-  margin-top: var(--sp-2);
 }
 
 /* Заголовок окна — ручка для перетаскивания (только на десктопе, где окно
@@ -4620,18 +4397,6 @@
 
 /* One section per region. The heading is what turns nineteen tiles from a
    wall into a list you can skip through. */
-.payment-settings__region + .payment-settings__region {
-  margin-top: var(--sp-4);
-}
-
-.payment-settings__region-title {
-  margin: 0 0 var(--sp-2);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-tertiary);
-}
 
 .payment-settings__provider {
   display: flex;
@@ -4700,16 +4465,6 @@
 }
 
 /* On the landing there is no header to sit in. */
-.theme-toggle--floating {
-  position: fixed;
-  top: max(var(--sp-3), env(safe-area-inset-top));
-  right: max(var(--sp-3), env(safe-area-inset-right));
-  z-index: 30;
-  background: color-mix(in srgb, var(--tg-bg) 88%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: var(--shadow-card);
-}
 
 .payment-settings__provider-title {
   font-weight: 600;
@@ -4724,32 +4479,6 @@
 
 /* The test provider hands goods over without money. It should not look like
    one more way to get paid. */
-.payment-settings__provider--test {
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--accent-buttons) 45%, transparent);
-  background: color-mix(in srgb, var(--accent-buttons) 7%, transparent);
-}
-
-.payment-settings__none {
-  width: 100%;
-  min-height: 44px;
-  margin-top: var(--sp-3);
-  padding: 10px;
-  border-radius: 12px;
-  border: 1.5px dashed var(--tg-separator);
-  background: none;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  cursor: pointer;
-}
-
-.payment-settings__none--active {
-  border-style: solid;
-  border-color: var(--tg-button);
-  color: var(--accent-on-surface);
-  background: color-mix(in srgb, var(--tg-button) 8%, transparent);
-}
 
 .payment-settings__provider--active {
   border-color: var(--tg-button);
@@ -5964,24 +5693,6 @@
 
 /* Выручка в шапке конструктора. Раньше её можно было найти только внутри
    панели «Приём оплаты» — под кнопкой, на которой написано «касса». */
-.bot-sales-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: var(--radius-full);
-  border: 1px solid color-mix(in srgb, var(--accent-success) 35%, transparent);
-  background: color-mix(in srgb, var(--accent-success) 10%, transparent);
-  color: var(--accent-success-ink);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.bot-sales-button:hover {
-  border-color: var(--accent-success);
-}
 
 /* Ссылка-починка внутри предупреждения: «убрать свою надпись». */
 .payment-editor__fix-link {
@@ -6755,10 +6466,6 @@ html {
   align-items: center;
 }
 
-.payment-settings__region-title {
-  margin-top: var(--sp-3);
-}
-
 .payment-settings__providers {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
 }
@@ -7161,9 +6868,6 @@ html {
   color: var(--accent-success-ink);
 }
 
-@media (min-width: 960px) {
-}
-
 @media (max-width: 719px) {
   .landing-promise {
     flex-direction: row;
@@ -7264,10 +6968,6 @@ details.live-problems > summary::-webkit-details-marker {
   font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
-}
-
-.payment-settings__region-title {
-  margin-top: var(--sp-4);
 }
 
 .media-editor__caption {
@@ -7640,12 +7340,6 @@ details.live-problems > summary::-webkit-details-marker {
   text-align: center;
 }
 
-.kb-demo__empty {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
 .buttons-editor__warning {
   margin: var(--sp-2) 0;
   padding: 10px 12px;
@@ -7936,4 +7630,44 @@ details.live-problems > summary::-webkit-details-marker {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* ----- Touch-цели: на телефоне и планшете всё нажимаемое не меньше 44×44 -----
+   Выше нельзя, ниже нельзя: поэтому у мелких кнопок задан минимум. */
+@media (pointer: coarse), (max-width: 959px) {
+  .header-logout-button,
+  .edit-panel__close,
+  .edit-panel__delete,
+  .sheet__close,
+  .live-preview__close,
+  .buttons-editor__remove,
+  .buttons-editor__add,
+  .poll-editor__remove,
+  .calendar__nav button,
+  .chat-buttons__pill--tappable,
+  .live-preview__skip,
+  .live-preview__key {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .payment-editor__input,
+  .buttons-editor__label,
+  .buttons-editor__value,
+  .poll-editor__option input,
+  .live-problems__title,
+  details > summary {
+    min-height: 44px;
+  }
+
+  .poll-editor__question {
+    min-height: 44px;
+    padding-top: 10px;
+  }
+
+  .landing-footer__docs a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
 }

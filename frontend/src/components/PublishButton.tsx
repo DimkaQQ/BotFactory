@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { builderApi } from "../api/builderApi";
 import { BotFatherSteps } from "./BotFatherSteps";
+import { scrollBehavior } from "../motion";
 
 interface Props {
   disabled?: boolean;
@@ -26,7 +27,7 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
   // saying so. Cheaper and far more robust than trying to make every
   // viewport's chrome budget add up exactly.
   useEffect(() => {
-    if (open) formRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (open) formRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "nearest" });
   }, [open]);
   const [token, setToken] = useState("");
   // Шаг 1 запуска: человек должен нажать Start у мета-бота (уведомления о

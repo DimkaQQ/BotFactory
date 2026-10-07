@@ -294,3 +294,8 @@ textarea:focus-visible,
   outline-offset: 2px;
   border-radius: var(--radius-md);
 }
+
+/* Окна-диалоги получают фокус программно (для скринридера и Tab): рамка вокруг всего окна не нужна. */
+[role="dialog"]:focus-visible {
+  outline: none;
+}

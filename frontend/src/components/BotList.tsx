@@ -5,6 +5,7 @@ import { type Bot, type BotBlock, ApiError, builderApi } from "../api/builderApi
 import { confirmDialog } from "../confirm";
 import { openExternal } from "../hooks/useTelegramWebApp";
 import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
+import { useDialogA11y } from "../hooks/useDialogA11y";
 import { useEscape } from "../hooks/useEscape";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
 import { SiteFooter } from "./SiteFooter";
@@ -70,6 +71,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
   const { sheetRef, handleProps } = useSwipeToDismiss(() => {
     if (!creatingTemplateId) setPickerOpen(false);
   });
+  useDialogA11y(sheetRef, ".sheet__title", pickerOpen);
 
   const refresh = useCallback(async () => {
     try {
@@ -272,10 +274,10 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 type="button"
                 className="bot-payments-button"
                 onClick={() => setOverviewOpen(true)}
+                aria-label="Продажи"
                 title="Продажи и нажатия на кнопки по всем ботам"
               >
-                💰 <span className="bot-payments-button__long">Продажи</span>
-                <span className="bot-payments-button__short">💰</span>
+                <span aria-hidden="true">💰</span> <span className="bot-payments-button__long">Продажи</span>
               </button>
             )}
             {!isMiniApp && (bots?.length ?? 0) > 0 && (
@@ -283,10 +285,10 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 type="button"
                 className="bot-payments-button"
                 onClick={() => setCrmOpen(true)}
+                aria-label="Клиенты"
                 title="Клиенты, их контакты и календарь записи"
               >
-                👥 <span className="bot-payments-button__long">Клиенты</span>
-                <span className="bot-payments-button__short">👥</span>
+                <span aria-hidden="true">👥</span> <span className="bot-payments-button__long">Клиенты</span>
               </button>
             )}
             {!isMiniApp && <ThemeToggle />}
