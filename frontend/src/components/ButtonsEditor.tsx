@@ -48,7 +48,7 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
     onChange({ ...content, buttons: [...buttons, emptyButton()] });
   }
 
-  const style = content.keyboard === "reply" ? "reply" : content.keyboard === "remove" ? "remove" : "inline";
+  const style = content.keyboard === "reply" ? "reply" : "inline";
   const shown = buttons.map((b) => (b.label || "").trim()).filter(Boolean);
   const sample = shown.length > 0 ? shown : ["Кнопка 1", "Кнопка 2", "Кнопка 3"];
 
@@ -60,7 +60,10 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
           role="radio"
           aria-checked={style === "inline"}
           className={`payment-settings__mode${style === "inline" ? " payment-settings__mode--active" : ""}`}
-          onClick={() => onChange({ ...content, keyboard: "inline" })}
+          onClick={() =>
+            // Был быстрый вид — запоминаем, чтобы бот убрал клавиатуру внизу у покупателей.
+            onChange({ ...content, keyboard: "inline", clear_reply: style === "reply" ? true : content.clear_reply })
+          }
         >
           <strong>Под сообщением</strong>
           <span>Кнопки прикреплены к сообщению. Могут открывать ссылки.</span>
@@ -70,25 +73,18 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
           role="radio"
           aria-checked={style === "reply"}
           className={`payment-settings__mode${style === "reply" ? " payment-settings__mode--active" : ""}`}
-          onClick={() => onChange({ ...content, keyboard: "reply" })}
+          onClick={() => onChange({ ...content, keyboard: "reply", clear_reply: false })}
         >
           <strong>Быстрые, внизу экрана</strong>
           <span>Кнопки вместо клавиатуры, всегда под рукой. Подписи делай разными.</span>
         </button>
       </div>
-      <button
-        type="button"
-        role="radio"
-        aria-checked={style === "remove"}
-        className={`payment-settings__other${style === "remove" ? " payment-settings__other--active" : ""}`}
-        onClick={() => onChange({ ...content, keyboard: "remove" })}
-      >
-        <strong>⌫ Убрать быстрые кнопки</strong>
-        <span>
-          Нужно, если вы ставили быстрые кнопки внизу, а дальше хотите кнопки под сообщением или чистый чат:
-          у покупателя они сами не пропадут. Поставьте такой блок на их пути, и бот их уберёт.
-        </span>
-      </button>
+      {style === "inline" && content.clear_reply && (
+        <p className="buttons-editor__warning" role="status">
+          ⚠️ Вы меняете вид кнопок. Быстрые кнопки внизу экрана у покупателей уберутся сами, когда они получат этот блок в
+          следующий раз. Уже отправленные сообщения не меняются.
+        </p>
+      )}
 
       <div className={`kb-demo kb-demo--${style}`} aria-hidden="true">
         <p className="kb-demo__caption">Так это увидит покупатель в Telegram</p>
@@ -112,11 +108,10 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
               ))}
             </div>
           )}
-          {style === "remove" && <p className="kb-demo__empty">Клавиатура внизу исчезнет — остаётся обычное поле ввода.</p>}
         </div>
       </div>
 
-      {style !== "remove" && (
+      {(
         <>
       {buttons.map((button, index) => (
         <ButtonRow

@@ -658,3 +658,33 @@ def test_remove_mode_clears_the_reply_keyboard():
 
     kb = _build_keyboard(uuid.uuid4(), {"keyboard": "remove", "text": "Меню закрыто", "buttons": [{"label": "A"}]})
     assert isinstance(kb, ReplyKeyboardRemove)
+
+
+async def test_clear_reply_flag_removes_keyboard_before_inline_block():
+    import uuid
+
+    from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardRemove
+
+    from app.models.bot_block import BlockType, BotBlock
+    from app.services.bot_dispatcher import _send_block
+
+    calls = []
+
+    class FakeBot:
+        async def send_message(self, chat_id, text, reply_markup=None):
+            calls.append(("send", text, type(reply_markup)))
+            return type("M", (), {"message_id": 7})()
+
+        async def delete_message(self, chat_id, message_id):
+            calls.append(("delete", message_id))
+
+    block = BotBlock(
+        id=uuid.uuid4(),
+        bot_id=uuid.uuid4(),
+        block_type=BlockType.buttons,
+        content={"text": "Выбери", "clear_reply": True, "buttons": [{"label": "A", "action_type": "text"}]},
+    )
+    await _send_block(FakeBot(), 1, block)
+    assert calls[0] == ("send", "⌨️", ReplyKeyboardRemove)
+    assert calls[1] == ("delete", 7)
+    assert calls[2][2] is InlineKeyboardMarkup

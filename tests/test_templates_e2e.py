@@ -24,8 +24,18 @@ CHAT_ID = 4242
 OWNER_NOTICE = "Оплачен заказ"
 
 
-def _wire(blocks):
-    """Как BotList: кнопка-ветка первой не-URL кнопки ведёт в следующий блок."""
+def _wire(blocks, template=None):
+    """Как BotList: кнопка-ветка первой не-URL кнопки ведёт в следующий блок.
+    Если у шаблона своя разводка (`nexts`/`links`) — применяем её."""
+    if template and template.get("nexts"):
+        for frm, to in template["nexts"]:
+            blocks[frm].next_block_id = blocks[to].id
+        for link in template.get("links") or []:
+            source = blocks[link["from"]]
+            buttons = list(source.content.get("buttons") or [])
+            buttons[link["button"]] = {**buttons[link["button"]], "target_block_id": str(blocks[link["to"]].id)}
+            source.content = {**source.content, "buttons": buttons}
+        return
     for index, block in enumerate(blocks[:-1]):
         buttons = block.content.get("buttons") or []
         if block.block_type == BlockType.buttons:
@@ -40,8 +50,17 @@ def _wire(blocks):
 async def test_a_buyer_can_walk_every_template(template, api, db, owner, make_bot, as_bot):
     spec = [(BlockType(b["block_type"]), dict(b["content"])) for b in template["blocks"]]
     bot, blocks = await make_bot(owner, spec, provider="test", is_test=True)
-    _wire(blocks)
+    _wire(blocks, template)
     await db.commit()
+
+    # Настоящий Telegram возвращает у каждого опроса свой id (в таблице он уникален).
+    counter = iter(range(1, 1000))
+
+    async def fake_send_poll(chat_id, **kwargs):
+        n = next(counter)
+        return type("Sent", (), {"poll": type("P", (), {"id": f"poll-{n}"})(), "chat": type("C", (), {"id": chat_id})(), "message_id": n})()
+
+    as_bot.send_poll.side_effect = fake_send_poll
 
     await bot_dispatcher.process_update(
         as_bot, {"message": {"chat": {"id": CHAT_ID}, "from": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
@@ -51,7 +70,18 @@ async def test_a_buyer_can_walk_every_template(template, api, db, owner, make_bo
 
     # дальше — нажать первую кнопку, если она есть
     buttons_block = next((b for b in blocks if b.block_type == BlockType.buttons), None)
-    if buttons_block is not None:
+    if buttons_block is not None and buttons_block.content.get("keyboard") == "reply":
+        # быстрые кнопки: покупатель нажимает каждую — приходит текст с подписью
+        for button in buttons_block.content["buttons"]:
+            before = len(as_bot.sent())
+            await bot_dispatcher.process_update(
+                as_bot,
+                {"message": {"chat": {"id": CHAT_ID}, "from": {"id": CHAT_ID}, "text": button["label"]}},
+                bot.id, db,
+            )
+            await background.wait_for_all()
+            assert len(as_bot.sent()) > before, f"кнопка {button['label']!r} ничего не ответила"
+    elif buttons_block is not None:
         await bot_dispatcher.process_update(
             as_bot,
             {"callback_query": {"id": "cb", "data": f"b:{buttons_block.id.hex}:0",

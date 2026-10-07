@@ -140,34 +140,42 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       // of disconnected blocks would send nothing but its first message —
       // and it's also how someone learns what the arrows are for: the first
       // bot they open already shows a working one.
-      const firstButtons = template.links ? template.blocks.findIndex((b) => b.block_type === "buttons") : -1;
-      for (let i = 0; i < created.length - 1; i++) {
-        if (template.links && firstButtons !== -1 && i >= firstButtons) break;
-        const current = created[i];
-        const next = created[i + 1];
-        const buttons = current.content.buttons ?? [];
-        // A buttons block stops and waits for a tap, so its "next" is the
-        // button's own branch, not the plain arrow (see bot_dispatcher.py).
-        const branchIndex = buttons.findIndex((b) => b.action_type !== "url");
-        if (current.block_type === "buttons" && branchIndex !== -1) {
-          await builderApi.updateBlock(bot.id, current.id, {
-            content: {
-              ...current.content,
-              buttons: buttons.map((b, index) => (index === branchIndex ? { ...b, target_block_id: next.id } : b)),
-            },
-          });
-        } else {
-          await builderApi.updateBlock(bot.id, current.id, { next_block_id: next.id });
+      if (template.nexts) {
+        // Своя разводка: стрелки «дальше» и ведение каждой кнопки заданы в шаблоне.
+        for (const [from, to] of template.nexts) {
+          await builderApi.updateBlock(bot.id, created[from].id, { next_block_id: created[to].id });
         }
-      }
-      if (template.links && firstButtons !== -1) {
-        // Разводка по кнопкам: каждая ведёт к своему блоку.
-        const source = created[firstButtons];
-        const buttons = (source.content.buttons ?? []).map((b, index) => {
-          const link = template.links!.find((l) => l.from === firstButtons && l.button === index);
-          return link ? { ...b, target_block_id: created[link.to].id } : b;
-        });
-        await builderApi.updateBlock(bot.id, source.id, { content: { ...source.content, buttons } });
+        const byBlock = new Map<number, { button: number; to: number }[]>();
+        for (const link of template.links ?? []) {
+          byBlock.set(link.from, [...(byBlock.get(link.from) ?? []), { button: link.button, to: link.to }]);
+        }
+        for (const [from, list] of byBlock) {
+          const source = created[from];
+          const buttons = (source.content.buttons ?? []).map((b, index) => {
+            const link = list.find((l) => l.button === index);
+            return link ? { ...b, target_block_id: created[link.to].id } : b;
+          });
+          await builderApi.updateBlock(bot.id, source.id, { content: { ...source.content, buttons } });
+        }
+      } else {
+        // Простая цепочка. Блок кнопок ждёт нажатия, поэтому его «дальше» — это
+        // ветка первой кнопки (см. bot_dispatcher.py).
+        for (let i = 0; i < created.length - 1; i++) {
+          const current = created[i];
+          const next = created[i + 1];
+          const buttons = current.content.buttons ?? [];
+          const branchIndex = buttons.findIndex((b) => b.action_type !== "url");
+          if (current.block_type === "buttons" && branchIndex !== -1) {
+            await builderApi.updateBlock(bot.id, current.id, {
+              content: {
+                ...current.content,
+                buttons: buttons.map((b, index) => (index === branchIndex ? { ...b, target_block_id: next.id } : b)),
+              },
+            });
+          } else {
+            await builderApi.updateBlock(bot.id, current.id, { next_block_id: next.id });
+          }
+        }
       }
       setPickerOpen(false);
       onOpen(bot.id);

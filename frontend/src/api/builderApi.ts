@@ -25,6 +25,8 @@ export interface BlockContent {
   buttons?: ButtonAction[];
   /** Кнопки блока: под сообщением (по умолчанию) или быстрые внизу экрана. */
   keyboard?: "inline" | "reply" | "remove";
+  /** Блок раньше был с быстрыми кнопками: бот уберёт клавиатуру внизу у покупателя. */
+  clear_reply?: boolean;
   question?: string;
   options?: string[];
   anonymous?: boolean;

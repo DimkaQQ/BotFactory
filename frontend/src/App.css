@@ -7627,3 +7627,14 @@ details.live-problems > summary::-webkit-details-marker {
   font-size: 12px;
   color: var(--text-tertiary);
 }
+
+.buttons-editor__warning {
+  margin: var(--sp-2) 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-warning, #d9a400) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-warning, #d9a400) 12%, var(--tg-bg));
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}

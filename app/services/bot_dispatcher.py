@@ -707,6 +707,19 @@ async def _send_block(
     if not text and not media_file_id and not keyboard:
         return
 
+    # Владелец переключил блок с быстрых кнопок на кнопки под сообщением:
+    # у покупателя клавиатура внизу осталась бы навсегда. Telegram не даёт
+    # убрать её тем же сообщением, поэтому шлём служебное и сразу удаляем.
+    if (
+        block.block_type == BlockType.buttons
+        and content.get("clear_reply")
+        and content.get("keyboard") != "reply"
+        and not isinstance(keyboard, ReplyKeyboardRemove)
+    ):
+        with contextlib.suppress(Exception):
+            gone = await bot.send_message(chat_id, "⌨️", reply_markup=ReplyKeyboardRemove())
+            await bot.delete_message(chat_id, gone.message_id)
+
     if media_file_id:
         # A caption is capped at 1024, a quarter of a message — and the block
         # that runs long is «Выдача», which is exactly the one that also
