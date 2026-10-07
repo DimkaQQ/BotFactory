@@ -20,6 +20,7 @@ import { loopedBlocks, orphanBlocks } from "../reachability";
 import { BillingBanner, paidUntilLabel } from "./BillingBanner";
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { LivePreview } from "./LivePreview";
+import { BotProfilePanel } from "./BotProfilePanel";
 import { PaymentSettingsPanel } from "./PaymentSettingsPanel";
 import { SalesPanel } from "./SalesPanel";
 import { PublishPaywall } from "./PublishPaywall";
@@ -49,6 +50,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [paymentPanelOpen, setPaymentPanelOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [salesPanelOpen, setSalesPanelOpen] = useState(false);
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [paymentProviders, setPaymentProviders] = useState<PaymentProviderInfo[]>([]);
@@ -701,6 +703,16 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 <span className="bot-payments-button__short">{salesShort}</span>
               </button>
             )}
+            {!isMiniApp && bot.status === "active" && (
+              <button
+                type="button"
+                className="bot-sales-button"
+                onClick={() => setProfileOpen(true)}
+                title="Фото, имя и описание бота в Telegram"
+              >
+                🎨 <span className="bot-payments-button__long">Оформление</span>
+              </button>
+            )}
             <button
               type="button"
               className="bot-delete-button"
@@ -909,6 +921,10 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             Открыть @{bot.telegram_bot_username} →
           </a>
         </div>
+      )}
+
+      {profileOpen && (
+        <BotProfilePanel botId={bot.id} botUsername={bot.telegram_bot_username ?? ""} onClose={() => setProfileOpen(false)} />
       )}
 
       {paymentPanelOpen && (

@@ -452,3 +452,58 @@ async def test_public_config_shows_the_launch_offer_only_while_it_runs(api, monk
     monkeypatch.setattr(settings, "launch_offer_ends_at", future, raising=False)
     monkeypatch.setattr(settings, "launch_offer_regular_price", "", raising=False)
     assert (await api.get("/api/config")).json()["launch_offer_ends_at"] == ""
+
+
+async def test_bot_profile_needs_a_published_bot_and_validates_photo(api, auth, owner, monkeypatch):
+    headers = auth(owner)
+    bot_id = await create_bot(api, headers)
+
+    # Пока токена нет, оформлять нечего.
+    early = await api.get(f"/api/bots/{bot_id}/profile", headers=headers)
+    assert early.status_code == 409
+
+    from app.models.bot import Bot
+    from app.routers import bot_profile
+    from app.services.security import encrypt_token
+
+    class FakeSession:
+        async def close(self):
+            pass
+
+    calls = {}
+
+    class FakeBot:
+        def __init__(self, token, session=None):
+            self.session = FakeSession()
+
+        async def set_my_description(self, description):
+            calls["description"] = description
+
+        async def get_my_name(self):
+            return type("N", (), {"name": "Мой бот"})()
+
+        async def get_my_short_description(self):
+            return type("S", (), {"short_description": "коротко"})()
+
+        async def get_my_description(self):
+            return type("D", (), {"description": calls.get("description", "")})()
+
+    monkeypatch.setattr(bot_profile, "AiogramBot", FakeBot)
+
+    from app.database import AsyncSessionLocal as async_session_factory
+
+    async with async_session_factory() as db:
+        bot = await db.get(Bot, __import__("uuid").UUID(bot_id))
+        bot.bot_token_encrypted = encrypt_token("123456:FAKE")
+        await db.commit()
+
+    put = await api.put(f"/api/bots/{bot_id}/profile", headers=headers, json={"description": "Что умеет бот"})
+    assert put.status_code == 200 and put.json()["description"] == "Что умеет бот"
+
+    too_long = await api.put(f"/api/bots/{bot_id}/profile", headers=headers, json={"description": "x" * 600})
+    assert too_long.status_code == 422
+
+    not_jpg = await api.post(
+        f"/api/bots/{bot_id}/profile/photo", headers=headers, files={"file": ("a.png", b"\x89PNG....", "image/png")}
+    )
+    assert not_jpg.status_code == 400

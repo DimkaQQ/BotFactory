@@ -161,6 +161,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (response.status === 204) {
     return undefined as T;
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -189,6 +190,12 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
     throw new ApiError(detail, response.status);
   }
   return (await response.json()) as T;
+}
+
+export interface BotProfile {
+  name: string;
+  short_description: string;
+  description: string;
 }
 
 export interface TelegramLoginPayload {
@@ -273,6 +280,13 @@ export const builderApi = {
       method: "PATCH",
       body: JSON.stringify({ items }),
     }),
+
+  // ---- Оформление бота в Telegram ----
+  getBotProfile: (botId: string) => request<BotProfile>(`/bots/${botId}/profile`),
+  saveBotProfile: (botId: string, payload: Partial<BotProfile>) =>
+    request<BotProfile>(`/bots/${botId}/profile`, { method: "PUT", body: JSON.stringify(payload) }),
+  uploadBotPhoto: (botId: string, file: File) => uploadFile<void>(`/bots/${botId}/profile/photo`, file),
+  removeBotPhoto: (botId: string) => request<void>(`/bots/${botId}/profile/photo`, { method: "DELETE" }),
 
   // ---- Payments ----
   listPaymentProviders: () => request<PaymentProviderCatalogue>("/payments/providers"),
