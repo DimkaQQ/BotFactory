@@ -72,6 +72,12 @@ class Bot(Base):
     # `disabled` ставит платформа за неоплату, и снимается он оплатой.
     paused: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
+    # Бот снят оператором по жалобе или требованию (см. `app.services.moderation`).
+    # Пока отметка стоит, бот на паузе, а владелец снять её не может: пауза —
+    # его собственный выключатель, а это решение платформы. Продление периода
+    # бота не возвращает.
+    moderation_blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # How far the owner has already been warned about the current period
     # (see `platform_billing.NOTICE_*`). Reset to 0 every time `paid_until`
     # moves forward, which is what scopes it to one period and lets the

@@ -153,8 +153,10 @@ the use of the Telegram bot builder service available at {site}, on the terms be
   <li>material that infringes the rights of third parties, including copyright;</li>
   <li>mailings to people who have not subscribed to them.</li>
 </ul>
-<p>See also the <a href="/legal/acceptable-use?lang=en">Acceptable Use Policy</a>. On a violation the Provider may
-take the bot off the air, notifying the User.</p>
+<p>See also the <a href="/legal/acceptable-use?lang=en">Acceptable Use Policy</a>. The Provider does not review
+bots in advance, but may review a bot's settings on a report, at the request of competent authorities or a payment
+provider, and take it off the air (with or without notice if the violation is obvious or puts buyers at risk). The
+Provider does not open buyers' messages without a lawful basis.</p>
 
 <h2>5. Refunds</h2>
 <ul>
@@ -316,20 +318,36 @@ def _acceptable_use(s) -> tuple[str, str]:
       limits.</li>
 </ul>
 
-<h2>2. What the Provider does about a violation</h2>
+<h2>2. How we enforce the rules</h2>
 <ul>
-  <li>May take a bot off the air without prior notice if the violation is obvious or puts buyers at risk.</li>
+  <li>The Provider <strong>does not read bots or buyers' conversations in advance</strong>. The bot and its buyers
+      belong to the bot owner.</li>
+  <li>We act on reports, on lawful requests of competent authorities, and on requirements of payment providers and
+      Telegram.</li>
+  <li>When reviewing, we look only at the settings of the reported bot (name, texts, what and how it sells). We do
+      not open buyers' messages without a lawful basis.</li>
+  <li>Every decision (taking a bot down, closing an account, dismissing a report) is recorded in a log: who, when
+      and why.</li>
+</ul>
+
+<h2>3. What we do about a violation</h2>
+<ul>
+  <li>May take a bot off the air without prior notice if the violation is obvious, puts buyers at risk, or the law
+      requires it.</li>
   <li>Otherwise first writes to the owner at the contacts they left and gives a reasonable time to fix it.</li>
+  <li>Taking a bot down does not delete it: its settings are kept, but it accepts no new conversations and its
+      scheduled messages are cancelled. The owner cannot bring it back on their own; that is the platform's decision.</li>
   <li>For repeated or serious violations closes the account. Payment for the period in which the violation took
       place is not refunded.</li>
   <li>On a lawful request of a competent authority, discloses data to the extent the law requires.</li>
 </ul>
 
-<h2>3. How to report abuse</h2>
-<p>If you come across a bot that breaks these rules, write to the contacts below with the bot's Telegram name and a
-description of what happened. We review every report and reply.</p>
+<h2>4. How to report abuse</h2>
+<p>You can report a bot <a href="/report">on this page</a> or with the <code>/report</code> command inside the bot.
+Give the bot's Telegram name and describe what happened. We review the report and take the bot down if it breaks the
+rules. If you are a bot owner and believe your bot was taken down by mistake, write to the contacts below.</p>
 
-<h2>4. Responsibility of the bot owner</h2>
+<h2>5. Responsibility of the bot owner</h2>
 <p>The bot's owner is responsible for the bot's content, the goods and services it sells, and for compliance with tax
 and consumer law. The Provider supplies a tool and does not review bots in advance.</p>
 """

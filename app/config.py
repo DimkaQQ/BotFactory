@@ -212,6 +212,9 @@ class Settings(BaseSettings):
     #: id (число, узнать у @userinfobot). Пусто — поддержка через бота
     #: выключена, и бот отвечает, что она пока не подключена.
     support_chat_id: str = ""
+    #: Telegram id операторов, которым доступна модерация в мета-боте (/reports, /journal,
+    #: /block, /ban...), через запятую. Пусто — модерации в боте нет, остаётся командная строка.
+    admin_telegram_ids: str = ""
     #: Файл с корневыми сертификатами Минцифры (Russian Trusted Root + Sub CA) для запросов к API
     #: Т-Банка: банк переходит на них, а в certifi их нет, и без файла запросы падают с ошибкой
     #: проверки TLS. Ставит deploy/install-russian-ca.sh; пусто — только обычное хранилище.
@@ -262,6 +265,15 @@ class Settings(BaseSettings):
             return int(raw) if raw else None
         except ValueError:
             return None
+
+    @property
+    def admin_ids(self) -> set[int]:
+        ids: set[int] = set()
+        for part in self.admin_telegram_ids.split(","):
+            part = part.strip()
+            if part.lstrip("-").isdigit():
+                ids.add(int(part))
+        return ids
 
     @property
     def support_contact(self) -> str:

@@ -1144,6 +1144,22 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
     # Условия покупки. Telegram требует, чтобы бот, принимающий оплату (в том числе
     # звёздами), отвечал на /terms: человек должен знать, на что соглашается. Бот
     # принадлежит продавцу, поэтому текст нейтральный и честный про главное.
+    if text.startswith("/report"):
+        from app.config import get_settings
+
+        username = (
+            await db.execute(select(BotModel.telegram_bot_username).where(BotModel.id == bot_id))
+        ).scalar_one_or_none()
+        link = get_settings().public_base_url.rstrip("/") + "/report"
+        if username:
+            link += f"?bot={username}"
+        await bot.send_message(
+            chat_id,
+            "Если этот бот обманывает, нарушает закон или чьи-то права, сообщите нам: "
+            f"{link}\nУкажите, что произошло, — мы рассмотрим жалобу.",
+        )
+        return
+
     if text.startswith("/terms"):
         await bot.send_message(
             chat_id,

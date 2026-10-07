@@ -86,6 +86,12 @@ export function SiteFooter({ config: given, compact = false }: Props) {
           </a>
         </nav>
       )}
+      {/* Жалоба на бота не зависит от реквизитов: подать её можно всегда. */}
+      <nav className="landing-footer__docs" aria-label="Жалобы">
+        <a href="/report" target="_blank" rel="noreferrer">
+          Пожаловаться на бота
+        </a>
+      </nav>
       {!compact && (
         <p className="landing-footer__note">
           Деньги покупателей идут напрямую на счёт владельца бота — сервис их не принимает и не хранит.

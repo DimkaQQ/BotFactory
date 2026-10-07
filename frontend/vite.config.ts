@@ -15,6 +15,7 @@ export default defineConfig({
       "/api": "http://localhost:8000",
       // Оферта и политика отдаются приложением, а не сборкой фронтенда.
       "/legal": "http://localhost:8000",
+      "/report": "http://localhost:8000",
     },
   },
 });

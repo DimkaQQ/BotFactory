@@ -11,6 +11,7 @@ from aiogram import Bot, Dispatcher
 
 from app.config import get_settings
 from app.services.telegram_session import build_bot_session
+from meta_bot.handlers.admin import router as admin_router
 from meta_bot.handlers.menu import router as menu_router
 from meta_bot.handlers.payments import router as payments_router
 from meta_bot.handlers.support import router as support_router
@@ -27,6 +28,8 @@ def build_dispatcher() -> Dispatcher:
     dp = Dispatcher()
     # Платежи первыми: сообщение об оплате не должно попасть в «поддержку».
     dp.include_router(payments_router)
+    # Модерация оператора: только свои id и свои команды, остальным не отвечает.
+    dp.include_router(admin_router)
     dp.include_router(menu_router)
     # Последним: он ловит всё, что не команда, — команды должны достаться раньше.
     dp.include_router(support_router)

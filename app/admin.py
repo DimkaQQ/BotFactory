@@ -138,9 +138,13 @@ async def delete(db: AsyncSession, telegram_id: int) -> str:
 async def _run(args: argparse.Namespace) -> int:
     async with AsyncSessionLocal() as db:
         if args.command == "ban":
-            print(await ban(db, args.telegram_id, args.reason))
+            from app.services import moderation
+
+            print(await moderation.ban_client(db, args.telegram_id, actor="cli", reason=args.reason))
         elif args.command == "unban":
-            print(await unban(db, args.telegram_id))
+            from app.services import moderation
+
+            print(await moderation.unban_client(db, args.telegram_id, actor="cli"))
         elif args.command == "export":
             print(json.dumps(await export(db, args.telegram_id), ensure_ascii=False, indent=2))
         elif args.command == "delete":
