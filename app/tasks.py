@@ -9,6 +9,7 @@
 from app.services import (
     background,
     bot_registry,
+    housekeeping,
     media_gc,
     payment_service,
     platform_billing,
@@ -45,5 +46,8 @@ def start_background_tasks() -> None:
     # переживали и блок, и бота, и клиента, а каталог лежит на том же томе,
     # что и база.
     background.spawn(media_gc.sweep_forever(), name="media-gc", daemon=True)
+    # Напоминания о записи за сутки и за 2 часа; уборка старых нажатий кнопок,
+    # записей и слепков ключей кассы.
+    background.spawn(housekeeping.run_forever(), name="housekeeping", daemon=True)
     background.spawn(platform_billing.sweep_once(), name="billing-catchup")
     background.spawn(platform_billing.sweep_forever(), name="billing-sweep", daemon=True)

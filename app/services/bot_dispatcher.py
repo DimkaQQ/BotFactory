@@ -268,7 +268,7 @@ async def _send_payment_block(
         with contextlib.suppress(Exception):
             await bot.send_message(
                 chat_id,
-                f"У тебя уже есть доступ — «{what}» оплачено ✅" if what else "Это уже оплачено ✅",
+                f"У вас уже есть доступ — «{what}» оплачено ✅" if what else "Это уже оплачено ✅",
             )
         # Not `True`: the chain continues into what was bought, which is
         # exactly what "уже оплачено" has to mean.
@@ -291,8 +291,8 @@ async def _send_payment_block(
         with contextlib.suppress(Exception):
             await bot.send_message(
                 chat_id,
-                "Не получилось открыть оплату — попробуй ещё раз чуть позже. "
-                "Если не заработает, напиши продавцу.",
+                "Не получилось открыть оплату — попробуйте ещё раз чуть позже. "
+                "Если не заработает, напишите продавцу.",
             )
         # И — обязательно — продавцу. Это единственная ветка в файле, где
         # покупатель уходит без товара, а владелец не узнавал ничего:
@@ -335,8 +335,8 @@ async def _send_payment_block(
         with contextlib.suppress(Exception):
             await bot.send_message(
                 chat_id,
-                "Не получилось показать оплату — попробуй ещё раз чуть позже. "
-                "Если не заработает, напиши продавцу.",
+                "Не получилось показать оплату — попробуйте ещё раз чуть позже. "
+                "Если не заработает, напишите продавцу.",
             )
         await _tell_owner(
             db, bot_id,
@@ -434,9 +434,9 @@ async def _handle_payment_callback(
     if status_now == PaymentStatus.paid:
         return  # resume_after_payment already said everything and delivered
     if status_now == PaymentStatus.failed:
-        await bot.send_message(chat_id, "Платёж не прошёл. Попробуй оплатить ещё раз.")
+        await bot.send_message(chat_id, "Платёж не прошёл. Попробуйте оплатить ещё раз.")
     else:
-        await bot.send_message(chat_id, "Оплата пока не дошла. Если ты только что заплатил — подожди минуту и нажми ещё раз.")
+        await bot.send_message(chat_id, "Оплата пока не дошла. Если вы только что заплатили — подождите минуту и нажмите ещё раз.")
 
 
 async def _is_owner(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None) -> bool:
@@ -534,7 +534,7 @@ async def _cancel_subscriptions(
         return
     live = await subscription_service.active_for(db, bot_id, telegram_user_id)
     if not live:
-        await bot.send_message(chat_id, "У тебя нет активных подписок на этого бота 🙂")
+        await bot.send_message(chat_id, "У вас нет активных подписок на этого бота 🙂")
         return
 
     until = max(s.current_period_end for s in live)
@@ -554,7 +554,7 @@ async def _cancel_subscriptions(
         chat_id,
         f"Готово — больше списывать не буду 👍\n"
         f"Доступ остаётся до {dates.day(until)}, всё оплаченное придёт как обычно.\n"
-        f"Захочешь вернуться — нажми /start.",
+        f"Захотите вернуться — нажмите /start.",
     )
 
 
@@ -1032,7 +1032,7 @@ async def walk_chain(
 
 #: Что видит покупатель, пока владелец держит бота на паузе. Пауза не трогает
 #: оплату, возвраты, /stop и выдачу уже купленного — только новые диалоги.
-_PAUSED_TEXT = "Бот сейчас на паузе — владелец скоро вернёт его. Загляни чуть позже 🙏"
+_PAUSED_TEXT = "Бот сейчас на паузе — владелец скоро вернёт его. Загляните чуть позже 🙏"
 
 
 async def _is_paused(db: AsyncSession, bot_id: uuid.UUID) -> bool:
@@ -1245,7 +1245,7 @@ async def _handle_pre_checkout(bot: Bot, query: dict, bot_id: uuid.UUID, db: Asy
         elif payment.status == PaymentStatus.paid:
             message = "Этот заказ уже оплачен"
         elif int(query.get("total_amount") or 0) != payment.amount_minor // 100:
-            message = "Цена изменилась — открой оплату заново"
+            message = "Цена изменилась — откройте оплату заново"
         else:
             ok = True
     except (ValueError, TypeError):
@@ -1399,7 +1399,7 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
         await bot.send_message(
             chat_id,
             "Готово — рассылку больше не пришлю 👍\nПокупки и доступы это не отменяет. "
-            "Если передумаешь, напиши /start.",
+            "Если передумаете, напишите /start.",
         )
         return
 
@@ -1414,10 +1414,10 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
         contact = get_settings().support_contact
         await bot.send_message(
             chat_id,
-            "По оплате и возвратам напиши продавцу — это владелец бота: он отвечает за товар "
-            "и решает, вернуть ли деньги. Просто ответь ему здесь же или через ссылку, "
-            "по которой ты пришёл к боту."
-            + (f"\n\nЕсли продавец не отвечает, напиши в поддержку сервиса: @{contact}." if contact else ""),
+            "По оплате и возвратам напишите продавцу — это владелец бота: он отвечает за товар "
+            "и решает, вернуть ли деньги. Просто ответьте ему здесь же или через ссылку, "
+            "по которой вы пришли к боту."
+            + (f"\n\nЕсли продавец не отвечает, напишите в поддержку сервиса: @{contact}." if contact else ""),
         )
         return
 
@@ -1482,7 +1482,7 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
         if start_block_id is not None:
             await bot.send_message(
                 chat_id,
-                "Я отвечаю на кнопки под сообщениями 🙂\nНапиши /start, чтобы начать сначала.",
+                "Я отвечаю на кнопки под сообщениями 🙂\nНапишите /start, чтобы начать сначала.",
             )
         return
 

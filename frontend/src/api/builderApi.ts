@@ -37,6 +37,8 @@ export interface BlockContent {
   horizon_days?: number;
   notice_hours?: number;
   tz?: string;
+  /** Блок «Запись»: напоминать клиенту за сутки и за 2 часа (по умолчанию да). */
+  reminders?: boolean;
   /** Блок «Контакты»: что спросить у человека (Telegram-данные приходят сами). */
   ask_name?: boolean;
   ask_phone?: boolean;

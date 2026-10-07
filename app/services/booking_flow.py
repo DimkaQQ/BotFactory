@@ -141,9 +141,18 @@ async def handle_callback(bot: Bot, callback_query: dict, bot_id: uuid.UUID, db:
     if start is None or start < now + timedelta(hours=schedule.notice_hours):
         await send_days(bot, chat_id, block, bot_id, db, message_id=message_id)
         return
-    booking = await bk.reserve(
-        db, bot_id=bot_id, block=block, schedule=schedule, start=start, telegram_user_id=user_id, chat_id=chat_id
-    )
+    try:
+        booking = await bk.reserve(
+            db, bot_id=bot_id, block=block, schedule=schedule, start=start, telegram_user_id=user_id, chat_id=chat_id
+        )
+    except bk.BookingLimitError:
+        await _show(
+            bot, chat_id, message_id,
+            f"У вас уже {bk.MAX_ACTIVE_PER_PERSON} активные записи. Новую можно будет сделать после визита "
+            "или если одну из записей отменить: напишите нам.",
+            None,
+        )
+        return
     local_day = bk.local_day(schedule, start)
     if booking is None:
         await db.refresh(block)  # откат после гонки сбросил состояние объектов

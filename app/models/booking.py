@@ -44,6 +44,9 @@ class Booking(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="held", index=True)
     held_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    #: Когда клиенту ушло напоминание за сутки / за 2 часа (NULL — ещё нет).
+    reminded_day_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reminded_hours_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

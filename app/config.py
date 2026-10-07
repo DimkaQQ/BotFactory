@@ -99,8 +99,11 @@ class Settings(BaseSettings):
     # дату на сутки раньше. Имя из базы IANA: Europe/Moscow, Asia/Almaty.
     display_timezone: str = "UTC"
 
-    # CORS - Mini App origin(s), comma separated. "*" for local dev.
-    cors_origins: str = "*"
+    # CORS: адреса, которым можно ходить в API из чужих страниц, через запятую.
+    # Пусто (по умолчанию) — только свой домен `PUBLIC_BASE_URL`: сайт и Mini App
+    # открываются с него же, так что ничего больше не нужно. "*" — для локальной
+    # разработки.
+    cors_origins: str = ""
     # Интерактивная документация API (/docs, /redoc, /openapi.json). В проде
     # она раскрывает всю поверхность API всем подряд, поэтому по умолчанию
     # выключена; для разработки — ENABLE_API_DOCS=true.
@@ -301,7 +304,13 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         if self.cors_origins.strip() == "*":
             return ["*"]
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        listed = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        if listed:
+            return listed
+        from urllib.parse import urlparse
+
+        parsed = urlparse(self.public_base_url)
+        return [f"{parsed.scheme}://{parsed.netloc}"] if parsed.scheme and parsed.netloc else []
 
 
 @lru_cache

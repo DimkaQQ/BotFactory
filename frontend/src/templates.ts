@@ -38,7 +38,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     pitch: "Гайд, курс, файл, путеводитель — купил один раз и получил",
     suggestedName: "Разовый продукт",
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Здесь можно получить [название продукта] 👋" } },
+      { block_type: "welcome", content: { text: "Здравствуйте! Здесь можно получить [название продукта] 👋" } },
       {
         block_type: "description",
         content: { text: "[Расскажи, что внутри и кому это подойдёт — 2-3 предложения хватит.]" },
@@ -49,7 +49,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         // Текст обязателен: блок кнопок без него уходит покупателю как
         // сообщение «…» — Telegram не отправляет кнопки без сообщения.
         content: {
-          text: "Готов забрать?",
+          text: "Готовы забрать?",
           buttons: [{ label: "Купить", action_type: "text", action_value: "" }],
         },
       },
@@ -64,7 +64,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       },
       {
         block_type: "delivery",
-        content: { text: "Спасибо за покупку! Вот твой материал 🎁 [пришли сюда ссылку или файл]" },
+        content: { text: "Спасибо за покупку! Вот ваш материал 🎁 [пришли сюда ссылку или файл]" },
       },
     ],
   },
@@ -89,7 +89,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     blocks: [
       {
         block_type: "welcome",
-        content: { text: "Привет! Здесь открывается доступ в закрытый канал 🔔" },
+        content: { text: "Здравствуйте! Здесь открывается доступ в закрытый канал 🔔" },
       },
       {
         block_type: "description",
@@ -100,7 +100,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       {
         block_type: "buttons",
         content: {
-          text: "Готов присоединиться?",
+          text: "Готовы присоединиться?",
           buttons: [{ label: "Оформить подписку", action_type: "text", action_value: "" }],
         },
       },
@@ -120,7 +120,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         // отсюда, и без этого поля шаблон снова стал бы «просто сообщением».
         block_type: "delivery",
         content: {
-          text: "Готово! Вот твоя персональная ссылка на вход — она одноразовая и только для тебя 👇",
+          text: "Готово! Вот ваша персональная ссылка на вход — она одноразовая и только для вас 👇",
           group_chat_id: "",
         },
       },
@@ -134,7 +134,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     pitch: "Консультация, коучинг, разбор один-на-один",
     suggestedName: "Запись на сессию",
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Здесь можно записаться на личную сессию со мной 📅" } },
+      { block_type: "welcome", content: { text: "Здравствуйте! Здесь можно записаться на личную сессию со мной 📅" } },
       {
         block_type: "description",
         content: { text: "[Опиши формат: длительность, что разбираем, что получит клиент на выходе.]" },
@@ -146,14 +146,14 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         // which slot was booked, because the order carries the block's title.
         block_type: "buttons",
         content: {
-          text: "Выбери, когда удобно — я подтвержу время в переписке.",
+          text: "Выберите, когда удобно — я подтвержу время в переписке.",
           buttons: [{ label: "Записаться", action_type: "text", action_value: "" }],
         },
       },
       {
         block_type: "payment",
         content: {
-          text: "Сессия стоит [цена]. После оплаты я напишу тебе лично и подтвержу время.",
+          text: "Сессия стоит [цена]. После оплаты я напишу вам лично и подтвержу время.",
           title: "Личная сессия",
           price: "3000",
           currency: "RUB",
@@ -167,7 +167,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         block_type: "delivery",
         content: {
           text:
-            "Записал! Я получу уведомление с твоим именем и временем и свяжусь с тобой здесь, " +
+            "Записал! Я получу уведомление с вашим именем и временем и свяжусь с вами здесь, " +
             "чтобы подтвердить. До встречи 👋",
         },
       },
@@ -181,7 +181,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     pitch: "Кафе, магазин, шоурум — держи подписчиков в курсе скидок",
     suggestedName: "Акции и новости",
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Подпишись, чтобы не пропускать акции и новинки 🎉" } },
+      { block_type: "welcome", content: { text: "Здравствуйте! Подпишитесь, чтобы не пропускать акции и новинки 🎉" } },
       { block_type: "description", content: { text: "[Расскажи о заведении или магазине в паре предложений.]" } },
       {
         block_type: "poll",
@@ -196,7 +196,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         // и вместе с кнопкой пропадало всё сообщение. Пустой ловит
         // чек-лист перед публикацией.
         content: {
-          text: "Загляни к нам:",
+          text: "Загляните к нам:",
           buttons: [{ label: "Наш сайт / меню", action_type: "url", action_value: "" }],
         },
       },
@@ -210,12 +210,12 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     pitch: "Кафе, салон, магазин: кнопки внизу экрана — цены, отзывы, адрес. Хороший пример, как это выглядит",
     suggestedName: "Меню с быстрыми кнопками",
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Выбери внизу, что показать 👇" } },
+      { block_type: "welcome", content: { text: "Здравствуйте! Выберите внизу, что показать 👇" } },
       {
         block_type: "buttons",
         content: {
           keyboard: "reply",
-          text: "Что тебя интересует?",
+          text: "Что вас интересует?",
           buttons: [
             { label: "💰 Цены", action_type: "text", action_value: "" },
             { label: "⭐ Отзывы", action_type: "text", action_value: "" },
@@ -360,7 +360,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     pitch: "Каталог, доставка, покупка в один тап, связь с продавцом",
     suggestedName: "Магазин",
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Выбирайте внизу 👇" } },
+      { block_type: "welcome", content: { text: "Здравствуйте! Выбирайте внизу 👇" } },
       {
         block_type: "buttons",
         content: {
@@ -455,13 +455,13 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     pitch: "Дай полезное бесплатно, потом предложи платный продукт",
     suggestedName: "Подарок и продукт",
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Дарю [название подарка] — забирай 🎁" } },
-      { block_type: "delivery", content: { text: "Держи подарок! [пришли сюда ссылку или файл]" } },
+      { block_type: "welcome", content: { text: "Здравствуйте! Дарю [название подарка] — забирайте 🎁" } },
+      { block_type: "delivery", content: { text: "Держите подарок! [пришли сюда ссылку или файл]" } },
       { block_type: "description", content: { text: "[Расскажи, что ещё есть в полной версии и чем она полезна.]" } },
       {
         block_type: "buttons",
         content: {
-          text: "Хочешь полную версию?",
+          text: "Хотите полную версию?",
           buttons: [{ label: "Да, хочу", action_type: "text", action_value: "" }],
         },
       },
@@ -485,12 +485,12 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     pitch: "Купил — получает урок сразу, следующий через сутки",
     suggestedName: "Мини-курс",
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Это мини-курс: один урок в день 🎓" } },
+      { block_type: "welcome", content: { text: "Здравствуйте! Это мини-курс: один урок в день 🎓" } },
       { block_type: "description", content: { text: "[Программа курса: чему научится человек за эти дни.]" } },
       {
         block_type: "buttons",
         content: {
-          text: "Готов начать?",
+          text: "Готовы начать?",
           buttons: [{ label: "Записаться на курс", action_type: "text", action_value: "" }],
         },
       },
@@ -518,7 +518,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     pitch: "Вебинар, мастер-класс, встреча: описание, билет, ссылка после оплаты",
     suggestedName: "Билеты на мероприятие",
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Здесь можно купить билет на [название мероприятия] 🎟" } },
+      { block_type: "welcome", content: { text: "Здравствуйте! Здесь можно купить билет на [название мероприятия] 🎟" } },
       { block_type: "description", content: { text: "[Когда, где и о чём мероприятие, кто ведущий.]" } },
       {
         block_type: "buttons",
@@ -548,7 +548,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     pitch: "Блогер, автор, проект: «спасибо» одним нажатием",
     suggestedName: "Поддержать автора",
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Если мои материалы помогли — можно поддержать 💛" } },
+      { block_type: "welcome", content: { text: "Здравствуйте! Если мои материалы помогли — можно поддержать 💛" } },
       { block_type: "description", content: { text: "[На что пойдут деньги: расскажи честно и коротко.]" } },
       {
         block_type: "payment",
@@ -571,7 +571,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     pitch: "Узнай, что нравится и чего не хватает, — два вопроса и благодарность",
     suggestedName: "Опрос клиентов",
     blocks: [
-      { block_type: "welcome", content: { text: "Привет! Два быстрых вопроса — это поможет сделать лучше 🙏" } },
+      { block_type: "welcome", content: { text: "Здравствуйте! Два быстрых вопроса — это поможет сделать лучше 🙏" } },
       {
         block_type: "poll",
         content: { question: "Как вам наш сервис?", options: ["Отлично", "Нормально", "Можно лучше"], anonymous: false },

@@ -509,22 +509,45 @@ async def test_bot_profile_needs_a_published_bot_and_validates_photo(api, auth, 
     assert not_jpg.status_code == 400
 
 
-async def test_provider_cannot_be_switched_while_a_fresh_invoice_is_open(api, auth, owner, make_bot, db):
+async def test_open_invoice_is_checked_with_the_keys_it_was_issued_with(api, auth, owner, make_bot, db):
+    """Владелец сменил кассу (или ключи) — начатая оплата подтверждается прежней кассой."""
     from app.models.payment import Payment, PaymentKind, PaymentStatus
+    from app.services import payment_service
 
-    bot, _ = await make_bot(owner, [(BlockType.welcome, {"text": "Hi"})], provider="yookassa", is_test=True)
-    db.add(
-        Payment(
-            kind=PaymentKind.order, status=PaymentStatus.pending, provider="yookassa", amount_minor=99000,
-            currency="RUB", description="Товар", bot_id=bot.id, meta={},
-        )
+    bot, _ = await make_bot(
+        owner, [(BlockType.welcome, {"text": "Hi"})], provider="yookassa", is_test=True,
+        credentials={"shop_id": "111", "secret_key": "test_old"},
     )
+    bot_id = bot.id
+    payment = Payment(
+        kind=PaymentKind.order, status=PaymentStatus.pending, provider="yookassa", amount_minor=99000,
+        currency="RUB", description="Товар", bot_id=bot_id, meta={
+            "kassa": {"cred": payment_service.encrypt_credentials({"shop_id": "111", "secret_key": "test_old"}).decode(),
+                      "is_test": True}
+        },
+    )
+    db.add(payment)
     await db.commit()
+    headers = auth(owner)
 
-    blocked = await api.put(
-        f"/api/bots/{bot.id}/payment-settings", headers=auth(owner), json={"provider": "cryptobot", "is_test": True}
+    switched = await api.put(
+        f"/api/bots/{bot_id}/payment-settings", headers=headers, json={"provider": "cryptobot", "is_test": True}
     )
-    assert blocked.status_code == 409
+    assert switched.status_code == 200  # смена кассы больше не блокируется
+
+    db.expire_all()
+    await db.refresh(payment)
+    creds, is_test = await payment_service.credentials_for(db, payment)
+    assert creds == {"shop_id": "111", "secret_key": "test_old"} and is_test is True
+
+    # закрытый платёж ключами из слепка не проверяется
+    payment.status = PaymentStatus.paid
+    await db.commit()
+    db.expire_all()
+    await db.refresh(payment)
+    assert payment.status == PaymentStatus.paid
+    creds, _ = await payment_service.credentials_for(db, payment)
+    assert creds == {}  # касса бота уже другая, слепок после оплаты не нужен
 
 
 async def test_button_clicks_are_counted_and_choices_reach_the_order(api, auth, owner, make_bot, db, as_bot):

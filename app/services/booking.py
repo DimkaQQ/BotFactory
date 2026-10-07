@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,12 @@ from app.models.bot_block import BlockType, BotBlock
 logger = logging.getLogger(__name__)
 
 HOLD_MINUTES = 60
+#: Сколько подтверждённых будущих записей может быть у одного человека в боте.
+MAX_ACTIVE_PER_PERSON = 3
+
+
+class BookingLimitError(Exception):
+    """У человека уже максимум активных записей."""
 DEFAULT_TZ = "Asia/Almaty"
 WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 MONTHS = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
@@ -189,6 +195,19 @@ async def reserve(
     now = datetime.now(timezone.utc)
     if status != "blocked" and start not in day_slots(schedule, local_day(schedule, start)):
         return None
+    if status == "held" and telegram_user_id is not None:
+        active = (
+            await db.execute(
+                select(func.count(Booking.id)).where(
+                    Booking.bot_id == bot_id,
+                    Booking.telegram_user_id == telegram_user_id,
+                    Booking.status == "confirmed",
+                    Booking.starts_at > now,
+                )
+            )
+        ).scalar_one()
+        if active >= MAX_ACTIVE_PER_PERSON:
+            raise BookingLimitError(active)
     # Просроченную придержку на этом времени убираем: иначе она держит уникальный индекс.
     await db.execute(
         update(Booking)

@@ -442,7 +442,7 @@ async def _tell_them_the_charge_failed(db: AsyncSession, subscription: Subscript
         await instance.send_message(
             subscription.chat_id,
             f"⚠️ Не получилось списать оплату за «{subscription.title}».\n"
-            f"Доступ работает до {ends}. Проверь карту и оплати вручную — нажми /start.",
+            f"Доступ работает до {ends}. Проверьте карту и оплатите вручную — нажмите /start.",
         )
     except Exception as exc:
         if subscribers.looks_blocked(exc):
@@ -573,7 +573,7 @@ async def _tell_them_it_ended(db: AsyncSession, subscription: Subscription) -> N
         if subscription.billing_mode == BillingMode.auto:
             note = "Оплата не прошла, поэтому доступ приостановлен. Можно оформить заново в любой момент."
         else:
-            note = "Чтобы продолжить, оплати следующий период — нажми /start."
+            note = "Чтобы продолжить, оплатите следующий период — нажмите /start."
         await bot_instance.send_message(subscription.chat_id, f"⏳ «{what}» — срок доступа закончился.\n{note}")
     except Exception as exc:
         from app.services import subscribers

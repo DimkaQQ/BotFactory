@@ -211,3 +211,23 @@ async def test_crm_lists_customers_and_calendar_is_private(api, auth, owner, str
     assert again.status_code == 409
     cancelled = await api.post(f"/api/bots/{bot_id}/bookings/{blocked.json()['id']}/cancel", headers=mine)
     assert cancelled.json()["cancelled"] is True
+
+
+async def test_one_person_cannot_hold_more_than_three_active_bookings(db, owner, make_bot):
+    bot, blocks = await make_bot(owner, [(BlockType.booking, _cfg())])
+    bot_id = bot.id
+    schedule = bk.schedule_of(blocks[0].content)
+    day = bk.local_day(schedule, datetime.now(timezone.utc)) + timedelta(days=2)
+    slots = bk.day_slots(schedule, day)
+    for start in slots[:3]:
+        booking = await bk.reserve(db, bot_id=bot_id, block=blocks[0], schedule=schedule, start=start, telegram_user_id=9, chat_id=9)
+        assert booking is not None and await bk.confirm(db, booking)
+    try:
+        await bk.reserve(db, bot_id=bot_id, block=blocks[0], schedule=schedule, start=slots[0] + timedelta(days=1), telegram_user_id=9, chat_id=9)
+    except bk.BookingLimitError:
+        pass
+    else:
+        raise AssertionError("четвёртая запись должна быть отклонена")
+    # другой человек не затронут
+    other = await bk.reserve(db, bot_id=bot_id, block=blocks[0], schedule=schedule, start=bk.day_slots(schedule, day + timedelta(days=1))[0], telegram_user_id=10, chat_id=10)
+    assert other is not None

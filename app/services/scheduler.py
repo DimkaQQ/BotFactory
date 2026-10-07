@@ -356,7 +356,7 @@ async def _run_step(step_id: uuid.UUID) -> None:
                 telegram_user_id=step.telegram_user_id,
                 # Рассылку человек не просил — значит, в ней обязано быть
                 # сказано, как её прекратить.
-                footer="Чтобы не получать рассылку — отправь /stop" if step.reason == "broadcast" else "",
+                footer="Чтобы не получать рассылку — отправьте /stop" if step.reason == "broadcast" else "",
             )
         except Exception as exc:  # noqa: BLE001 — сбой отправки: повтор
             if subscribers.looks_blocked(exc):

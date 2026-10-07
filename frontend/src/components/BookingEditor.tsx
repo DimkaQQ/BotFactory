@@ -151,6 +151,14 @@ export function BookingEditor({ content, onChange }: Props) {
           ⚠️ В рабочие часы не помещается ни одной записи такой длины — проверь начало, конец и длину записи.
         </p>
       )}
+      <label className="payment-settings__test">
+        <input
+          type="checkbox"
+          checked={content.reminders !== false}
+          onChange={(e) => set({ reminders: e.target.checked })}
+        />
+        <span>Напоминать клиенту о записи за сутки и за 2 часа</span>
+      </label>
       <p className="app-hint">
         Календарь один на бота: два блока «Запись» делят одно время. Закрыть перерыв или выходной можно в разделе
         «Клиенты и записи» → «Календарь».

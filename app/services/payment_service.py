@@ -422,6 +422,14 @@ async def _create(
     # that in the callback, so it is stored now, not when the money lands.
     payment.provider_payment_id = checkout.provider_payment_id
     payment.meta = {"checkout_url": checkout.url, **checkout.meta, **(meta or {})}
+    if kind == PaymentKind.order and credentials:
+        # Слепок кассы на момент счёта: подтверждать эту оплату нужно теми
+        # ключами, с которыми счёт выставлен, даже если владелец сменил кассу или
+        # ключи. Хранится зашифрованным и стирается, когда платёж закрыт.
+        payment.meta = {
+            **payment.meta,
+            "kassa": {"cred": encrypt_credentials(credentials).decode(), "is_test": bool(is_test)},
+        }
     await db.commit()
     await db.refresh(payment)
     return payment, checkout.url
@@ -704,11 +712,44 @@ async def credentials_for(db: AsyncSession, payment: Payment) -> tuple[dict[str,
         logger.error("Payment %s used provider %r, which is no longer configured", payment.id, payment.provider)
         return {}, False
 
+    snapshot = (payment.meta or {}).get("kassa")
+    if snapshot and payment.status == PaymentStatus.pending and _snapshot_is_fresh(payment):
+        creds = decrypt_credentials(str(snapshot.get("cred") or "").encode())
+        if creds:
+            return creds, bool(snapshot.get("is_test"))
+
     result = await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))
     bot = result.scalar_one_or_none()
     if bot is None:
         return {}, False
     return decrypt_credentials(bot.payment_credentials_encrypted), bot.payment_is_test
+
+
+#: Сколько живёт слепок кассы у неоплаченного счёта: дольше ссылка на оплату не ждёт.
+KASSA_SNAPSHOT_HOURS = 48
+
+
+def _snapshot_is_fresh(payment: Payment) -> bool:
+    created = payment.created_at
+    if created is None:
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - created < timedelta(hours=KASSA_SNAPSHOT_HOURS)
+
+
+async def scrub_old_kassa_snapshots(db: AsyncSession) -> int:
+    """Стереть зашифрованные ключи из старых неоплаченных счетов (слепок нужен ≤ 48 ч)."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=KASSA_SNAPSHOT_HOURS)
+    rows = (
+        await db.execute(
+            select(Payment).where(Payment.created_at < cutoff, Payment.meta["kassa"].isnot(None)).limit(500)
+        )
+    ).scalars().all()
+    for payment in rows:
+        payment.meta = {k: v for k, v in (payment.meta or {}).items() if k != "kassa"}
+    await db.commit()
+    return len(rows)
 
 
 async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
@@ -1502,7 +1543,7 @@ async def reject_by_owner(db: AsyncSession, payment: Payment) -> None:
         if instance is not None:
             await instance.send_message(
                 payment.chat_id,
-                "Пока не видим оплату по этому заказу. Если платёж прошёл — напиши продавцу, разберёмся.",
+                "Пока не видим оплату по этому заказу. Если платёж прошёл — напишите продавцу, разберёмся.",
             )
     except Exception:  # noqa: BLE001
         logger.info("Could not tell the buyer that payment %s was rejected", payment.id, exc_info=True)
@@ -1594,6 +1635,10 @@ async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str
 
     if payment.kind in (PaymentKind.publication, PaymentKind.renewal) and payment.bot_id:
         await _extend_paid_period(db, payment, now)
+
+    # Оплачено — слепок ключей больше не нужен.
+    if "kassa" in (payment.meta or {}):
+        payment.meta = {k: v for k, v in payment.meta.items() if k != "kassa"}
 
     await db.commit()
     # The in-memory object was not touched by the UPDATE; refresh it so the
