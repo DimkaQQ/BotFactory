@@ -609,3 +609,12 @@ def test_document_input_hides_upload_hash_prefix():
     assert isinstance(out, URLInputFile) and out.filename == "guide.pdf"
     assert _document_input("https://other.example/file.pdf") == "https://other.example/file.pdf"
     assert _document_input("BQACAgIAAx0") == "BQACAgIAAx0"
+
+
+def test_fill_placeholders():
+    from app.services.bot_dispatcher import fill_placeholders
+
+    assert fill_placeholders("Стоимость — [цена]. Готово", price="490 ₽") == "Стоимость — 490 ₽. Готово"
+    assert fill_placeholders("Здесь [название продукта] 👋", title="Гайд") == "Здесь Гайд 👋"
+    assert fill_placeholders("Цена [цена] .", price="") == "Цена."
+    assert fill_placeholders("Без заготовок [1]") == "Без заготовок [1]"

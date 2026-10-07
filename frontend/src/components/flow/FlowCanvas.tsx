@@ -130,6 +130,16 @@ function Inner({
   const [notice, setNotice] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   useEscape(() => setSheetOpen(false), sheetOpen);
+  // Пока открыт список блоков, фон не прокручивается: на телефоне палец,
+  // листающий список, тянул за собой страницу под ним.
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [sheetOpen]);
 
   const blocksById = useMemo(() => new Map(bot.blocks.map((b) => [b.id, b])), [bot.blocks]);
 

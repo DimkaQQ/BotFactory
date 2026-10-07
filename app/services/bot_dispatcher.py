@@ -580,6 +580,45 @@ async def _handle_poll_answer(answer: dict, bot_id: uuid.UUID, db: AsyncSession)
         await db.commit()
 
 
+_PLACEHOLDER_RE = re.compile(r"\[\s*(цена|стоимость|сумма|название продукта|название|продукт)\s*\]", re.IGNORECASE)
+_CURRENCY_SIGN = {"RUB": "₽", "USD": "$", "EUR": "€", "KZT": "₸", "UZS": "сум", "UAH": "₴", "XTR": "⭐"}
+
+
+def fill_placeholders(text: str, *, price: str = "", title: str = "") -> str:
+    """Шаблоны сценариев содержат заготовки вроде «Стоимость — [цена]». Если их
+    не заменить, покупатель увидит квадратные скобки. Подставляем цену и
+    название из блока оплаты бота; если брать нечего — заготовка убирается
+    вместе с лишним пробелом, а не уходит покупателю как есть."""
+    if "[" not in text:
+        return text
+
+    def repl(match: re.Match) -> str:
+        key = match.group(1).lower()
+        return price if key in ("цена", "стоимость", "сумма") else title
+
+    out = _PLACEHOLDER_RE.sub(repl, text)
+    return re.sub(r"[ \t]{2,}", " ", out).replace(" .", ".").replace(" ,", ",")
+
+
+async def _placeholder_values(db: AsyncSession, bot_id: uuid.UUID) -> tuple[str, str]:
+    """(цена, название) из первого блока оплаты бота."""
+    block = (
+        await db.execute(
+            select(BotBlock)
+            .where(BotBlock.bot_id == bot_id, BotBlock.block_type == BlockType.payment)
+            .order_by(BotBlock.order_index)
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if block is None:
+        return "", ""
+    content = block.content or {}
+    raw = str(content.get("price") or "").strip()
+    currency = str(content.get("currency") or "").upper()
+    price = f"{raw} {_CURRENCY_SIGN.get(currency, currency)}".strip() if raw else ""
+    return price, str(content.get("title") or "").strip()
+
+
 async def _send_block(
     bot: Bot, chat_id: int, block: BotBlock, db: AsyncSession | None = None, footer: str = ""
 ) -> None:
@@ -612,6 +651,9 @@ async def _send_block(
     # Whitespace is not content: a block holding only spaces used to pass the
     # emptiness check and send a bubble containing "   ".
     text = (content.get("text") or "").strip()
+    if db is not None and "[" in text:
+        price, title = await _placeholder_values(db, block.bot_id)
+        text = fill_placeholders(text, price=price, title=title).strip()
     if footer:
         text = f"{text}\n\n{footer}" if text else footer
     media_file_id = content.get("media_file_id")

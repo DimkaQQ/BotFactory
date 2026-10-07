@@ -7369,3 +7369,22 @@ details.live-problems > summary::-webkit-details-marker {
 .media-editor__caption {
   min-height: 3em;
 }
+
+/* Список блоков на телефоне: листается сам список, а не страница под ним, и
+   нижний пункт («Пауза») не прижат к панели Safari. */
+.sheet-backdrop {
+  touch-action: none;
+}
+
+.sheet {
+  max-height: 78dvh;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+@media (max-width: 959px) {
+  .sheet {
+    padding-bottom: calc(var(--sp-8, 48px) + env(safe-area-inset-bottom));
+  }
+}
