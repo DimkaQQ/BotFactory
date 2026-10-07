@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ApiError, builderApi } from "../api/builderApi";
+import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
 
 interface Props {
@@ -27,6 +28,7 @@ async function toSquareJpeg(file: File): Promise<File> {
 /** Имя, описание и фото бота в Telegram — без похода в @BotFather. */
 export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
   useEscape(onClose);
+  const { panelRef, handleProps: dragProps } = useDraggablePanel();
   const [name, setName] = useState("");
   const [short, setShort] = useState("");
   const [description, setDescription] = useState("");
@@ -86,8 +88,12 @@ export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
   return (
     <>
       <div className="sheet-backdrop edit-panel-backdrop" onClick={onClose} />
-      <div className="edit-panel">
-        <div className="edit-panel__header">
+      <div className="edit-panel" ref={panelRef}>
+        <div
+          className="edit-panel__header"
+          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          {...dragProps}
+        >
           <span className="edit-panel__icon block-card__icon--welcome" aria-hidden="true">
             🎨
           </span>
