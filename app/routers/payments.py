@@ -415,6 +415,37 @@ async def set_payment_settings(
         )
 
     switching = (payload.provider or None) != bot.payment_provider
+    if switching and bot.payment_provider:
+        # Счёт, открытый в старой кассе, подтверждается её ключами. Пока
+        # покупатель может ещё платить, ключи менять нельзя: платёж пришёл бы,
+        # а подтвердить его было бы нечем.
+        from datetime import datetime, timedelta, timezone
+
+        from app.models.payment import Payment, PaymentKind, PaymentStatus
+
+        recent = (
+            await db.execute(
+                select(Payment.id)
+                .where(
+                    Payment.bot_id == bot.id,
+                    Payment.kind == PaymentKind.order,
+                    Payment.status == PaymentStatus.pending,
+                    Payment.provider == bot.payment_provider,
+                    Payment.provider.notin_(("test", "link", "stars")),
+                    Payment.created_at > datetime.now(timezone.utc) - timedelta(hours=2),
+                )
+                .limit(1)
+            )
+        ).first()
+        if recent is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "У бота есть неоплаченный счёт, выставленный в последние 2 часа через текущую кассу. "
+                    "Подожди, пока он оплатится или устареет, и меняй кассу после этого — "
+                    "иначе оплату нечем будет подтвердить."
+                ),
+            )
     bot.payment_provider = payload.provider or None
     bot.payment_is_test = payload.is_test
 

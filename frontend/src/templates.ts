@@ -35,7 +35,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       { block_type: "welcome", content: { text: "Привет! Здесь можно получить [название продукта] 👋" } },
       {
         block_type: "description",
-        content: { text: "Расскажи, что внутри и кому это подойдёт — 2-3 предложения хватит." },
+        content: { text: "[Расскажи, что внутри и кому это подойдёт — 2-3 предложения хватит.]" },
       },
       { block_type: "image", content: { media_type: "photo", media_file_id: "", text: "Как это выглядит" } },
       {
@@ -58,7 +58,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       },
       {
         block_type: "delivery",
-        content: { text: "Спасибо за покупку! Вот твой материал 🎁 (пришли сюда ссылку или файл)" },
+        content: { text: "Спасибо за покупку! Вот твой материал 🎁 [пришли сюда ссылку или файл]" },
       },
     ],
   },
@@ -88,7 +88,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       {
         block_type: "description",
         content: {
-          text: "Расскажи, что внутри канала и как часто там появляется новое. Это главный текст, который решает, купят или нет.",
+          text: "[Расскажи, что внутри канала и как часто там появляется новое. Это главный текст, который решает, купят или нет.]",
         },
       },
       {
@@ -131,7 +131,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       { block_type: "welcome", content: { text: "Привет! Здесь можно записаться на личную сессию со мной 📅" } },
       {
         block_type: "description",
-        content: { text: "Опиши формат: длительность, что разбираем, что получит клиент на выходе." },
+        content: { text: "[Опиши формат: длительность, что разбираем, что получит клиент на выходе.]" },
       },
       {
         // One button, wired to the payment block. For separate time slots,
@@ -176,7 +176,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     suggestedName: "Акции и новости",
     blocks: [
       { block_type: "welcome", content: { text: "Привет! Подпишись, чтобы не пропускать акции и новинки 🎉" } },
-      { block_type: "description", content: { text: "Расскажи о заведении или магазине в паре предложений." } },
+      { block_type: "description", content: { text: "[Расскажи о заведении или магазине в паре предложений.]" } },
       {
         block_type: "poll",
         // Не анонимный: у анонимного опроса Telegram не присылает ответы

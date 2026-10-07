@@ -507,3 +507,21 @@ async def test_bot_profile_needs_a_published_bot_and_validates_photo(api, auth, 
         f"/api/bots/{bot_id}/profile/photo", headers=headers, files={"file": ("a.png", b"\x89PNG....", "image/png")}
     )
     assert not_jpg.status_code == 400
+
+
+async def test_provider_cannot_be_switched_while_a_fresh_invoice_is_open(api, auth, owner, make_bot, db):
+    from app.models.payment import Payment, PaymentKind, PaymentStatus
+
+    bot, _ = await make_bot(owner, [(BlockType.welcome, {"text": "Hi"})], provider="yookassa", is_test=True)
+    db.add(
+        Payment(
+            kind=PaymentKind.order, status=PaymentStatus.pending, provider="yookassa", amount_minor=99000,
+            currency="RUB", description="Товар", bot_id=bot.id, meta={},
+        )
+    )
+    await db.commit()
+
+    blocked = await api.put(
+        f"/api/bots/{bot.id}/payment-settings", headers=auth(owner), json={"provider": "cryptobot", "is_test": True}
+    )
+    assert blocked.status_code == 409

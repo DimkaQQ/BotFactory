@@ -285,6 +285,34 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       );
     }
 
+    // Картинка или видео без файла: бот отправил бы голую подпись.
+    const emptyMedia = bot.blocks.filter(
+      (b) => (b.block_type === "image" || b.block_type === "video") && !String(b.content.media_file_id ?? "").trim(),
+    );
+    if (emptyMedia.length > 0) {
+      found.push("Есть блок «Изображение» или «Видео» без файла — загрузи файл или вставь ссылку, иначе уйдёт только подпись.");
+    }
+
+    // Валюта блока, которую касса не принимает: покупатель получит ошибку.
+    const allowed = paymentProviders.find((p) => p.slug === paymentSettings?.provider)?.currencies ?? [];
+    if (allowed.length > 0) {
+      const wrong = payBlocks.filter((b) => b.content.currency && !allowed.includes(String(b.content.currency).toUpperCase()));
+      if (wrong.length > 0) {
+        found.push(`Валюта в блоке оплаты не подходит этой кассе (она принимает: ${allowed.join(", ")}).`);
+      }
+    }
+
+    // Быстрые кнопки: подписи должны быть уникальны и короче 64 символов.
+    const replyLabels = bot.blocks
+      .filter((b) => b.block_type === "buttons" && b.content.keyboard === "reply")
+      .flatMap((b) => (b.content.buttons ?? []).map((btn) => (btn.label || "").trim()).filter(Boolean));
+    if (new Set(replyLabels).size !== replyLabels.length) {
+      found.push("У быстрых кнопок есть одинаковые подписи — бот не поймёт, какую нажали. Сделай их разными.");
+    }
+    if (replyLabels.some((l) => l.length > 64)) {
+      found.push("Подпись быстрой кнопки длиннее 64 символов — Telegram её обрежет.");
+    }
+
     const priceless = payBlocks.filter((b) => {
       const raw = String(b.content.price ?? "").replace(",", ".").trim();
       return !raw || Number(raw) <= 0;
