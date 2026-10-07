@@ -302,3 +302,25 @@ async def test_customer_search_treats_percent_and_underscore_literally(api, auth
     assert [c["telegram_user_id"] for c in everything] == [2], "«%» искался как «любой текст»"
     underscore = (await api.get("/api/crm/customers?q=_", headers=mine)).json()["customers"]
     assert [c["telegram_user_id"] for c in underscore] == [2]
+
+
+# ------------------------------------------------------------ кнопки-ссылки
+
+
+def test_a_bad_url_button_is_skipped_instead_of_losing_the_whole_message():
+    import uuid
+
+    from app.services.bot_dispatcher import _build_keyboard
+
+    content = {
+        "buttons": [
+            {"label": "Хорошая", "action_type": "url", "action_value": "example.com/page"},
+            {"label": "С пробелом", "action_type": "url", "action_value": "https://exa mple.com"},
+            {"label": "Без точки", "action_type": "url", "action_value": "localhost"},
+            {"label": "Telegram", "action_type": "url", "action_value": "tg://resolve?domain=durov"},
+        ]
+    }
+    markup = _build_keyboard(uuid.uuid4(), content)
+    labels = [row[0].text for row in markup.inline_keyboard]
+    assert labels == ["Хорошая", "Telegram"]
+    assert markup.inline_keyboard[0][0].url == "https://example.com/page"

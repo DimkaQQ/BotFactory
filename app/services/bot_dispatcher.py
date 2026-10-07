@@ -120,6 +120,21 @@ def _is_url_button(button: dict) -> bool:
     return button.get("action_type") == "url" and bool((button.get("action_value") or "").strip())
 
 
+def _is_sendable_url(url: str) -> bool:
+    """Ссылка, которую Telegram примет в кнопке: http(s) с хостом или tg://, без пробелов."""
+    from urllib.parse import urlparse
+
+    if len(url) > 2000 or any(ch.isspace() for ch in url):
+        return False
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme.lower() in ("http", "https"):
+        return bool(parsed.hostname) and "." in (parsed.hostname or "")
+    return parsed.scheme.lower() == "tg" and bool(parsed.netloc or parsed.path)
+
+
 def _button_has_branches(content: dict) -> bool:
     """Whether this block is a real decision point — one the dialogue can
     actually continue from.
@@ -191,6 +206,11 @@ def _build_keyboard(
             # rather than let one typo take the whole message down.
             if not _URL_SCHEME_RE.match(url):
                 url = f"https://{url}"
+            if not _is_sendable_url(url):
+                # Telegram отклоняет сообщение целиком из-за одной плохой ссылки (BUTTON_URL_INVALID),
+                # и пропадал бы весь блок с текстом. Плохую кнопку пропускаем, остальное уходит.
+                logger.warning("Button %r has an invalid URL — skipped", label)
+                continue
             rows.append([InlineKeyboardButton(text=label, url=url)])
         else:
             # Every non-URL button's callback_data is just a pointer back to

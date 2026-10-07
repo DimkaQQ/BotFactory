@@ -24,6 +24,13 @@ interface Props {
 // Only used before a provider is chosen; once one is, its own list wins.
 const FALLBACK_CURRENCIES = ["RUB", "KZT", "USD", "EUR"];
 
+/** Значение поля, которое задаёт не касса, а сам блок: ключи приходят с
+ * сервера (см. `block_fields` провайдера), поэтому типизированного поля под
+ * них нет. */
+function blockFieldValue(content: BlockContent, key: string): string {
+  return String((content as Record<string, unknown>)[key] ?? "").trim();
+}
+
 /** Оставить из набранного число, которое означает ровно то, что человек имел
  * в виду.
  *
@@ -36,13 +43,6 @@ const FALLBACK_CURRENCIES = ["RUB", "KZT", "USD", "EUR"];
  * разделителей — тем более. Всё остальное остаётся как набрано, иначе
  * фильтр воевал бы с человеком, который посреди набора «1500.5» успел
  * поставить точку. */
-/** Значение поля, которое задаёт не касса, а сам блок: ключи приходят с
- * сервера (см. `block_fields` провайдера), поэтому типизированного поля под
- * них нет. */
-function blockFieldValue(content: BlockContent, key: string): string {
-  return String((content as Record<string, unknown>)[key] ?? "").trim();
-}
-
 function cleanPrice(raw: string, isStars: boolean): string {
   // Звёзды бывают только целыми — дробная часть всё равно не дойдёт до кассы.
   if (isStars) return raw.replace(/[\s ]/g, "").match(/^\d*/)?.[0] ?? "";
@@ -62,9 +62,6 @@ function cleanPrice(raw: string, isStars: boolean): string {
   return text;
 }
 
-/** Editor for a payment block: what's being sold, for how much, and what
- * the button says. What happens *after* the money lands is the block's
- * plain arrow on the canvas — usually a delivery block. */
 function PeriodField({
   content,
   onChange,
@@ -86,6 +83,9 @@ function PeriodField({
   );
 }
 
+/** Editor for a payment block: what's being sold, for how much, and what
+ * the button says. What happens *after* the money lands is the block's
+ * plain arrow on the canvas — usually a delivery block. */
 export function PaymentEditor({
   blockId,
   content,
