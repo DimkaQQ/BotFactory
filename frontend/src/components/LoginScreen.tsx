@@ -204,7 +204,8 @@ export function LoginScreen({ onLoggedIn }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!botUsername || !widgetRef.current) return;
+    // После ошибки входа контейнер виджета создаётся заново — нужно собрать его снова.
+    if (loading || !botUsername || !widgetRef.current) return;
 
     window.onTelegramAuth = async (user) => {
       setLoading(true);
@@ -243,7 +244,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
       clearTimeout(timer);
       delete window.onTelegramAuth;
     };
-  }, [botUsername, onLoggedIn]);
+  }, [botUsername, onLoggedIn, loading]);
 
   useEffect(() => {
     const hero = heroRef.current;

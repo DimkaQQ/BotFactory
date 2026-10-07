@@ -127,7 +127,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
 
         <div className="edit-panel__body">
           {providers === null ? (
-            <p className="app-hint">Загружаем…</p>
+            error ? <p className="publish-form__error">{error}</p> : <p className="app-hint">Загружаем…</p>
           ) : (
             <>
               <p className="payment-settings__lead">
@@ -170,7 +170,10 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                       key={provider.slug}
                       type="button"
                       className={`payment-settings__provider ${slug === provider.slug ? "payment-settings__provider--active" : ""}`}
-                      onClick={() => setSlug(provider.slug)}
+                      onClick={() => {
+                        setSlug(provider.slug);
+                        setValues({});
+                      }}
                     >
                       <span className="payment-settings__provider-title">
                         {provider.title}

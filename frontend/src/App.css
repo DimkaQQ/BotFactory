@@ -7517,3 +7517,10 @@ details.live-problems > summary::-webkit-details-marker {
   font-weight: 600;
   text-decoration: none;
 }
+
+/* «Открыть бота» в карточке входа — кнопка, а не ссылка: без этого цвет ссылки
+   совпадал с фоном кнопки и текст пропадал. */
+.login-card a.publish-button,
+.login-card__fallback a.publish-button {
+  color: var(--tg-button-text, #fff);
+}

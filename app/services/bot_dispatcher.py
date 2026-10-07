@@ -246,7 +246,14 @@ async def _send_payment_block(
         # exactly what "уже оплачено" has to mean.
         return False
 
-    text = (content.get("text") or content.get("title") or "").strip()
+    price_raw = str(content.get("price") or "").strip()
+    sign = _CURRENCY_SIGN.get(str(content.get("currency") or "").upper(), str(content.get("currency") or "").upper())
+    title_clean = fill_placeholders(str(content.get("title") or ""), price="", title="").strip()
+    text = fill_placeholders(
+        (content.get("text") or content.get("title") or "").strip(),
+        price=f"{price_raw} {sign}".strip() if price_raw else "",
+        title=title_clean,
+    ).strip()
     try:
         payment, url = await payment_service.create_order_payment(
             db, bot=bot_row, block=block, chat_id=chat_id, telegram_user_id=telegram_user_id
@@ -645,7 +652,7 @@ async def _placeholder_values(db: AsyncSession, bot_id: uuid.UUID) -> tuple[str,
     raw = str(content.get("price") or "").strip()
     currency = str(content.get("currency") or "").upper()
     price = f"{raw} {_CURRENCY_SIGN.get(currency, currency)}".strip() if raw else ""
-    return price, str(content.get("title") or "").strip()
+    return price, fill_placeholders(str(content.get("title") or ""), price="", title="").strip()
 
 
 async def _send_block(
@@ -1048,7 +1055,9 @@ async def _handle_reply_button(
         return False
     blocks = (
         await db.execute(
-            select(BotBlock).where(BotBlock.bot_id == bot_id, BotBlock.block_type == BlockType.buttons)
+            select(BotBlock)
+            .where(BotBlock.bot_id == bot_id, BotBlock.block_type == BlockType.buttons)
+            .order_by(BotBlock.order_index, BotBlock.id)
         )
     ).scalars()
     for block in blocks:
@@ -1056,7 +1065,7 @@ async def _handle_reply_button(
         if content.get("keyboard") != "reply":
             continue
         for button in content.get("buttons") or []:
-            if (button.get("label") or "").strip() != label:
+            if (button.get("label") or "").strip()[:64] != label:
                 continue
             if _is_url_button(button):
                 await bot.send_message(chat_id, button["action_value"].strip())

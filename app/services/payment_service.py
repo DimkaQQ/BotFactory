@@ -444,7 +444,10 @@ async def create_order_payment(
         raise ProviderError("У бота не подключён платёжный провайдер")
 
     settings = get_settings()
-    title = (content.get("title") or "").strip() or "Оплата"
+    from app.services.bot_dispatcher import fill_placeholders
+
+    # Название из шаблона («[название продукта]») не должно попасть в чек кассы.
+    title = fill_placeholders(content.get("title") or "", price="", title="").strip() or "Оплата"
     currency = currency_for(bot.payment_provider, content.get("currency"))
 
     # Someone who taps /start three times is looking at one product, not

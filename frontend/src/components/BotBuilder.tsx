@@ -408,6 +408,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       markPending(blockId);
       clearTimeout(saveTimers.current[blockId]);
       saveTimers.current[blockId] = setTimeout(async () => {
+        delete saveTimers.current[blockId];
         try {
           await builderApi.updateBlock(bot.id, blockId, { content });
           markSettled(blockId);
