@@ -48,8 +48,32 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
     onChange({ ...content, buttons: [...buttons, emptyButton()] });
   }
 
+  const style = content.keyboard === "reply" ? "reply" : "inline";
+
   return (
     <div className="buttons-editor" onClick={(e) => e.stopPropagation()}>
+      <div className="payment-settings__modes" role="radiogroup" aria-label="Вид кнопок">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={style === "inline"}
+          className={`payment-settings__mode${style === "inline" ? " payment-settings__mode--active" : ""}`}
+          onClick={() => onChange({ ...content, keyboard: "inline" })}
+        >
+          <strong>Под сообщением</strong>
+          <span>Кнопки прикреплены к сообщению. Могут открывать ссылки.</span>
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={style === "reply"}
+          className={`payment-settings__mode${style === "reply" ? " payment-settings__mode--active" : ""}`}
+          onClick={() => onChange({ ...content, keyboard: "reply" })}
+        >
+          <strong>Быстрые, внизу экрана</strong>
+          <span>Кнопки вместо клавиатуры, всегда под рукой. Подписи делай разными.</span>
+        </button>
+      </div>
       {buttons.map((button, index) => (
         <ButtonRow
           key={index}

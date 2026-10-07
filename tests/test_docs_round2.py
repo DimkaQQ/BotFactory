@@ -618,3 +618,17 @@ def test_fill_placeholders():
     assert fill_placeholders("Здесь [название продукта] 👋", title="Гайд") == "Здесь Гайд 👋"
     assert fill_placeholders("Цена [цена] .", price="") == "Цена."
     assert fill_placeholders("Без заготовок [1]") == "Без заготовок [1]"
+
+
+def test_reply_keyboard_built_for_quick_buttons():
+    import uuid
+
+    from aiogram.types import ReplyKeyboardMarkup
+
+    from app.services.bot_dispatcher import _build_keyboard
+
+    content = {"keyboard": "reply", "buttons": [{"label": "Цена"}, {"label": "Отзывы"}, {"label": "Очень длинная подпись кнопки номер три"}, {"label": ""}]}
+    kb = _build_keyboard(uuid.uuid4(), content)
+    assert isinstance(kb, ReplyKeyboardMarkup)
+    assert [[b.text for b in row] for row in kb.keyboard] == [["Цена", "Отзывы"], ["Очень длинная подпись кнопки номер три"]]
+    assert _build_keyboard(uuid.uuid4(), {"buttons": [{"label": "A", "action_type": "text"}]}).inline_keyboard

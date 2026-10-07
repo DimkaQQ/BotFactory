@@ -40,7 +40,13 @@ import uuid
 from datetime import datetime, timezone
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, URLInputFile
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    URLInputFile,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -129,7 +135,30 @@ def _button_has_branches(content: dict) -> bool:
     )
 
 
-def _build_keyboard(block_id: uuid.UUID, content: dict) -> InlineKeyboardMarkup | None:
+def _build_reply_keyboard(content: dict) -> ReplyKeyboardMarkup | None:
+    """Быстрые кнопки внизу экрана (клавиатура Telegram). Нажатие приходит как
+    обычный текст с подписью кнопки — `_handle_reply_button` находит по ней
+    кнопку и продолжает сценарий. Короткие подписи ставятся по две в ряд."""
+    labels = [
+        (button.get("label") or "").strip()
+        for button in content.get("buttons") or []
+        if (button.get("label") or "").strip()
+    ]
+    rows: list[list[KeyboardButton]] = []
+    for label in labels:
+        label = label[:64]
+        if rows and len(rows[-1]) == 1 and len(label) <= 16 and len(rows[-1][0].text) <= 16:
+            rows[-1].append(KeyboardButton(text=label))
+        else:
+            rows.append([KeyboardButton(text=label)])
+    if not rows:
+        return None
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, is_persistent=True)
+
+
+def _build_keyboard(block_id: uuid.UUID, content: dict) -> InlineKeyboardMarkup | ReplyKeyboardMarkup | None:
+    if content.get("keyboard") == "reply":
+        return _build_reply_keyboard(content)
     buttons = content.get("buttons") or []
     rows = []
     for index, button in enumerate(buttons):
@@ -1001,6 +1030,41 @@ async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UU
     await walk_chain(bot, chat_id, target_id, bot_id, db, telegram_user_id=tapped_by)
 
 
+async def _handle_reply_button(
+    bot: Bot, chat_id: int, text: str, bot_id: uuid.UUID, db: AsyncSession, sender_id: int | None
+) -> bool:
+    """Текст совпал с подписью быстрой кнопки — продолжить сценарий с неё.
+
+    Подписи быстрых кнопок лучше делать разными в рамках бота: при совпадении
+    берётся первая кнопка с этой подписью, у которой есть куда вести."""
+    label = (text or "").strip()
+    if not label or label.startswith("/"):
+        return False
+    blocks = (
+        await db.execute(
+            select(BotBlock).where(BotBlock.bot_id == bot_id, BotBlock.block_type == BlockType.buttons)
+        )
+    ).scalars()
+    for block in blocks:
+        content = block.content or {}
+        if content.get("keyboard") != "reply":
+            continue
+        for button in content.get("buttons") or []:
+            if (button.get("label") or "").strip() != label:
+                continue
+            if _is_url_button(button):
+                await bot.send_message(chat_id, button["action_value"].strip())
+                return True
+            target_raw = (button.get("target_block_id") or "").strip()
+            try:
+                target_id = uuid.UUID(target_raw)
+            except ValueError:
+                continue
+            await walk_chain(bot, chat_id, target_id, bot_id, db, telegram_user_id=sender_id)
+            return True
+    return False
+
+
 async def _handle_pre_checkout(bot: Bot, query: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
     """Telegram's last check before charging Stars: answer within 10 seconds
     or the payment is cancelled. We approve only an order that is ours, still
@@ -1246,6 +1310,9 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
 
     if paused:
         await bot.send_message(chat_id, _PAUSED_TEXT)
+        return
+
+    if await _handle_reply_button(bot, chat_id, text, bot_id, db, sender_id):
         return
 
     if not text.startswith("/start"):
