@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { BotBlock, PaymentProviderInfo } from "../../api/builderApi";
 import { BLOCK_TYPE_BY_ID } from "../../blockTypes";
 import { useDraggablePanel } from "../../hooks/useDraggablePanel";
@@ -53,7 +55,7 @@ export function BlockEditPanel({
   blocks,
   onChange,
   onDelete,
-  onClose,
+  onClose: closeNow,
   paymentProvider,
   paymentCurrencies,
   paymentProviderInfo,
@@ -62,6 +64,13 @@ export function BlockEditPanel({
   botPublished,
   subscriptionsEnabled,
 }: Props) {
+  // Закрытие с плавным уходом: окно не исчезает рывком.
+  const [closing, setClosing] = useState(false);
+  const onClose = () => {
+    if (closing) return;
+    setClosing(true);
+    window.setTimeout(closeNow, 180);
+  };
   useEscape(onClose);
   const { panelRef, handleProps: dragProps } = useDraggablePanel();
   const def = BLOCK_TYPE_BY_ID[block.block_type];
@@ -78,7 +87,7 @@ export function BlockEditPanel({
   return (
     <>
       <div className="sheet-backdrop edit-panel-backdrop" onClick={onClose} />
-      <div className="edit-panel" ref={panelRef}>
+      <div className={`edit-panel${closing ? " edit-panel--closing" : ""}`} ref={panelRef}>
         <div
           className="edit-panel__header"
           title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"

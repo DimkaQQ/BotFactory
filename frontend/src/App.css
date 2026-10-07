@@ -844,7 +844,11 @@
   line-height: 1.4;
   color: var(--text-primary);
   resize: none;
-  overflow: hidden;
+  /* Длинный текст прокручивается внутри поля: раньше он обрезался без скролла. */
+  overflow-y: auto;
+  max-height: 40dvh;
+  field-sizing: content;
+  overscroll-behavior: contain;
 }
 
 .chat-bubble__textarea:focus {
@@ -2368,10 +2372,11 @@
   .empty-arrow {
     display: block;
     position: absolute;
-    top: -78px;
-    right: 4px;
-    width: 150px;
-    height: 124px;
+    /* Кончик стрелки останавливается ниже кнопки, а не заходит на неё. */
+    top: -44px;
+    right: 12px;
+    width: 140px;
+    height: 112px;
     color: color-mix(in srgb, var(--tg-button) 55%, transparent);
     pointer-events: none;
   }
@@ -4236,14 +4241,73 @@
   right: var(--sp-3);
   bottom: 0;
   z-index: 25;
-  max-height: 72vh;
+  max-height: 82dvh;
   display: flex;
   flex-direction: column;
   background: var(--tg-bg);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   box-shadow: 0 -8px 32px color-mix(in srgb, black 24%, transparent);
-  animation: sheet-in var(--dur-slow) var(--ease-out);
+  /* Свои keyframes: общий sheet-in на десктопе сдвигает окно как центрированную
+     модалку (translate -50%), и панель «прыгала» перед тем, как встать на место. */
+  animation: panel-in-up 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
   overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.edit-panel--closing {
+  animation: panel-out-down 180ms ease-in both;
+  pointer-events: none;
+}
+
+@keyframes panel-in-up {
+  from {
+    transform: translateY(32px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes panel-out-down {
+  from {
+    transform: none;
+    opacity: 1;
+  }
+  to {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+@keyframes panel-in-side {
+  from {
+    transform: translateX(24px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes panel-out-side {
+  from {
+    transform: none;
+    opacity: 1;
+  }
+  to {
+    transform: translateX(16px) scale(0.98);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edit-panel,
+  .edit-panel--closing {
+    animation-duration: 1ms;
+  }
 }
 
 .edit-panel__header {
@@ -4385,8 +4449,13 @@
        content genuinely is that tall. */
     bottom: auto;
     max-height: calc(100vh - var(--sp-6) * 2 - 64px);
-    width: 360px;
+    width: 420px;
     border-radius: var(--radius-lg);
+    animation-name: panel-in-side;
+  }
+
+  .edit-panel--closing {
+    animation-name: panel-out-side;
   }
 }
 
@@ -6781,8 +6850,7 @@ html {
 
 .edit-panel__textarea {
   min-height: 64px;
-  field-sizing: content;
-  max-height: 40dvh;
+  max-height: 45dvh;
 }
 
 @media (max-width: 719px) {
@@ -7294,4 +7362,10 @@ details.live-problems > summary::-webkit-details-marker {
   color-scheme: light;
   background: transparent;
   border-radius: 12px;
+}
+
+/* Подпись под файлом и вопросы опроса — те же поля: минимум в две строки и
+   прокрутка, когда текст длиннее. */
+.media-editor__caption {
+  min-height: 3em;
 }

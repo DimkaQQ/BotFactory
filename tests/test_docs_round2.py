@@ -597,3 +597,15 @@ async def test_yookassa_partial_refund_keeps_payment_paid(mock_http):
         assert (await get_provider("yookassa").check_status(**kwargs)).status == PaymentStatus.paid
     with mock_http(api("990.00")):
         assert (await get_provider("yookassa").check_status(**kwargs)).status == PaymentStatus.refunded
+
+
+def test_document_input_hides_upload_hash_prefix():
+    from aiogram.types import URLInputFile
+
+    from app.services.bot_dispatcher import _document_input
+
+    own = "https://bot.example/api/media/1/" + "a" * 32 + "-guide.pdf"
+    out = _document_input(own)
+    assert isinstance(out, URLInputFile) and out.filename == "guide.pdf"
+    assert _document_input("https://other.example/file.pdf") == "https://other.example/file.pdf"
+    assert _document_input("BQACAgIAAx0") == "BQACAgIAAx0"

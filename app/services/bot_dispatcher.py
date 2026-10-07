@@ -40,7 +40,7 @@ import uuid
 from datetime import datetime, timezone
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, URLInputFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -635,7 +635,7 @@ async def _send_block(
         elif media_type == "video":
             await bot.send_video(chat_id, media_file_id, caption=caption, reply_markup=None if overflow else keyboard)
         else:
-            await bot.send_document(chat_id, media_file_id, caption=caption, reply_markup=None if overflow else keyboard)
+            await bot.send_document(chat_id, _document_input(media_file_id), caption=caption, reply_markup=None if overflow else keyboard)
         for index, piece in enumerate(overflow):
             # The keyboard belongs on the last thing sent, wherever that is.
             last = index == len(overflow) - 1
@@ -708,6 +708,25 @@ def _split_for_telegram(text: str) -> list[str]:
     return pieces
 
 
+_UPLOAD_HASH_PREFIX = re.compile(r"^[0-9a-f]{32}-(.+)$")
+
+
+def _document_input(url: str):
+    """Файл, загруженный через наш сервер, лежит под именем `<uuid>-имя.pdf`:
+    uuid нужен, чтобы адрес нельзя было угадать. Покупателю он ни к чему —
+    в чате он видел `1c83965d…-guide.pdf`. Для своих файлов отдаём Telegram имя
+    без префикса; чужие ссылки и file_id остаются как есть."""
+    if not isinstance(url, str) or "/api/media/" not in url:
+        return url
+    from urllib.parse import unquote, urlparse
+
+    name = unquote(urlparse(url).path.rsplit("/", 1)[-1])
+    match = _UPLOAD_HASH_PREFIX.match(name)
+    if not match:
+        return url
+    return URLInputFile(url, filename=match.group(1))
+
+
 async def _send_media_only(bot: Bot, chat_id: int, block: BotBlock) -> None:
     """Вложение блока без его текста — текст уже ушёл с приглашением."""
     content = block.content or {}
@@ -722,7 +741,7 @@ async def _send_media_only(bot: Bot, chat_id: int, block: BotBlock) -> None:
     elif media_type == "video":
         await bot.send_video(chat_id, file_id)
     else:
-        await bot.send_document(chat_id, file_id)
+        await bot.send_document(chat_id, _document_input(file_id))
 
 
 async def walk_chain(

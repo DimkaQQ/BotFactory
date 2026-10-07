@@ -24,8 +24,9 @@ const ACCEPT: Record<Props["kind"], string> = {
   image: "image/*",
   video: "video/*",
   // Ровно то, что принимает сервер (app/routers/media.py) — иначе человек
-  // выберет .docx и узнает об отказе только после загрузки.
-  file: ".pdf,.zip,.epub,.mp3,.m4a,.ogg,application/pdf,application/zip,application/epub+zip,audio/*",
+  // выберет .docx и узнает об отказе только после загрузки. Картинки и видео
+  // тоже можно выдавать: раньше JPG в выбор не попадал вовсе.
+  file: ".pdf,.zip,.epub,.mp3,.m4a,.ogg,.jpg,.jpeg,.png,.gif,.webp,.mp4,.mov,.webm,application/pdf,application/zip,application/epub+zip,audio/*,image/*,video/*",
 };
 const NOUN: Record<Props["kind"], string> = { image: "фото", video: "видео", file: "файл" };
 const PLACEHOLDER_URL: Record<Props["kind"], string> = {
@@ -38,6 +39,18 @@ const URL_MEDIA_TYPE: Record<Props["kind"], string> = {
   video: "video",
   file: "document",
 };
+
+/** `https://…/api/media/123/<32 hex>-guide.pdf` → `guide.pdf`: префикс нужен
+ * серверу, чтобы адрес нельзя было угадать, человеку он ни к чему. */
+function displayFileName(url: string): string {
+  let name = url.split("?")[0].split("/").pop() ?? url;
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    /* оставляем как есть */
+  }
+  return name.replace(/^[0-9a-f]{32}-/i, "");
+}
 
 export function MediaEditor({ kind, botId, content, onChange }: Props) {
   const url = content.media_file_id ?? "";
@@ -77,7 +90,7 @@ export function MediaEditor({ kind, botId, content, onChange }: Props) {
           kind === "file" ? (
             <div className="media-editor__video-badge">
               <span aria-hidden="true">📎</span>
-              <span className="media-editor__video-url">{url.split("/").pop()}</span>
+              <span className="media-editor__video-url">{displayFileName(url)}</span>
             </div>
           ) : kind === "image" ? (
             <img src={url} alt="" onError={() => setBroken(true)} />
