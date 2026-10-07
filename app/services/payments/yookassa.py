@@ -9,6 +9,7 @@ believes that, which is both simpler and stronger than an IP allowlist.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 
 import httpx
@@ -216,7 +217,7 @@ class YooKassaProvider(ProviderDefaults):
         remote_id = provider_payment_id or (event.get("object") or {}).get("id")
         if not remote_id:
             raise ProviderError("ЮKassa: не удалось определить платёж")
-        return await self._read(credentials, str(remote_id), amount_minor, currency)
+        return await self._read(credentials, str(remote_id), amount_minor, currency, expect_order=payment_id)
 
     async def check_status(
         self,
@@ -231,14 +232,23 @@ class YooKassaProvider(ProviderDefaults):
     ) -> WebhookResult:
         if not provider_payment_id:
             raise ProviderError("ЮKassa: платёж ещё не создан")
-        return await self._read(credentials, provider_payment_id, amount_minor, currency)
+        return await self._read(credentials, provider_payment_id, amount_minor, currency, expect_order=payment_id)
 
     async def _read(
-        self, credentials: dict[str, str], remote_id: str, amount_minor: int, currency: str = ""
+        self,
+        credentials: dict[str, str],
+        remote_id: str,
+        amount_minor: int,
+        currency: str = "",
+        expect_order: uuid.UUID | None = None,
     ) -> WebhookResult:
         """The single source of truth for this provider: what the shop's own
         API says about the payment. Both the callback and the buyer's "Я
         оплатил" tap end up here."""
+        # Идентификатор попадает в путь запроса: из неподписанного тела вебхука
+        # не принимаем слэши и точки (обход пути).
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", remote_id):
+            raise ProviderError("ЮKassa: неверный идентификатор платежа")
         auth = self._auth(credentials)
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(f"{_BASE}/payments/{remote_id}", auth=auth)
@@ -246,6 +256,10 @@ class YooKassaProvider(ProviderDefaults):
             raise ProviderError(f"ЮKassa: {_error(response)}")
 
         payment = response.json()
+        # Платёж должен быть нашим: его metadata.order_id — id заказа, который проверяем.
+        order_ref = (payment.get("metadata") or {}).get("order_id")
+        if expect_order is not None and order_ref and str(order_ref) != str(expect_order):
+            raise ProviderError("ЮKassa: платёж относится к другому заказу")
         status = payment.get("status")
         # A refund does not change `status` — ЮKassa keeps it "succeeded" and
         # adds `refunded_amount`. Checked first, or a refunded sale would go
