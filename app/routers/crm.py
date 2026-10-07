@@ -68,14 +68,17 @@ async def list_customers(
     stmt = select(BotSubscriber).where(BotSubscriber.bot_id.in_(wanted))
     needle = q.strip()
     if needle:
-        like = f"%{needle}%"
+        # «%» и «_» в строке поиска — обычные символы, а не подстановки LIKE.
+        def like_of(text: str) -> str:
+            return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
         stmt = stmt.where(
             or_(
-                BotSubscriber.first_name.ilike(like),
-                BotSubscriber.last_name.ilike(like),
-                BotSubscriber.username.ilike(f"%{needle.lstrip('@')}%"),
-                BotSubscriber.contact_name.ilike(like),
-                BotSubscriber.phone.ilike(like),
+                BotSubscriber.first_name.ilike(like_of(needle), escape="\\"),
+                BotSubscriber.last_name.ilike(like_of(needle), escape="\\"),
+                BotSubscriber.username.ilike(like_of(needle.lstrip("@")), escape="\\"),
+                BotSubscriber.contact_name.ilike(like_of(needle), escape="\\"),
+                BotSubscriber.phone.ilike(like_of(needle), escape="\\"),
             )
         )
     subs = (await db.execute(stmt.order_by(BotSubscriber.last_seen_at.desc()).limit(limit))).scalars().all()

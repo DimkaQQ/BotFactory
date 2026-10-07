@@ -58,7 +58,8 @@ async def find_bot_by_username(db: AsyncSession, raw: str) -> Bot | None:
     name = parse_bot_ref(raw).lower()
     if not name or not re.fullmatch(r"[a-z0-9_]{3,64}", name):
         return None
-    result = await db.execute(select(Bot).where(Bot.telegram_bot_username.ilike(name)))
+    # Точное сравнение без учёта регистра: в LIKE «_» — любой символ, и `/block @my_bot` мог снять чужой `myxbot`.
+    result = await db.execute(select(Bot).where(func.lower(Bot.telegram_bot_username) == name))
     return result.scalars().first()
 
 

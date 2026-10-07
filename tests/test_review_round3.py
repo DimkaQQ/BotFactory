@@ -268,3 +268,37 @@ def test_a_schedule_with_no_working_days_is_closed_not_weekdays():
     # не задано вовсе (или записано не списком) — по-прежнему будни
     for content in ({}, {"days": None}, {"days": 3}):
         assert bk.schedule_of(content).days == (0, 1, 2, 3, 4)
+
+
+# ------------------------------------------------------------ модерация и поиск клиентов
+
+
+async def test_block_by_username_does_not_treat_underscore_as_a_wildcard(db, owner, make_bot):
+    from app.services import moderation
+
+    bot_a, _ = await make_bot(owner, [])
+    bot_b, _ = await make_bot(owner, [])
+    bot_a.telegram_bot_username = "myxbot"
+    bot_b.telegram_bot_username = "my_bot"
+    await db.commit()
+    found = await moderation.find_bot_by_username(db, "@MY_BOT")
+    assert found is not None and found.telegram_bot_username == "my_bot"
+    bot_b_id = bot_b.id
+    bot_b.telegram_bot_username = "other_name"
+    await db.commit()
+    assert await moderation.find_bot_by_username(db, "my_bot") is None, "«_» не должен совпадать с «x»"
+    assert bot_b_id
+
+
+async def test_customer_search_treats_percent_and_underscore_literally(api, auth, owner, make_bot, db):
+    from app.models.bot_subscriber import BotSubscriber
+
+    bot, _ = await make_bot(owner, [])
+    db.add(BotSubscriber(bot_id=bot.id, telegram_user_id=1, chat_id=1, first_name="Анна"))
+    db.add(BotSubscriber(bot_id=bot.id, telegram_user_id=2, chat_id=2, first_name="50%_скидка"))
+    await db.commit()
+    mine = auth(owner)
+    everything = (await api.get("/api/crm/customers?q=%25", headers=mine)).json()["customers"]
+    assert [c["telegram_user_id"] for c in everything] == [2], "«%» искался как «любой текст»"
+    underscore = (await api.get("/api/crm/customers?q=_", headers=mine)).json()["customers"]
+    assert [c["telegram_user_id"] for c in underscore] == [2]
