@@ -98,8 +98,12 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
     if (!template) return;
 
     setCreatingTemplateId(templateId);
+    // Бот, созданный под шаблон: если сборка оборвётся посередине, его надо убрать, иначе в списке
+    // останется «полусобранный» бот без стрелок.
+    let createdBotId: string | null = null;
     try {
       const bot = await builderApi.createBot();
+      createdBotId = bot.id;
       if (template.suggestedName) {
         await builderApi.renameBot(bot.id, template.suggestedName);
       }
@@ -184,7 +188,15 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       setPickerOpen(false);
       onOpen(bot.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось создать бота");
+      if (createdBotId) {
+        try {
+          await builderApi.deleteBot(createdBotId);
+        } catch {
+          // Не вышло убрать — бот останется в списке, и его можно удалить вручную.
+        }
+        void refresh();
+      }
+      setError(err instanceof ApiError ? err.message : "Не удалось создать бота по шаблону. Попробуй ещё раз.");
     } finally {
       setCreatingTemplateId(null);
     }
@@ -411,13 +423,10 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
               </motion.div>
             )}
             {bots.map((bot, index) => (
-              <motion.button
-                type="button"
+              <motion.div
                 key={bot.id}
                 layout
-                className="bot-card"
-                onClick={() => onOpen(bot.id)}
-                disabled={deletingId === bot.id}
+                className={`bot-card${deletingId === bot.id ? " bot-card--busy" : ""}`}
                 initial={{ opacity: 0, y: 14, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.16, ease: "easeIn" } }}
@@ -425,42 +434,49 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 whileHover={{ y: -3, transition: { duration: 0.15, ease: EASE_OUT } }}
                 whileTap={{ scale: 0.98 }}
               >
-                <div className={`bot-card__icon bot-card__icon--${bot.status}`} aria-hidden="true">
-                  🤖
-                </div>
-                <div className="bot-card__info">
-                  <span className="bot-card__name">{botTitle(bot)}</span>
-                  <span className="bot-card__meta">
-                    <span className={`bot-card__status bot-card__status--${bot.status}`}>
-                      {bot.status === "active" && bot.paused ? "На паузе" : STATUS_LABEL[bot.status]}
-                    </span>
-                    <span className="bot-card__dot">·</span>
-                    {blockCountLabel(bot.block_count)}
-                    {bot.name && bot.telegram_bot_username && (
-                      <>
-                        <span className="bot-card__dot">·</span>@{bot.telegram_bot_username}
-                      </>
-                    )}
-                    {bot.paid_until && (
-                      <>
-                        <span className="bot-card__dot">·</span>
-                        <span className={`bot-card__due${dueSoon(bot.paid_until) ? " bot-card__due--soon" : ""}`}>
-                          {dueSoon(bot.paid_until) ? "нужно продлить" : `оплачен до ${shortDay(bot.paid_until)}`}
-                        </span>
-                      </>
-                    )}
+                <button
+                  type="button"
+                  className="bot-card__open"
+                  onClick={() => onOpen(bot.id)}
+                  disabled={deletingId === bot.id}
+                >
+                  <span className={`bot-card__icon bot-card__icon--${bot.status}`} aria-hidden="true">
+                    🤖
                   </span>
-                </div>
-                <span
-                  role="button"
-                  tabIndex={0}
+                  <span className="bot-card__info">
+                    <span className="bot-card__name">{botTitle(bot)}</span>
+                    <span className="bot-card__meta">
+                      <span className={`bot-card__status bot-card__status--${bot.status}`}>
+                        {bot.status === "active" && bot.paused ? "На паузе" : STATUS_LABEL[bot.status]}
+                      </span>
+                      <span className="bot-card__dot">·</span>
+                      {blockCountLabel(bot.block_count)}
+                      {bot.name && bot.telegram_bot_username && (
+                        <>
+                          <span className="bot-card__dot">·</span>@{bot.telegram_bot_username}
+                        </>
+                      )}
+                      {bot.paid_until && (
+                        <>
+                          <span className="bot-card__dot">·</span>
+                          <span className={`bot-card__due${dueSoon(bot.paid_until) ? " bot-card__due--soon" : ""}`}>
+                            {dueSoon(bot.paid_until) ? "нужно продлить" : `оплачен до ${shortDay(bot.paid_until)}`}
+                          </span>
+                        </>
+                      )}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
                   className="bot-card__delete"
-                  aria-label="Удалить бота"
+                  aria-label={`Удалить бота ${botTitle(bot)}`}
                   onClick={(e) => handleDelete(bot, e)}
+                  disabled={deletingId === bot.id}
                 >
                   🗑
-                </span>
-              </motion.button>
+                </button>
+              </motion.div>
             ))}
           </AnimatePresence>
         </div>

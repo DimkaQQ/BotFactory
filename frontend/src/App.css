@@ -553,17 +553,32 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  position: relative;
   width: 100%;
   padding: var(--sp-3);
   border: none;
   border-radius: var(--radius-lg);
   background: var(--tg-secondary-bg);
   box-shadow: var(--shadow-card);
+  font: inherit;
+  color: inherit;
+  transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-base) var(--ease-smooth);
+}
+
+/* Основная часть карточки — одна кнопка «открыть»; «удалить» — соседняя, не вложенная. */
+.bot-card__open {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
   cursor: pointer;
   text-align: left;
   font: inherit;
   color: inherit;
-  transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-base) var(--ease-smooth);
 }
 
 .bot-card:active {
@@ -618,7 +633,7 @@
   }
 }
 
-.bot-card:disabled {
+.bot-card--busy {
   opacity: 0.5;
 }
 
@@ -686,6 +701,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  border: none;
+  background: none;
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
   font-size: 15px;
@@ -2410,6 +2427,11 @@
     border-radius: var(--radius-lg);
   }
 
+  .screen--list .bot-card__open {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .screen--list .bot-card:hover {
     box-shadow: var(--shadow-elevated);
     transform: translateY(-2px);
@@ -2426,10 +2448,6 @@
     position: absolute;
     top: var(--sp-3);
     right: var(--sp-3);
-  }
-
-  .screen--list .bot-card {
-    position: relative;
   }
 
   .screen--list .app-footer {

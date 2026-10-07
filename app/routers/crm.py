@@ -305,8 +305,7 @@ async def cancel_booking(
     if booking is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Запись не найдена")
     was_client = booking.status in ("held", "confirmed") and booking.chat_id is not None
-    schedule, _block = await bk.first_schedule(db, bot.id)
-    label = bk.full_label(schedule, booking.starts_at)
+    label = bk.full_label(await bk.schedule_for(db, booking), booking.starts_at)
     if not await bk.cancel(db, booking):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Запись уже отменена")
     informed = False

@@ -13,12 +13,20 @@ interface Props {
 /** Квадратный JPEG 640×640 из любой картинки: Telegram принимает для аватара
  * только JPG, а обрезку по центру проще сделать здесь, чем объяснять. */
 async function toSquareJpeg(file: File): Promise<File> {
-  const bitmap = await createImageBitmap(file);
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error("Не получилось открыть картинку. Подойдёт обычное фото в формате JPG или PNG.");
+  }
   const side = Math.min(bitmap.width, bitmap.height);
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 640;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Браузер не смог подготовить фото");
+  // JPEG не умеет прозрачность: без подложки прозрачные места PNG стали бы чёрными.
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, 640, 640);
   ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, 640, 640);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
   if (!blob) throw new Error("Не удалось подготовить фото");

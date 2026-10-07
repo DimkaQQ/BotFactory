@@ -14,6 +14,9 @@ interface Props {
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 10;
+/** Лимиты Telegram: вопрос опроса — до 300 знаков, вариант — до 100. */
+const MAX_QUESTION = 300;
+const MAX_OPTION = 100;
 
 /** Compact inline editor for a poll block — question + option list, lives inside a chat bubble. */
 export function PollEditor({ content, onChange, botId, blockId }: Props) {
@@ -46,6 +49,7 @@ export function PollEditor({ content, onChange, botId, blockId }: Props) {
       <textarea
         className="poll-editor__question"
         placeholder="Вопрос опроса"
+        maxLength={MAX_QUESTION}
         value={content.question ?? ""}
         onChange={(e) => onChange({ ...content, question: e.target.value })}
         onPointerDown={(e) => e.stopPropagation()}
@@ -58,6 +62,7 @@ export function PollEditor({ content, onChange, botId, blockId }: Props) {
           </span>
           <input
             placeholder={`Вариант ${index + 1}`}
+            maxLength={MAX_OPTION}
             value={option}
             onChange={(e) => updateOption(index, e.target.value)}
           />

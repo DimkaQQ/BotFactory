@@ -81,3 +81,74 @@ def test_payme_basic_auth_with_non_ascii_password_is_just_refused():
     assert payme._authorised({"authorization": header}, "key") is False
     good = "Basic " + base64.b64encode(b"Paycom:key").decode()
     assert payme._authorised({"authorization": good}, "key") is True
+
+
+# ------------------------------------------------------------ опрос: лимиты Telegram
+
+
+async def test_poll_question_and_options_are_cut_to_telegram_limits(db, owner, make_bot, as_bot):
+    from app.models.bot_block import BlockType
+    from app.services import bot_dispatcher
+
+    bot, blocks = await make_bot(
+        owner,
+        [(BlockType.poll, {"question": "в" * 400, "options": [f"{i}" + "о" * 150 for i in range(12)]})],
+    )
+    as_bot.send_poll.return_value = type("Sent", (), {"poll": type("P", (), {"id": "p1"})()})()
+    await bot_dispatcher._send_block(as_bot, 1, blocks[0], db)
+    kwargs = as_bot.send_poll.call_args.kwargs
+    assert len(kwargs["question"]) == 300
+    assert len(kwargs["options"]) == 10 and all(len(o) <= 100 for o in kwargs["options"])
+
+
+# ------------------------------------------------------------ запись
+
+
+def _cfg(**extra):
+    return {"days": [0, 1, 2, 3, 4, 5, 6], "start": "10:00", "end": "13:00", "slot_minutes": 60,
+            "horizon_days": 7, "notice_hours": 0, "tz": "Asia/Almaty", **extra}
+
+
+async def test_an_expired_hold_is_not_attached_to_an_unrelated_purchase(db, owner, make_bot):
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.bot_block import BlockType
+    from app.services import booking as bk
+
+    bot, blocks = await make_bot(owner, [(BlockType.booking, _cfg())])
+    schedule = bk.schedule_of(blocks[0].content)
+    day = bk.local_day(schedule, datetime.now(timezone.utc)) + timedelta(days=2)
+    start = bk.day_slots(schedule, day)[0]
+    held = await bk.reserve(db, bot_id=bot.id, block=blocks[0], schedule=schedule, start=start,
+                            telegram_user_id=42, chat_id=42)
+    assert await bk.latest_held(db, bot.id, 42) is not None
+    held.held_until = datetime.now(timezone.utc) - timedelta(minutes=1)
+    await db.commit()
+    assert await bk.latest_held(db, bot.id, 42) is None
+
+
+def test_slots_skip_local_times_that_do_not_exist_at_the_dst_jump():
+    from datetime import date
+
+    from app.services import booking as bk
+
+    schedule = bk.schedule_of({"days": [6], "start": "02:00", "end": "04:00", "slot_minutes": 30,
+                               "tz": "America/New_York"})
+    slots = bk.day_slots(schedule, date(2026, 3, 8))  # в 2:00 часы переводят на 3:00
+    local = [s.astimezone(schedule.tz).strftime("%H:%M") for s in slots]
+    assert local == ["03:00", "03:30"]
+    normal = bk.day_slots(schedule, date(2026, 3, 15))
+    assert [s.astimezone(schedule.tz).strftime("%H:%M") for s in normal] == ["02:00", "02:30", "03:00", "03:30"]
+
+
+# ------------------------------------------------------------ оформление бота
+
+
+def test_telegram_errors_in_the_profile_are_russian_and_never_carry_the_token():
+    from app.routers.bot_profile import _telegram_error
+
+    token = "123456:SECRET-token-value"
+    exc = _telegram_error(Exception(f"Bad Request: wrong file at https://api.telegram.org/bot{token}/setMyProfilePhoto"), token)
+    assert token not in exc.detail and "SECRET" not in exc.detail
+    assert "фото" in exc.detail
+    assert not exc.detail.isascii()

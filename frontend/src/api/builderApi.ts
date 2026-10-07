@@ -156,6 +156,24 @@ function authHeaders(): Record<string, string> {
   return auth.kind === "session-token" ? { Authorization: `Bearer ${auth.token}` } : { "X-Telegram-Init-Data": auth.getInitData() };
 }
 
+/** Текст ошибки из ответа сервера. FastAPI при неверных данных отдаёт `detail` списком объектов —
+ * в сообщении это превращалось в «[object Object]», поэтому берём человеческую строку. */
+async function errorDetail(response: Response): Promise<string> {
+  const fallback = response.statusText || `Ошибка ${response.status}`;
+  try {
+    const body = await response.json();
+    const detail = body?.detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    if (Array.isArray(detail)) {
+      const first = detail.find((item) => item && typeof item.msg === "string");
+      if (first) return `Проверьте введённые данные: ${first.msg}`;
+    }
+  } catch {
+    // response wasn't JSON — keep statusText
+  }
+  return fallback;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -167,19 +185,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const body = await response.json();
-      detail = body.detail ?? detail;
-    } catch {
-      // response wasn't JSON — keep statusText
-    }
-    throw new ApiError(detail, response.status);
+    throw new ApiError(await errorDetail(response), response.status);
   }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
@@ -199,14 +207,7 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
   });
 
   if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const body = await response.json();
-      detail = body.detail ?? detail;
-    } catch {
-      // response wasn't JSON — keep statusText
-    }
-    throw new ApiError(detail, response.status);
+    throw new ApiError(await errorDetail(response), response.status);
   }
   return (await response.json()) as T;
 }

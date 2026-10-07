@@ -58,12 +58,25 @@ async def _owned_bot_token(bot_id: uuid.UUID, client: Client, db: AsyncSession) 
     return decrypt_token(bot.bot_token_encrypted)
 
 
-def _telegram_error(exc: Exception) -> HTTPException:
-    logger.info("Bot profile call failed: %s", exc)
-    return HTTPException(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        detail=f"Telegram не принял изменение: {exc}".strip()[:300],
-    )
+def _telegram_error(exc: Exception, token: str = "") -> HTTPException:
+    """Ошибка Bot API человеческими словами. Сырой английский ответ Telegram владельцу ни к чему,
+    а токен в тексте исключения не должен ни попасть в журнал, ни уйти в браузер."""
+    raw = str(exc)
+    if token:
+        raw = raw.replace(token, "***")
+    logger.info("Bot profile call failed: %s", raw)
+    low = raw.lower()
+    if "too many requests" in low or "retry after" in low:
+        text = "Telegram просит подождать: оформление можно менять не чаще, чем раз в несколько минут."
+    elif "photo" in low or "image" in low or "file" in low:
+        text = "Telegram не принял фото. Попробуй другую картинку (JPG или PNG, без анимации)."
+    elif "unauthorized" in low or "token" in low:
+        text = "Telegram не принял токен бота. Если ты его перевыпускал в @BotFather, вставь новый при публикации."
+    elif "not found" in low or "network" in low or "timeout" in low or "connect" in low:
+        text = "Не получилось связаться с Telegram. Попробуй ещё раз чуть позже."
+    else:
+        text = "Telegram не принял изменение. Проверь значения и попробуй ещё раз."
+    return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=text)
 
 
 @router.get("", response_model=ProfileOut)
@@ -77,7 +90,7 @@ async def get_profile(
         short = await bot.get_my_short_description()
         long = await bot.get_my_description()
     except Exception as exc:  # noqa: BLE001
-        raise _telegram_error(exc) from exc
+        raise _telegram_error(exc, token) from exc
     finally:
         await bot.session.close()
     return ProfileOut(name=name.name, short_description=short.short_description, description=long.description)
@@ -103,7 +116,7 @@ async def update_profile(
         short = await bot.get_my_short_description()
         long = await bot.get_my_description()
     except Exception as exc:  # noqa: BLE001
-        raise _telegram_error(exc) from exc
+        raise _telegram_error(exc, token) from exc
     finally:
         await bot.session.close()
     return ProfileOut(name=name.name, short_description=short.short_description, description=long.description)
@@ -129,7 +142,7 @@ async def set_photo(
             photo=InputProfilePhotoStatic(photo=BufferedInputFile(data, filename="avatar.jpg"))
         )
     except Exception as exc:  # noqa: BLE001
-        raise _telegram_error(exc) from exc
+        raise _telegram_error(exc, token) from exc
     finally:
         await bot.session.close()
 
@@ -143,6 +156,6 @@ async def remove_photo(
     try:
         await bot.remove_my_profile_photo()
     except Exception as exc:  # noqa: BLE001
-        raise _telegram_error(exc) from exc
+        raise _telegram_error(exc, token) from exc
     finally:
         await bot.session.close()

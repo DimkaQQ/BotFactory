@@ -95,7 +95,11 @@ def day_slots(schedule: Schedule, day: date) -> list[datetime]:
     step = timedelta(minutes=schedule.slot_minutes)
     out = []
     while cursor + step <= end:
-        out.append(cursor.astimezone(timezone.utc))
+        start = cursor.astimezone(timezone.utc)
+        # Переход на летнее время: «02:30» может не существовать — такой слот пропускаем,
+        # иначе кнопка вела бы на другое время, а запись бы отклонялась.
+        if start.astimezone(schedule.tz).replace(tzinfo=None) == cursor.replace(tzinfo=None) and start not in out:
+            out.append(start)
         cursor += step
     return out
 
@@ -244,10 +248,17 @@ async def cancel(db: AsyncSession, booking: Booking) -> bool:
 async def latest_held(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None) -> Booking | None:
     if telegram_user_id is None:
         return None
+    # Только живая придержка: просроченная (статус ещё «held», пока кто-то не занял время) не
+    # должна цепляться к чужой по смыслу покупке и подтверждаться её оплатой.
     return (
         await db.execute(
             select(Booking)
-            .where(Booking.bot_id == bot_id, Booking.telegram_user_id == telegram_user_id, Booking.status == "held")
+            .where(
+                Booking.bot_id == bot_id,
+                Booking.telegram_user_id == telegram_user_id,
+                Booking.status == "held",
+                Booking.held_until > datetime.now(timezone.utc),
+            )
             .order_by(Booking.created_at.desc())
             .limit(1)
         )
@@ -268,6 +279,15 @@ async def chain_needs_payment(db: AsyncSession, bot_id: uuid.UUID, start_id: uui
             return True
         current = by_id.get(current.next_block_id) if current.next_block_id else None
     return False
+
+
+async def schedule_for(db: AsyncSession, booking: Booking) -> Schedule:
+    """Расписание блока, через который сделана эта запись (у блоков может быть свой часовой пояс)."""
+    if booking.block_id is not None:
+        block = await db.get(BotBlock, booking.block_id)
+        if block is not None and block.bot_id == booking.bot_id:
+            return schedule_of(block.content)
+    return (await first_schedule(db, booking.bot_id))[0]
 
 
 async def first_schedule(db: AsyncSession, bot_id: uuid.UUID) -> tuple[Schedule, BotBlock | None]:

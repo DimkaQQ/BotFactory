@@ -32,6 +32,15 @@ function hasBranches(block: BotBlock): boolean {
   );
 }
 
+/** Блоки, на которых настоящий бот останавливается и ждёт покупателя: оплата (цепочка идёт дальше
+ * только после подтверждения денег) и запись (дальше — после выбора дня и времени). Предпросмотр
+ * обязан остановиться там же, иначе «выдача» покажется до оплаты. */
+function waitsForBuyer(block: BotBlock): string | null {
+  if (block.block_type === "payment") return "Здесь бот ждёт оплату. Выдача придёт только после неё.";
+  if (block.block_type === "booking") return "Здесь клиент выбирает день и время. Дальше — после его выбора.";
+  return null;
+}
+
 /** Walks the same graph the real bot walks (start_block_id → next_block_id,
  * pausing at any buttons block with a configured branch) instead of just
  * replaying the flat block list — tapping a button here actually picks the
@@ -47,6 +56,11 @@ export function LivePreview({ bot, botName, onClose }: Props) {
   const [showTyping, setShowTyping] = useState(false);
   const [waitingForTap, setWaitingForTap] = useState(false);
   const [done, setDone] = useState(!bot.start_block_id);
+  // Блок оплаты/записи: бот ждёт покупателя; `next` — куда пойдёт сценарий после этого.
+  const [gate, setGate] = useState<{ hint: string; next: string | null } | null>(null);
+  // Номер шага: переход на тот же блок (кнопка «повторить», «Смотреть заново» со стартового) тоже
+  // должен запустить показ заново, а `currentId` в таком случае не меняется.
+  const [step, setStep] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const skipRef = useRef(false);
   // Same cycle guard as the backend (_walk_chain's `visited` set) — a demo
@@ -58,8 +72,10 @@ export function LivePreview({ bot, botName, onClose }: Props) {
     visitedRef.current = new Set();
     setRevealed([]);
     setWaitingForTap(false);
+    setGate(null);
     setDone(!bot.start_block_id);
     setCurrentId(bot.start_block_id);
+    setStep((n) => n + 1);
   }
 
   useEffect(() => {
@@ -99,8 +115,11 @@ export function LivePreview({ bot, botName, onClose }: Props) {
 
       setRevealed((prev) => [...prev, block]);
 
+      const gateHint = waitsForBuyer(block);
       if (hasBranches(block)) {
         setWaitingForTap(true);
+      } else if (gateHint) {
+        setGate({ hint: gateHint, next: block.next_block_id });
       } else if (block.next_block_id) {
         setCurrentId(block.next_block_id);
       } else {
@@ -112,7 +131,7 @@ export function LivePreview({ bot, botName, onClose }: Props) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentId]);
+  }, [currentId, step]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -121,8 +140,24 @@ export function LivePreview({ bot, botName, onClose }: Props) {
   function handlePick(block: BotBlock, index: number) {
     const target = (block.content.buttons?.[index]?.target_block_id || "").trim();
     if (!target) return; // this button isn't wired to anything — real bot just re-answers the tap and stays put
+    // Каждое нажатие в настоящем боте начинает новый обход: меню, куда ведёт «Назад», должно
+    // показываться снова, а не считаться петлёй.
+    visitedRef.current = new Set();
     setWaitingForTap(false);
     setCurrentId(target);
+    setStep((n) => n + 1);
+  }
+
+  function continueAfterGate() {
+    if (!gate) return;
+    const next = gate.next;
+    setGate(null);
+    if (next) {
+      setCurrentId(next);
+      setStep((n) => n + 1);
+    } else {
+      setDone(true);
+    }
   }
 
   // Быстрые кнопки живут внизу экрана, а не в сообщении, и остаются, пока их
@@ -139,8 +174,10 @@ export function LivePreview({ bot, botName, onClose }: Props) {
     if (!target || button?.action_type === "url") return;
     visitedRef.current = new Set();
     setDone(false);
+    setGate(null);
     setWaitingForTap(false);
     setCurrentId(target);
+    setStep((n) => n + 1);
   }
 
   const lastBubbleIndex = (() => {
@@ -216,6 +253,13 @@ export function LivePreview({ bot, botName, onClose }: Props) {
             <button type="button" className="publish-button" onClick={replay}>
               🔁 Смотреть заново
             </button>
+          ) : gate ? (
+            <>
+              <p className="live-preview__hint">{gate.hint}</p>
+              <button type="button" className="live-preview__skip" onClick={continueAfterGate}>
+                {gate.next ? "Показать, что придёт дальше" : "Завершить"}
+              </button>
+            </>
           ) : waitingForTap ? (
             <p className="live-preview__hint">
               {replyBlock && replyBlock === revealed[revealed.length - 1]

@@ -216,7 +216,9 @@ async def confirm_after_payment(db: AsyncSession, payment) -> None:
         return
     if booking is None:
         return
-    schedule, _block = await bk.first_schedule(db, payment.bot_id)
+    if booking.bot_id != payment.bot_id:
+        return  # чужая запись в meta платежа — не трогаем
+    schedule = await bk.schedule_for(db, booking)
     label = bk.full_label(schedule, booking.starts_at)
     if booking.status == "confirmed":
         return

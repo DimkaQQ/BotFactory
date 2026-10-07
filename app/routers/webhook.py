@@ -57,7 +57,7 @@ async def handle_update(
     # instead re-registered at startup (see app/main.py), so nothing has to be
     # trusted on the way past.
     if x_telegram_bot_api_secret_token is None or not hmac.compare_digest(
-        x_telegram_bot_api_secret_token, webhook_secret(bot_id)
+        x_telegram_bot_api_secret_token.encode(), webhook_secret(bot_id).encode()
     ):
         logger.warning("Rejected an update for bot %s: bad or missing secret token", bot_id)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bad secret token")

@@ -686,8 +686,13 @@ async def _send_block(
         # carry no user, so Telegram sends no `poll_answer` at all and the
         # owner gets a vote count they cannot act on. The block can still ask
         # for anonymity explicitly — it just no longer does so by accident.
+        # Лимиты Telegram: вопрос до 300 знаков, вариант до 100, вариантов 2–10. Больше — и
+        # он отклоняет опрос целиком, а блок пропадает из диалога.
         sent = await bot.send_poll(
-            chat_id, question=question, options=options, is_anonymous=bool(content.get("anonymous", False))
+            chat_id,
+            question=question[:300],
+            options=[option[:100] for option in options[:10]],
+            is_anonymous=bool(content.get("anonymous", False)),
         )
         await _remember_poll(db, block, sent)
         return
