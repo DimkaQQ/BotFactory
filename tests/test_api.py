@@ -186,6 +186,29 @@ async def test_a_bot_on_the_test_provider_cannot_be_published(api, auth, owner):
     assert "Тестовая оплата" in response.json()["detail"]
 
 
+async def test_publish_needs_the_meta_bot_started_first(api, auth, owner, monkeypatch):
+    """Владелец сначала запускает мета-бота (туда идут уведомления), потом включает бота."""
+    from app.services import platform_billing
+
+    headers = auth(owner)
+    bot_id = await create_bot(api, headers)
+
+    async def closed(_telegram_id):
+        return False
+
+    monkeypatch.setattr(platform_billing, "can_reach_owner", closed)
+    blocked = await api.post(f"/api/bots/{bot_id}/publish", headers=headers, json={"token": "123456:FAKE"})
+    assert blocked.status_code == 409
+    assert "Start" in blocked.json()["detail"]
+
+    async def unknown(_telegram_id):
+        return None  # проверить не удалось — не блокируем
+
+    monkeypatch.setattr(platform_billing, "can_reach_owner", unknown)
+    passed = await api.post(f"/api/bots/{bot_id}/publish", headers=headers, json={"token": "123456:FAKE"})
+    assert passed.status_code != 409
+
+
 async def test_publication_is_gated_until_it_is_paid(api, auth, owner, monkeypatch):
     from app.config import get_settings
 

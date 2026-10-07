@@ -27,6 +27,7 @@ for a guide and would just see a dead bot.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from dataclasses import dataclass
@@ -411,6 +412,27 @@ def _meta_bot():
     if _meta_bot_instance is None:
         _meta_bot_instance = AiogramBot(token=token, session=build_bot_session())
     return _meta_bot_instance
+
+
+async def can_reach_owner(telegram_id: int) -> bool | None:
+    """Может ли мета-бот написать этому человеку (он нажал Start или разрешил при входе).
+
+    True/False — ответ Telegram; None — проверить не удалось (мета-бот не
+    настроен, сеть, таймаут): в этом случае человека не блокируем, потому что
+    сбой проверки не причина не пускать клиента к запуску."""
+    from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+
+    meta = _meta_bot()
+    if meta is None:
+        return None
+    try:
+        await asyncio.wait_for(meta.send_chat_action(telegram_id, "typing"), timeout=8)
+        return True
+    except (TelegramForbiddenError, TelegramBadRequest):
+        return False
+    except Exception:  # noqa: BLE001
+        logger.info("Meta bot reachability check failed for %s", telegram_id, exc_info=True)
+        return None
 
 
 async def close_meta_bot() -> None:

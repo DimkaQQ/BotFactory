@@ -220,6 +220,9 @@ export const builderApi = {
   setStartBlock: (botId: string, startBlockId: string | null) =>
     request<Bot>(`/bots/${botId}`, { method: "PATCH", body: JSON.stringify({ start_block_id: startBlockId }) }),
 
+  metaBotStatus: () =>
+    request<{ configured: boolean; reachable: boolean; username: string; url: string }>(`/meta-bot/status`),
+
   publishBot: (botId: string, token: string) =>
     request<{ status: string; telegram_bot_username: string }>(`/bots/${botId}/publish`, {
       method: "POST",

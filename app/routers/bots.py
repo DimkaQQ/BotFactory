@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -33,6 +35,22 @@ async def _get_owned_bot(bot_id: uuid.UUID, client: Client, db: AsyncSession, *,
     if bot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found")
     return bot
+
+
+@router.get("/meta-bot/status")
+async def meta_bot_status(client: Client = Depends(get_current_client)) -> dict:
+    """Нажал ли владелец Start у мета-бота: туда приходят уведомления о продажах и
+    сообщения о запуске. Запуск бота без этого закрыт (см. `publish_bot`)."""
+    from app.services import platform_billing
+
+    username = get_settings().meta_bot_username.lstrip("@").strip()
+    reachable = await platform_billing.can_reach_owner(client.telegram_user_id)
+    return {
+        "configured": reachable is not None or bool(get_settings().meta_bot_token),
+        "reachable": reachable is not False,
+        "username": username,
+        "url": f"https://t.me/{username}" if username else "",
+    }
 
 
 @router.get("/me", response_model=ClientOut)
@@ -182,6 +200,22 @@ async def publish_bot(
             detail="Публикация бота не оплачена",
         )
 
+    # Сначала мета-бот: уведомления о продажах и сообщения о запуске идут через
+    # него, поэтому владелец должен был его запустить до включения бота.
+    # False — Telegram сказал «писать нельзя»; None (не настроен, сбой сети)
+    # не блокирует.
+    from app.services import platform_billing
+
+    if await platform_billing.can_reach_owner(client.telegram_user_id) is False:
+        username = get_settings().meta_bot_username.lstrip("@").strip()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Сначала открой @{username or 'мета-бота'} в Telegram и нажми Start — "
+                "туда придут уведомления о продажах и сообщение о запуске. Потом вернись и включи бота."
+            ),
+        )
+
     try:
         me = await validate_bot_token(payload.token)
     except InvalidBotToken as exc:
@@ -217,5 +251,17 @@ async def publish_bot(
     bot.status = BotStatus.active
     bot.published_at = bot.published_at or datetime.now(timezone.utc)
     await db.commit()
+
+    # Подтверждение запуска в мета-боте — владелец видит, что уведомления работают.
+    with contextlib.suppress(Exception):
+        meta = platform_billing._meta_bot()
+        if meta is not None:
+            await asyncio.wait_for(
+                meta.send_message(
+                    client.telegram_user_id,
+                    f"✅ Бот @{me.username} запущен. Сюда будут приходить уведомления о продажах.",
+                ),
+                timeout=8,
+            )
 
     return PublishResponse(status=bot.status, telegram_bot_username=bot.telegram_bot_username)

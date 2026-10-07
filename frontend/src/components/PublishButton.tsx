@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { builderApi } from "../api/builderApi";
 import { BotFatherSteps } from "./BotFatherSteps";
 
 interface Props {
@@ -28,6 +29,25 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
     if (open) formRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [open]);
   const [token, setToken] = useState("");
+  // Шаг 1 запуска: человек должен нажать Start у мета-бота (уведомления о
+  // продажах идут туда). Пока Telegram не разрешил писать — токен не просим.
+  const [meta, setMeta] = useState<{ reachable: boolean; username: string; url: string } | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  async function checkMeta() {
+    setChecking(true);
+    try {
+      setMeta(await builderApi.metaBotStatus());
+    } catch {
+      setMeta(null); // не удалось проверить — не мешаем, сервер проверит при публикации
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  useEffect(() => {
+    if (open) void checkMeta();
+  }, [open]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -56,8 +76,33 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
 
   return (
     <form className="publish-form publish-form--sheet" ref={formRef} onSubmit={handleSubmit}>
+      {meta && !meta.reachable ? (
+        <div className="publish-form__meta">
+          <p className="publish-form__hint">
+            <strong>Шаг 1.</strong> Открой {meta.username ? `@${meta.username}` : "нашего бота"} в Telegram и нажми{" "}
+            <b>Start</b> — сюда придут уведомления о продажах и сообщение о запуске.
+          </p>
+          <div className="publish-form__actions">
+            {meta.url && (
+              <a className="publish-form__link-button" href={meta.url} target="_blank" rel="noreferrer">
+                Открыть в Telegram
+              </a>
+            )}
+            <button type="button" onClick={checkMeta} disabled={checking}>
+              {checking ? "Проверяем…" : "Я нажал Start — проверить"}
+            </button>
+          </div>
+          <p className="publish-form__hint">Когда Start нажат, здесь появится шаг 2 — токен бота.</p>
+          <div className="publish-form__actions">
+            <button type="button" onClick={() => setOpen(false)}>
+              Отмена
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
       <p className="publish-form__hint">
-        Вставь токен бота от <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather</a>
+        <strong>Шаг 2.</strong> Вставь токен бота от <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather</a>
       </p>
       <BotFatherSteps />
       {problems.length > 0 && (
@@ -93,6 +138,8 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
           {submitting ? "Публикуем…" : "Опубликовать"}
         </button>
       </div>
+        </>
+      )}
     </form>
   );
 }

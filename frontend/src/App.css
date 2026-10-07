@@ -7505,3 +7505,15 @@ details.live-problems > summary::-webkit-details-marker {
     grid-template-columns: 1fr;
   }
 }
+
+.publish-form__link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--tg-button);
+  color: var(--tg-button-text, #fff);
+  font-weight: 600;
+  text-decoration: none;
+}
