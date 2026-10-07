@@ -125,6 +125,20 @@ export function LivePreview({ bot, botName, onClose }: Props) {
     setCurrentId(target);
   }
 
+  // Быстрые кнопки живут внизу экрана, а не в сообщении, и остаются, пока их
+  // не заменит другая клавиатура — как в Telegram.
+  const replyBlock = [...revealed].reverse().find((b) => b.block_type === "buttons" && b.content.keyboard === "reply") ?? null;
+
+  function handleReplyPick(block: BotBlock, index: number) {
+    const button = block.content.buttons?.[index];
+    const target = (button?.target_block_id || "").trim();
+    if (!target || button?.action_type === "url") return;
+    visitedRef.current = new Set();
+    setDone(false);
+    setWaitingForTap(false);
+    setCurrentId(target);
+  }
+
   const lastBubbleIndex = (() => {
     for (let i = revealed.length - 1; i >= 0; i--) {
       if (revealed[i].block_type !== "delay") return i;
@@ -149,7 +163,7 @@ export function LivePreview({ bot, botName, onClose }: Props) {
               key={`${block.id}-${i}`}
               block={block}
               isLast={i === lastBubbleIndex && !showTyping}
-              interactive={i === revealed.length - 1 && waitingForTap}
+              interactive={i === revealed.length - 1 && waitingForTap && block.content.keyboard !== "reply"}
               onPick={(index) => handlePick(block, index)}
             />
           ))}
@@ -180,13 +194,30 @@ export function LivePreview({ bot, botName, onClose }: Props) {
           )}
         </div>
 
+        {replyBlock && (
+          <div className="live-preview__keyboard" aria-label="Быстрые кнопки">
+            {(replyBlock.content.buttons ?? [])
+              .map((btn, i) => ({ btn, i }))
+              .filter(({ btn }) => (btn.label || "").trim())
+              .map(({ btn, i }) => (
+                <button key={i} type="button" className="live-preview__key" onClick={() => handleReplyPick(replyBlock, i)}>
+                  {btn.label}
+                </button>
+              ))}
+          </div>
+        )}
+
         <div className="live-preview__footer">
           {done ? (
             <button type="button" className="publish-button" onClick={replay}>
               🔁 Смотреть заново
             </button>
           ) : waitingForTap ? (
-            <p className="live-preview__hint">👆 Нажми на кнопку выше, чтобы продолжить</p>
+            <p className="live-preview__hint">
+              {replyBlock && replyBlock === revealed[revealed.length - 1]
+                ? "👇 Нажми на быструю кнопку внизу, чтобы продолжить"
+                : "👆 Нажми на кнопку выше, чтобы продолжить"}
+            </p>
           ) : (
             <button
               type="button"
@@ -271,7 +302,7 @@ function PreviewBlock({
               <div className="block-preview__media block-preview__media--video live-preview__media">▶</div>
             )}
             {content.text && <p className="chat-bubble__text">{content.text}</p>}
-            {(content.buttons ?? []).length > 0 && (
+            {(content.buttons ?? []).length > 0 && content.keyboard !== "reply" && (
               <div className="chat-buttons">
                 <div className="chat-buttons__preview">
                   {content.buttons!.map((btn, i) =>

@@ -7524,3 +7524,30 @@ details.live-problems > summary::-webkit-details-marker {
 .login-card__fallback a.publish-button {
   color: var(--tg-button-text, #fff);
 }
+
+/* Быстрые кнопки в предпросмотре: клавиатура под чатом, как в Telegram. */
+.live-preview__keyboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+  padding: 8px;
+  background: var(--tg-secondary-bg);
+  border-top: 1px solid var(--tg-separator);
+}
+
+.live-preview__key {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--tg-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 15px;
+  box-shadow: 0 1px 0 color-mix(in srgb, black 25%, transparent);
+  cursor: pointer;
+}
+
+.live-preview__key:active {
+  transform: scale(0.97);
+}
