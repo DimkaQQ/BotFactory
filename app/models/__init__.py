@@ -1,3 +1,4 @@
+from app.models.booking import Booking, ChatState  # noqa: F401
 from app.models.bot import Bot, BotStatus
 from app.models.bot_block import BlockType, BotBlock
 from app.models.bot_subscriber import BotSubscriber

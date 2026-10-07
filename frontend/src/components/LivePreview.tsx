@@ -297,6 +297,35 @@ function PreviewBlock({
               ))}
             </div>
           </div>
+        ) : block.block_type === "booking" ? (
+          <div className="chat-bubble">
+            <p className="chat-bubble__text">{content.text || "Выберите день:"}</p>
+            <div className="chat-buttons">
+              <div className="chat-buttons__preview">
+                {["Чт 8 окт", "Пт 9 окт", "Сб 10 окт"].map((d) => (
+                  <span key={d} className="chat-buttons__pill">
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <p className="block-preview__caption">В боте клиент выберет день и свободное время, затем сценарий пойдёт дальше.</p>
+          </div>
+        ) : block.block_type === "contact" ? (
+          <div className="chat-bubble">
+            <p className="chat-bubble__text">
+              {content.ask_name || content.ask_phone
+                ? `${content.text ? content.text + "\n\n" : ""}${content.ask_name ? "Как к вам обращаться? " : ""}${content.ask_phone ? "Оставьте номер телефона." : ""}`
+                : "Ничего не спрашиваем: имя и @username берём из Telegram."}
+            </p>
+            {content.ask_phone && (
+              <div className="chat-buttons">
+                <div className="chat-buttons__preview">
+                  <span className="chat-buttons__pill">📱 Отправить мой номер</span>
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="chat-bubble">
             {content.media_file_id && block.block_type === "image" && (

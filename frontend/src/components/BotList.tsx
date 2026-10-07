@@ -8,6 +8,7 @@ import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
 import { useEscape } from "../hooks/useEscape";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
 import { SiteFooter } from "./SiteFooter";
+import { CrmPanel } from "./CrmPanel";
 import { SalesOverviewPanel } from "./SalesOverviewPanel";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -56,6 +57,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [overviewOpen, setOverviewOpen] = useState(false);
+  const [crmOpen, setCrmOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   // Subscriptions ship switched off while the one-off sale is being shaken
@@ -262,6 +264,17 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
               >
                 💰 <span className="bot-payments-button__long">Продажи</span>
                 <span className="bot-payments-button__short">💰</span>
+              </button>
+            )}
+            {!isMiniApp && (bots?.length ?? 0) > 0 && (
+              <button
+                type="button"
+                className="bot-payments-button"
+                onClick={() => setCrmOpen(true)}
+                title="Клиенты, их контакты и календарь записи"
+              >
+                👥 <span className="bot-payments-button__long">Клиенты</span>
+                <span className="bot-payments-button__short">👥</span>
               </button>
             )}
             {!isMiniApp && <ThemeToggle />}
@@ -517,6 +530,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       {/* Человек, у которого бот перестал продавать в субботу, не мог
           написать никому: контактов не было ни на сайте, ни здесь. */}
       {!isMiniApp && <SiteFooter compact />}
+      {crmOpen && bots && <CrmPanel bots={bots} onClose={() => setCrmOpen(false)} />}
       {overviewOpen && bots && <SalesOverviewPanel bots={bots} onClose={() => setOverviewOpen(false)} />}
     </div>
   );

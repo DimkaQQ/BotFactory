@@ -925,6 +925,19 @@ async def walk_chain(
                     # Paid delivery waits for the provider's callback — see
                     # payment_service.resume_after_payment.
                     return delivered
+            elif block.block_type == BlockType.booking:
+                from app.services import booking_flow
+
+                if not first:
+                    await bot.send_chat_action(chat_id, "typing")
+                    await _pause(db, _TYPING_DELAY_MIN)
+                await booking_flow.send_days(bot, chat_id, block, bot_id, db)
+                return delivered  # дальше — по нажатиям на день и время
+            elif block.block_type == BlockType.contact:
+                from app.services import booking_flow
+
+                if await booking_flow.start_contact(bot, chat_id, block, bot_id, db, telegram_user_id):
+                    return delivered  # ждём ответ человека текстом
             elif block.block_type == BlockType.delay:
                 # A bare pause — no message of its own, just stretches the
                 # gap before the next block.
@@ -1019,6 +1032,15 @@ async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UU
             await _handle_payment_callback(bot, callback_query, bot_id, db, parts[0], parts[1])
         except Exception:
             logger.exception("Payment callback %s failed for bot %s", data, bot_id)
+        return
+
+    if parts and parts[0] == "bk":
+        try:
+            from app.services import booking_flow
+
+            await booking_flow.handle_callback(bot, callback_query, bot_id, db, parts)
+        except Exception:
+            logger.exception("Booking callback %s failed for bot %s", data, bot_id)
         return
 
     if len(parts) != 3 or parts[0] != _CALLBACK_PREFIX:
@@ -1398,6 +1420,11 @@ async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSes
 
     if paused:
         await bot.send_message(chat_id, _PAUSED_TEXT)
+        return
+
+    from app.services import booking_flow
+
+    if await booking_flow.handle_message(bot, message, bot_id, db):
         return
 
     if await _handle_reply_button(bot, chat_id, text, bot_id, db, sender_id):

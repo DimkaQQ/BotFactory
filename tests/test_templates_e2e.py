@@ -81,6 +81,31 @@ async def test_a_buyer_can_walk_every_template(template, api, db, owner, make_bo
             )
             await background.wait_for_all()
             assert len(as_bot.sent()) > before, f"кнопка {button['label']!r} ничего не ответила"
+    booking_block = next((b for b in blocks if b.block_type == BlockType.booking), None)
+    if booking_block is not None:
+        from datetime import datetime, timedelta, timezone
+
+        from app.services import booking as bk
+
+        # контакты (если их спрашивали) и выбор свободного времени
+        await bot_dispatcher.process_update(
+            as_bot,
+            {"message": {"chat": {"id": CHAT_ID}, "from": {"id": CHAT_ID}, "text": "+77001234567"}},
+            bot.id, db,
+        )
+        schedule = bk.schedule_of(booking_block.content)
+        day = bk.local_day(schedule, datetime.now(timezone.utc)) + timedelta(days=3)
+        while not bk.day_slots(schedule, day):
+            day += timedelta(days=1)
+        local_start = bk.day_slots(schedule, day)[0].astimezone(schedule.tz)
+        await bot_dispatcher.process_update(
+            as_bot,
+            {"callback_query": {"id": "bk", "data": f"bk:{booking_block.id.hex}:s:{local_start:%Y%m%d%H%M}",
+                                "from": {"id": CHAT_ID}, "message": {"chat": {"id": CHAT_ID}, "message_id": 5}}},
+            bot.id, db,
+        )
+        await background.wait_for_all()
+
     # дальше — нажать первую кнопку каждого блока кнопок под сообщением (по порядку)
     for inline in blocks:
         if inline.block_type != BlockType.buttons or inline.content.get("keyboard") == "reply":

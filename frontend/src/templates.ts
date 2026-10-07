@@ -239,7 +239,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     accent: "poll",
     icon: "📅",
     label: "Запись по предоплате",
-    pitch: "Услуги, выбор дня и времени, предоплата, адрес — кнопки внизу экрана",
+    pitch: "Календарь со свободным временем, контакты клиента, предоплата и подтверждение записи",
     suggestedName: "Запись по предоплате",
     blocks: [
       { block_type: "welcome", content: { text: "Здравствуйте! Здесь можно посмотреть услуги и записаться 👇" } },
@@ -249,42 +249,35 @@ export const BOT_TEMPLATES: BotTemplate[] = [
           keyboard: "reply",
           text: "Что вас интересует?",
           buttons: [
-            { label: "💇 Услуги и цены", action_type: "text", action_value: "" },
             { label: "📅 Записаться", action_type: "text", action_value: "" },
+            { label: "💇 Услуги и цены", action_type: "text", action_value: "" },
             { label: "📍 Адрес", action_type: "text", action_value: "" },
           ],
         },
       },
       { block_type: "description", content: { text: "[Услуги и цены: стрижка — 1500 ₽, окрашивание — 4000 ₽.]" } },
       {
-        block_type: "buttons",
-        // collect_choice: выбор покупателя попадёт в заказ и в уведомление.
-        content: {
-          text: "Выберите день (дни можно заменить своими):",
-          collect_choice: true,
-          buttons: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб"].map((label) => ({
-            label,
-            action_type: "text" as const,
-            action_value: "",
-          })),
-        },
+        block_type: "contact",
+        // Имя и @username приходят из Telegram сами; спрашиваем только телефон.
+        content: { text: "Оставьте контакт, чтобы мы могли подтвердить запись.", ask_name: false, ask_phone: true },
       },
       {
-        block_type: "buttons",
+        block_type: "booking",
         content: {
-          text: "Выберите время (время можно заменить своим):",
-          collect_choice: true,
-          buttons: ["10:00", "12:00", "14:00", "16:00", "18:00"].map((label) => ({
-            label,
-            action_type: "text" as const,
-            action_value: "",
-          })),
+          text: "Выберите день:",
+          days: [0, 1, 2, 3, 4],
+          start: "10:00",
+          end: "19:00",
+          slot_minutes: 60,
+          horizon_days: 14,
+          notice_hours: 2,
+          tz: "Asia/Almaty",
         },
       },
       {
         block_type: "payment",
         content: {
-          text: "Предоплата за запись — [цена]. Она засчитывается в стоимость услуги.",
+          text: "Предоплата за запись — [цена]. Она засчитывается в стоимость услуги. Время придержано на час.",
           title: "Предоплата за запись",
           price: "500",
           currency: "RUB",
@@ -293,20 +286,70 @@ export const BOT_TEMPLATES: BotTemplate[] = [
       },
       {
         block_type: "delivery",
-        content: { text: "Записал! Мастер напишет вам здесь и подтвердит время. До встречи 👋" },
+        content: { text: "Записал! Мастер напишет вам здесь, если что-то изменится. До встречи 👋" },
       },
       { block_type: "description", content: { text: "[Адрес и часы работы: ул. Примерная, 1, ежедневно 10:00–21:00.]" } },
     ],
     nexts: [
       [0, 1],
+      [3, 4],
+      [4, 5],
       [5, 6],
     ],
     links: [
-      { from: 1, button: 0, to: 2 },
-      { from: 1, button: 1, to: 3 },
+      { from: 1, button: 0, to: 3 },
+      { from: 1, button: 1, to: 2 },
       { from: 1, button: 2, to: 7 },
-      ...[0, 1, 2, 3, 4, 5].map((button) => ({ from: 3, button, to: 4 })),
-      ...[0, 1, 2, 3, 4].map((button) => ({ from: 4, button, to: 5 })),
+    ],
+  },
+  {
+    id: "booking-free",
+    accent: "poll",
+    icon: "🗓",
+    label: "Запись без оплаты",
+    pitch: "Консультация, занятие, приём: клиент выбирает время, вы видите записи и контакты",
+    suggestedName: "Онлайн-запись",
+    blocks: [
+      { block_type: "welcome", content: { text: "Здравствуйте! Запишу вас на удобное время 👇" } },
+      {
+        block_type: "buttons",
+        content: {
+          keyboard: "reply",
+          text: "Что вас интересует?",
+          buttons: [
+            { label: "📅 Записаться", action_type: "text", action_value: "" },
+            { label: "ℹ️ Об услуге", action_type: "text", action_value: "" },
+          ],
+        },
+      },
+      { block_type: "description", content: { text: "[Об услуге: что входит, сколько длится, сколько стоит.]" } },
+      {
+        block_type: "contact",
+        content: { text: "", ask_name: false, ask_phone: false },
+      },
+      {
+        block_type: "booking",
+        content: {
+          text: "Выберите день:",
+          days: [0, 1, 2, 3, 4],
+          start: "10:00",
+          end: "18:00",
+          slot_minutes: 60,
+          horizon_days: 14,
+          notice_hours: 2,
+          tz: "Asia/Almaty",
+        },
+      },
+      { block_type: "delivery", content: { text: "Ждём вас! Если планы изменятся, напишите — перенесём 🙏" } },
+    ],
+    nexts: [
+      [0, 1],
+      [3, 4],
+      [4, 5],
+    ],
+    links: [
+      { from: 1, button: 0, to: 3 },
+      { from: 1, button: 1, to: 2 },
     ],
   },
   {

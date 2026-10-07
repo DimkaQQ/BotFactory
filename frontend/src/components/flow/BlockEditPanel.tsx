@@ -8,6 +8,7 @@ import { BroadcastButton } from "../BroadcastButton";
 import { ButtonsEditor } from "../ButtonsEditor";
 import { MediaEditor } from "../MediaEditor";
 import { PaymentEditor } from "../PaymentEditor";
+import { BookingEditor, ContactEditor } from "../BookingEditor";
 import { DelayEditor } from "../DelayEditor";
 import { PollEditor } from "../PollEditor";
 
@@ -20,6 +21,8 @@ const PLACEHOLDER: Record<BotBlock["block_type"], string> = {
   poll: "О чём спросим?",
   delivery: "Вот твой файл / ссылка / инструкция",
   payment: "",
+  booking: "",
+  contact: "",
   delay: "",
 };
 
@@ -79,7 +82,7 @@ export function BlockEditPanel({
   const isDeliveryBlock = block.block_type === "delivery";
   // Not payment (an invoice has to belong to a conversation) and not
   // delay (it says nothing on its own).
-  const canBroadcast = !["payment", "delay"].includes(block.block_type);
+  const canBroadcast = !["payment", "delay", "booking", "contact"].includes(block.block_type);
   const isButtonsBlock = block.block_type === "buttons";
   const isDelayBlock = block.block_type === "delay";
   const isPaymentBlock = block.block_type === "payment";
@@ -120,6 +123,10 @@ export function BlockEditPanel({
               onChange={onChange}
               onOpenSettings={onOpenPaymentSettings}
             />
+          ) : block.block_type === "booking" ? (
+            <BookingEditor content={block.content} onChange={onChange} />
+          ) : block.block_type === "contact" ? (
+            <ContactEditor content={block.content} onChange={onChange} />
           ) : isMediaBlock ? (
             <MediaEditor kind={block.block_type as "image" | "video"} botId={botId} content={block.content} onChange={onChange} />
           ) : isDeliveryBlock ? (

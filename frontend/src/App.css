@@ -7753,3 +7753,169 @@ details.live-problems > summary::-webkit-details-marker {
   font-weight: 600;
   color: var(--tg-link);
 }
+
+/* ---------- Запись и контакты ---------- */
+.booking-editor__days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--sp-3);
+}
+
+.booking-editor__day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1.5px solid var(--tg-separator);
+  background: var(--tg-bg);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.booking-editor__day input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.booking-editor__day--on {
+  border-color: var(--tg-button);
+  background: color-mix(in srgb, var(--tg-button) 14%, var(--tg-bg));
+  color: var(--tg-link);
+}
+
+.booking-editor__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+}
+
+@media (max-width: 420px) {
+  .booking-editor__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Мини-CRM и календарь ---------- */
+.crm-row {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.calendar__nav {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.calendar__nav button {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.calendar__day {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+}
+
+.calendar__slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.calendar__slot {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1.5px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.calendar__slot small {
+  font-size: 10px;
+  font-weight: 500;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar__slot--free {
+  border-color: color-mix(in srgb, var(--accent-success) 45%, transparent);
+}
+
+.calendar__slot--confirmed {
+  background: color-mix(in srgb, var(--tg-button) 18%, var(--tg-bg));
+  border-color: var(--tg-button);
+}
+
+.calendar__slot--held {
+  background: color-mix(in srgb, var(--accent-warning) 16%, var(--tg-bg));
+  border-color: var(--accent-warning);
+}
+
+.calendar__slot--blocked {
+  background: var(--tg-secondary-bg);
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.calendar__slot--past {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.calendar__slot--selected {
+  outline: 2px solid var(--tg-button);
+}
+
+.calendar__action {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--tg-secondary-bg);
+  border: 1px solid var(--tg-separator);
+}
+
+.calendar__action button {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1.5px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

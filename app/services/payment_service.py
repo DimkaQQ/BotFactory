@@ -462,8 +462,14 @@ async def create_order_payment(
     if existing is not None:
         # Повторное нажатие «Оплатить» после смены выбора: обновляем выбор в заказе.
         fresh = await recent_choices(db, bot.id, telegram_user_id)
+        held = await _held_booking(db, bot.id, telegram_user_id)
+        patch = {}
         if fresh and fresh != (existing.meta or {}).get("choices"):
-            existing.meta = {**(existing.meta or {}), "choices": fresh}
+            patch["choices"] = fresh
+        if held is not None and str(held.id) != (existing.meta or {}).get("booking_id"):
+            patch["booking_id"] = str(held.id)
+        if patch:
+            existing.meta = {**(existing.meta or {}), **patch}
             await db.commit()
         return existing, (existing.meta or {})["checkout_url"]
     # Send the buyer back where they came from — the bot — rather than to a
@@ -506,12 +512,23 @@ async def create_order_payment(
             "deliver_from": str(block.next_block_id) if block.next_block_id else None,
             "fingerprint": fingerprint,
             **(
+                {"booking_id": str(held.id)}
+                if (held := await _held_booking(db, bot.id, telegram_user_id)) is not None
+                else {}
+            ),
+            **(
                 {"choices": choices}
                 if (choices := await recent_choices(db, bot.id, telegram_user_id))
                 else {}
             ),
         },
     )
+
+
+async def _held_booking(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None):
+    from app.services import booking
+
+    return await booking.latest_held(db, bot_id, telegram_user_id)
 
 
 async def recent_choices(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None) -> list[str]:
@@ -1099,6 +1116,12 @@ async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: b
                 logger.exception("Payment %s settled but the subscription could not be updated", payment.id)
             if deliver:
                 await resume_after_payment(db, payment)
+            from app.services import booking_flow
+
+            try:
+                await booking_flow.confirm_after_payment(db, payment)
+            except Exception:
+                logger.exception("Payment %s settled but the booking could not be confirmed", payment.id)
             _later(_notify_owner_of_sale, payment.id, name=f"sale-notice-{payment.id}")
             return True
         return False

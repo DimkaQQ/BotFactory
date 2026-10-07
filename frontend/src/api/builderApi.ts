@@ -7,6 +7,8 @@ export type BlockType =
   | "poll"
   | "delivery"
   | "payment"
+  | "booking"
+  | "contact"
   | "delay";
 
 export interface ButtonAction {
@@ -27,6 +29,17 @@ export interface BlockContent {
   keyboard?: "inline" | "reply" | "remove";
   /** Запоминать, что выбрал покупатель, и показывать это в заказе. */
   collect_choice?: boolean;
+  /** Блок «Запись»: расписание. Дни недели 0 = понедельник. */
+  days?: number[];
+  start?: string;
+  end?: string;
+  slot_minutes?: number;
+  horizon_days?: number;
+  notice_hours?: number;
+  tz?: string;
+  /** Блок «Контакты»: что спросить у человека (Telegram-данные приходят сами). */
+  ask_name?: boolean;
+  ask_phone?: boolean;
   /** Блок раньше был с быстрыми кнопками: бот уберёт клавиатуру внизу у покупателя. */
   clear_reply?: boolean;
   question?: string;
@@ -333,6 +346,19 @@ export const builderApi = {
     }),
   getPayment: (paymentId: string) => request<PaymentInfo>(`/payments/${paymentId}`),
   listOrders: (botId: string) => request<OrdersReport>(`/bots/${botId}/orders`),
+  crmCustomers: (params: { botId?: string; q?: string }) =>
+    request<{ customers: CrmCustomer[] }>(
+      `/crm/customers?${new URLSearchParams({ ...(params.botId ? { bot_id: params.botId } : {}), q: params.q ?? "" })}`,
+    ),
+  crmCustomer: (botId: string, userId: number) => request<CrmCard>(`/crm/customers/${botId}/${userId}`),
+  crmUpdateCustomer: (botId: string, userId: number, patch: { contact_name?: string; phone?: string; note?: string }) =>
+    request<CrmCustomer>(`/crm/customers/${botId}/${userId}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  calendar: (botId: string, start: string, days = 7) =>
+    request<CalendarView>(`/bots/${botId}/calendar?start=${start}&days=${days}`),
+  blockSlot: (botId: string, startsAt: string) =>
+    request<{ id: string }>(`/bots/${botId}/calendar/block`, { method: "POST", body: JSON.stringify({ starts_at: startsAt }) }),
+  cancelBooking: (botId: string, bookingId: string) =>
+    request<{ cancelled: boolean; informed: boolean }>(`/bots/${botId}/bookings/${bookingId}/cancel`, { method: "POST" }),
   buttonStats: (botId: string, days = 30) =>
     request<ButtonStats>(`/bots/${botId}/button-stats?days=${days}`),
   listSubscribers: (botId: string) => request<SubscribersReport>(`/bots/${botId}/subscribers`),
@@ -516,6 +542,52 @@ export interface BillingState {
   price_minor: number;
   currency: string;
   period_days: number;
+}
+
+export interface CrmCustomer {
+  bot_id: string;
+  bot_name: string;
+  telegram_user_id: number;
+  name: string;
+  username: string;
+  phone: string;
+  note: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  orders?: { currency: string; count: number; total_minor: number }[];
+  bookings?: number;
+  last_booking_at?: string | null;
+}
+
+export interface CrmCard extends Omit<CrmCustomer, "orders" | "bookings"> {
+  bookings: { id: string; status: string; starts_at: string; label: string }[];
+  orders: {
+    id: string;
+    invoice_no: number;
+    status: string;
+    description: string;
+    amount_minor: number;
+    currency: string;
+    created_at: string;
+    choices: string[];
+  }[];
+}
+
+export interface CalendarSlot {
+  starts_at: string;
+  time: string;
+  state: "free" | "past" | "held" | "confirmed" | "blocked" | "cancelled";
+  booking_id: string | null;
+  client: string | null;
+  phone: string | null;
+  telegram_user_id: number | null;
+}
+
+export interface CalendarView {
+  tz: string;
+  configured: boolean;
+  slot_minutes: number;
+  days: { date: string; label: string; slots: CalendarSlot[] }[];
 }
 
 export interface ButtonStats {

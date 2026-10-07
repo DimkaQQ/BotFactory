@@ -27,6 +27,12 @@ function preview(block: BotBlock): string {
       return c.text?.trim() || (c.media_file_id ? "Без подписи" : "Ссылка не добавлена");
     case "buttons":
       return c.text?.trim() || "Текст перед кнопками";
+    case "booking":
+      return `📅 Запись: ${c.start ?? "10:00"}–${c.end ?? "19:00"}, слот ${c.slot_minutes ?? 60} мин`;
+    case "contact":
+      return c.ask_name || c.ask_phone
+        ? `Спросим: ${[c.ask_name && "имя", c.ask_phone && "телефон"].filter(Boolean).join(" и ")}`
+        : "Только данные из Telegram";
     case "payment":
       return c.price?.trim()
         ? `💳 ${c.title?.trim() || "Оплата"} — ${c.price} ${c.currency ?? ""}`.trim()
