@@ -460,6 +460,11 @@ async def create_order_payment(
         currency=currency, fingerprint=fingerprint,
     )
     if existing is not None:
+        # Повторное нажатие «Оплатить» после смены выбора: обновляем выбор в заказе.
+        fresh = await recent_choices(db, bot.id, telegram_user_id)
+        if fresh and fresh != (existing.meta or {}).get("choices"):
+            existing.meta = {**(existing.meta or {}), "choices": fresh}
+            await db.commit()
         return existing, (existing.meta or {})["checkout_url"]
     # Send the buyer back where they came from — the bot — rather than to a
     # web page of ours they have no use for.
@@ -500,8 +505,40 @@ async def create_order_payment(
         meta={
             "deliver_from": str(block.next_block_id) if block.next_block_id else None,
             "fingerprint": fingerprint,
+            **(
+                {"choices": choices}
+                if (choices := await recent_choices(db, bot.id, telegram_user_id))
+                else {}
+            ),
         },
     )
+
+
+async def recent_choices(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None) -> list[str]:
+    """Что покупатель выбрал на кнопках с пометкой «запомнить выбор» (день, время,
+    вариант) за последние 3 часа: по одному, последнему, на каждый блок."""
+    if telegram_user_id is None:
+        return []
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.button_click import ButtonClick
+
+    rows = (
+        await db.execute(
+            select(ButtonClick)
+            .where(
+                ButtonClick.bot_id == bot_id,
+                ButtonClick.telegram_user_id == telegram_user_id,
+                ButtonClick.collect_choice.is_(True),
+                ButtonClick.created_at > datetime.now(timezone.utc) - timedelta(hours=3),
+            )
+            .order_by(ButtonClick.created_at)
+        )
+    ).scalars().all()
+    latest: dict = {}
+    for row in rows:
+        latest[row.block_id] = row.label  # поздний нажатый перекрывает ранний в том же блоке
+    return list(latest.values())
 
 
 async def _open_platform_payment(
@@ -1358,6 +1395,9 @@ async def _notify_owner_of_sale(db: AsyncSession, payment: Payment) -> None:
             f"«{payment.description}» — {amount}",
             f"Покупатель: {who}",
         ]
+        picked = (payment.meta or {}).get("choices") or []
+        if picked:
+            lines.append("Выбрал: " + " · ".join(str(x) for x in picked))
         if subscription is not None:
             until = dates.day(subscription.current_period_end)
             lines.append(f"Доступ оплачен до {until}")

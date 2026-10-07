@@ -525,3 +525,40 @@ async def test_provider_cannot_be_switched_while_a_fresh_invoice_is_open(api, au
         f"/api/bots/{bot.id}/payment-settings", headers=auth(owner), json={"provider": "cryptobot", "is_test": True}
     )
     assert blocked.status_code == 409
+
+
+async def test_button_clicks_are_counted_and_choices_reach_the_order(api, auth, owner, make_bot, db, as_bot):
+    from sqlalchemy import select
+
+    from app.models.payment import Payment
+    from app.services import background, bot_dispatcher
+
+    bot, blocks = await make_bot(
+        owner,
+        [
+            (BlockType.buttons, {"text": "Выберите время", "collect_choice": True,
+                                 "buttons": [{"label": "10:00", "action_type": "text"}, {"label": "12:00", "action_type": "text"}]}),
+            (BlockType.payment, {"title": "Запись", "price": "500", "currency": "RUB"}),
+        ],
+        provider="test", is_test=True,
+    )
+    blocks[0].content = {**blocks[0].content, "buttons": [
+        {"label": "10:00", "action_type": "text", "target_block_id": str(blocks[1].id)},
+        {"label": "12:00", "action_type": "text", "target_block_id": str(blocks[1].id)},
+    ]}
+    await db.commit()
+    await bot_dispatcher.process_update(
+        as_bot,
+        {"callback_query": {"id": "c", "data": f"b:{blocks[0].id.hex}:1", "from": {"id": 77},
+                            "message": {"chat": {"id": 77}}}},
+        bot.id, db,
+    )
+    await background.wait_for_all()
+
+    stats = (await api.get(f"/api/bots/{bot.id}/button-stats", headers=auth(owner))).json()
+    assert stats["buttons"][0]["label"] == "12:00" and stats["buttons"][0]["clicks"] == 1
+
+    payment = (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalar_one()
+    assert payment.meta["choices"] == ["12:00"]
+    orders = (await api.get(f"/api/bots/{bot.id}/orders", headers=auth(owner))).json()
+    assert orders["orders"][0]["choices"] == ["12:00"]

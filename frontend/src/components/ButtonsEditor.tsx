@@ -86,6 +86,18 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
         </p>
       )}
 
+      <label className="payment-settings__test">
+        <input
+          type="checkbox"
+          checked={Boolean(content.collect_choice)}
+          onChange={(e) => onChange({ ...content, collect_choice: e.target.checked })}
+        />
+        <span>
+          Запомнить выбор покупателя: что он нажал здесь (день, время, вариант), увидишь в заказе и в уведомлении о
+          продаже.
+        </span>
+      </label>
+
       <div className={`kb-demo kb-demo--${style}`} aria-hidden="true">
         <p className="kb-demo__caption">Так это увидит покупатель в Telegram</p>
         <div className="kb-demo__phone">

@@ -53,6 +53,61 @@ async def meta_bot_status(client: Client = Depends(get_current_client)) -> dict:
     }
 
 
+@router.get("/bots/{bot_id}/button-stats")
+async def button_stats(
+    bot_id: uuid.UUID,
+    days: int = 30,
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Какие кнопки нажимают: число нажатий и сколько разных людей нажало."""
+    from datetime import timedelta
+
+    from app.models.button_click import ButtonClick
+
+    bot = await _get_owned_bot(bot_id, client, db)
+    since = datetime.now(timezone.utc) - timedelta(days=max(1, min(days, 365)))
+    rows = (
+        await db.execute(
+            select(
+                ButtonClick.block_id,
+                ButtonClick.label,
+                func.count(ButtonClick.id),
+                func.count(func.distinct(ButtonClick.telegram_user_id)),
+                func.max(ButtonClick.created_at),
+            )
+            .where(ButtonClick.bot_id == bot.id, ButtonClick.created_at >= since)
+            .group_by(ButtonClick.block_id, ButtonClick.label)
+            .order_by(func.count(ButtonClick.id).desc())
+            .limit(200)
+        )
+    ).all()
+    blocks = {
+        b.id: b
+        for b in (await db.execute(select(BotBlock).where(BotBlock.bot_id == bot.id))).scalars().all()
+    }
+
+    def title(block_id) -> str:
+        block = blocks.get(block_id)
+        text = str((block.content or {}).get("text") or "").strip() if block else ""
+        return text[:60] if text else ("Блок удалён" if block is None else "Кнопки")
+
+    return {
+        "days": days,
+        "buttons": [
+            {
+                "block_id": str(block_id) if block_id else None,
+                "block": title(block_id),
+                "label": label,
+                "clicks": int(clicks),
+                "people": int(people),
+                "last_at": last,
+            }
+            for block_id, label, clicks, people, last in rows
+        ],
+    }
+
+
 @router.get("/me", response_model=ClientOut)
 async def get_me(client: Client = Depends(get_current_client)) -> Client:
     return client

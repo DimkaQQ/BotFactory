@@ -81,10 +81,16 @@ async def test_a_buyer_can_walk_every_template(template, api, db, owner, make_bo
             )
             await background.wait_for_all()
             assert len(as_bot.sent()) > before, f"кнопка {button['label']!r} ничего не ответила"
-    elif buttons_block is not None:
+    # дальше — нажать первую кнопку каждого блока кнопок под сообщением (по порядку)
+    for inline in blocks:
+        if inline.block_type != BlockType.buttons or inline.content.get("keyboard") == "reply":
+            continue
+        buttons = inline.content.get("buttons") or []
+        if not buttons or buttons[0].get("action_type") == "url":
+            continue
         await bot_dispatcher.process_update(
             as_bot,
-            {"callback_query": {"id": "cb", "data": f"b:{buttons_block.id.hex}:0",
+            {"callback_query": {"id": "cb", "data": f"b:{inline.id.hex}:0",
                                 "from": {"id": CHAT_ID}, "message": {"chat": {"id": CHAT_ID}}}},
             bot.id, db,
         )

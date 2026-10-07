@@ -230,8 +230,20 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
 
               {active && (
                 <>
-                  <h3 className="payment-settings__heading">2. Данные из кабинета {active.title}</h3>
-                  <p className="payment-settings__hint">{active.hint}</p>
+                  <h3 className="payment-settings__heading">
+                    {active.fields.length > 0 ? `2. Данные из кабинета ${active.title}` : "2. Как это работает"}
+                  </h3>
+                  {active.hint.split("\n\n").map((part) =>
+                    part.startsWith("!") ? (
+                      <p key={part} className="payment-settings__callout">
+                        {part.slice(1)}
+                      </p>
+                    ) : (
+                      <p key={part} className="payment-settings__hint">
+                        {part}
+                      </p>
+                    ),
+                  )}
 
                   {active.fields.map((field) => {
                     const filled = settings?.provider === active.slug && settings.filled_fields.includes(field.key);

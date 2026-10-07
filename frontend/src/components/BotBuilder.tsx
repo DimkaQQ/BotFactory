@@ -11,7 +11,6 @@ import {
   type PublicationInfo,
   ApiError,
   builderApi,
-  formatAmount,
 } from "../api/builderApi";
 import { confirmDialog } from "../confirm";
 import { openExternal } from "../hooks/useTelegramWebApp";
@@ -216,27 +215,6 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     })();
   }, [botId]);
 
-  // Выручка этого бота одной строкой — чтобы не искать её под кнопкой с
-  // надписью «касса».
-  // Узкий вариант — не слово «Продажи», а число: на телефоне длинная
-  // подпись прячется, и владелец видел кнопку без единой цифры. С телефона
-  // её и открывают, чтобы посмотреть, не ждёт ли кто подтверждения.
-  const [salesLine, salesShort] = (() => {
-    if (!sales || sales.orders.length === 0) return [null, null];
-    // Заказы, где покупатель нажал «Я оплатил», а подтвердить может только
-    // человек. Они важнее выручки: пока их не разобрали, товар не выдан.
-    const awaiting = sales.orders.filter((o) => o.needs_confirmation).length;
-    if (awaiting > 0) return [`Ждут подтверждения: ${awaiting}`, `⏳ ${awaiting}`];
-    // Ни одной оплаты — но заказы есть: «десять открыли счёт и никто не
-    // заплатил» тоже стоит того, чтобы открыть экран продаж.
-    if (sales.paid_count === 0) return [`Заказы: ${sales.orders.length}`, `${sales.orders.length}`];
-    const best = [...(sales.totals ?? [])].sort((a, b) => b.total_minor - a.total_minor)[0];
-    if (!best) return [`Продаж: ${sales.paid_count}`, `${sales.paid_count}`];
-    return [
-      `${sales.paid_count} · ${formatAmount(best.total_minor)} ${best.currency}`,
-      `${sales.paid_count}`,
-    ];
-  })();
 
   // Что человек узнавал только после того, как заплатил 99 $: касса без
   // ключей, кнопка в никуда, цена не указана. Считается прямо здесь, потому
@@ -718,28 +696,15 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 <span className="bot-payments-button__short">Касса</span>
               </button>
             )}
-            {/* Выручка жила под кнопкой «Касса подключена» — искать её там
-                владелец не догадывался. Теперь она на виду и открывает
-                отдельный экран продаж, а не настройки кассы. */}
-            {!isMiniApp && salesLine && (
-              <button
-                type="button"
-                className="bot-sales-button"
-                onClick={() => setSalesPanelOpen(true)}
-                title="Продажи этого бота"
-              >
-                💰 <span className="bot-payments-button__long">{salesLine}</span>
-                <span className="bot-payments-button__short">{salesShort}</span>
-              </button>
-            )}
             {!isMiniApp && bot.status === "active" && (
               <button
                 type="button"
-                className="bot-sales-button"
+                className="bot-payments-button"
                 onClick={() => setProfileOpen(true)}
                 title="Фото, имя и описание бота в Telegram"
               >
                 🎨 <span className="bot-payments-button__long">Оформление</span>
+                <span className="bot-payments-button__short">Вид</span>
               </button>
             )}
             <button

@@ -192,6 +192,9 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
                     <span className="orders__amount">
                       {formatAmount(order.amount_minor)} {unit(order.currency)}
                     </span>
+                    {order.choices && order.choices.length > 0 && (
+                      <span className="orders__choices">Выбрал: {order.choices.join(" · ")}</span>
+                    )}
                     {order.buyer && (
                       <span className="orders__buyer">
                         {order.buyer.username ? (

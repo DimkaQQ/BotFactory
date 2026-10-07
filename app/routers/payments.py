@@ -724,6 +724,7 @@ async def list_orders(
                 "amount_minor": o.amount_minor,
                 "currency": o.currency,
                 "description": o.description,
+                "choices": (o.meta or {}).get("choices") or [],
                 "telegram_user_id": o.telegram_user_id,
                 "buyer": _buyer_of(buyers.get(o.telegram_user_id)),
                 "created_at": o.created_at,

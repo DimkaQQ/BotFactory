@@ -25,6 +25,8 @@ export interface BlockContent {
   buttons?: ButtonAction[];
   /** Кнопки блока: под сообщением (по умолчанию) или быстрые внизу экрана. */
   keyboard?: "inline" | "reply" | "remove";
+  /** Запоминать, что выбрал покупатель, и показывать это в заказе. */
+  collect_choice?: boolean;
   /** Блок раньше был с быстрыми кнопками: бот уберёт клавиатуру внизу у покупателя. */
   clear_reply?: boolean;
   question?: string;
@@ -331,6 +333,8 @@ export const builderApi = {
     }),
   getPayment: (paymentId: string) => request<PaymentInfo>(`/payments/${paymentId}`),
   listOrders: (botId: string) => request<OrdersReport>(`/bots/${botId}/orders`),
+  buttonStats: (botId: string, days = 30) =>
+    request<ButtonStats>(`/bots/${botId}/button-stats?days=${days}`),
   listSubscribers: (botId: string) => request<SubscribersReport>(`/bots/${botId}/subscribers`),
   broadcast: (botId: string, blockId: string, audience: "all" | "subscribers") =>
     request<{ queued: number }>(`/bots/${botId}/broadcast`, {
@@ -514,6 +518,11 @@ export interface BillingState {
   period_days: number;
 }
 
+export interface ButtonStats {
+  days: number;
+  buttons: { block_id: string | null; block: string; label: string; clicks: number; people: number; last_at: string }[];
+}
+
 export interface OrdersReport {
   orders: Order[];
   /** One row per currency — a shop selling for 990 ₽ and 250 ⭐ has not
@@ -537,6 +546,8 @@ export interface Order {
   amount_minor: number;
   currency: string;
   description: string;
+  /** Что покупатель выбрал на кнопках с пометкой «запомнить выбор» (день, время…). */
+  choices?: string[];
   telegram_user_id: number | null;
   /** Who bought. Null for orders placed before the bot started recording
    * its people. */

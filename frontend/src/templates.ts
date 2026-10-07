@@ -237,10 +237,10 @@ export const BOT_TEMPLATES: BotTemplate[] = [
   {
     id: "salon-booking",
     accent: "poll",
-    icon: "💇",
-    label: "Салон / барбер: запись с предоплатой",
-    pitch: "Услуги, запись с предоплатой, адрес — кнопки внизу экрана",
-    suggestedName: "Запись в салон",
+    icon: "📅",
+    label: "Запись по предоплате",
+    pitch: "Услуги, выбор дня и времени, предоплата, адрес — кнопки внизу экрана",
+    suggestedName: "Запись по предоплате",
     blocks: [
       { block_type: "welcome", content: { text: "Здравствуйте! Здесь можно посмотреть услуги и записаться 👇" } },
       {
@@ -256,6 +256,31 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         },
       },
       { block_type: "description", content: { text: "[Услуги и цены: стрижка — 1500 ₽, окрашивание — 4000 ₽.]" } },
+      {
+        block_type: "buttons",
+        // collect_choice: выбор покупателя попадёт в заказ и в уведомление.
+        content: {
+          text: "Выберите день (дни можно заменить своими):",
+          collect_choice: true,
+          buttons: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб"].map((label) => ({
+            label,
+            action_type: "text" as const,
+            action_value: "",
+          })),
+        },
+      },
+      {
+        block_type: "buttons",
+        content: {
+          text: "Выберите время (время можно заменить своим):",
+          collect_choice: true,
+          buttons: ["10:00", "12:00", "14:00", "16:00", "18:00"].map((label) => ({
+            label,
+            action_type: "text" as const,
+            action_value: "",
+          })),
+        },
+      },
       {
         block_type: "payment",
         content: {
@@ -274,12 +299,14 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     ],
     nexts: [
       [0, 1],
-      [3, 4],
+      [5, 6],
     ],
     links: [
       { from: 1, button: 0, to: 2 },
       { from: 1, button: 1, to: 3 },
-      { from: 1, button: 2, to: 5 },
+      { from: 1, button: 2, to: 7 },
+      ...[0, 1, 2, 3, 4, 5].map((button) => ({ from: 3, button, to: 4 })),
+      ...[0, 1, 2, 3, 4].map((button) => ({ from: 4, button, to: 5 })),
     ],
   },
   {

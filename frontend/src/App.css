@@ -7638,3 +7638,118 @@ details.live-problems > summary::-webkit-details-marker {
   font-size: 13px;
   line-height: 1.45;
 }
+
+.payment-settings__callout {
+  margin: var(--sp-3) 0;
+  padding: 10px 12px;
+  border-left: 4px solid var(--tg-button);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tg-button) 12%, var(--tg-bg));
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+/* ---------- Продажи и нажатия по всем ботам ---------- */
+.overview-panel__filters {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+@media (min-width: 520px) {
+  .overview-panel__filters {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+.overview-panel__filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overview-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.overview-panel__totals {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-success) 12%, var(--tg-bg));
+  font-weight: 700;
+}
+
+.overview-panel__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+  font-size: 14px;
+}
+
+.overview-panel__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.overview-panel__main strong {
+  overflow-wrap: anywhere;
+}
+
+.overview-panel__sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.overview-panel__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.overview-panel__status {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.overview-panel__status--paid {
+  color: var(--accent-success-ink);
+}
+
+.overview-panel__bar {
+  display: block;
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--tg-secondary-bg);
+  overflow: hidden;
+}
+
+.overview-panel__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tg-button);
+}
+
+.orders__choices {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tg-link);
+}

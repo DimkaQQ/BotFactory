@@ -8,6 +8,7 @@ import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
 import { useEscape } from "../hooks/useEscape";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
 import { SiteFooter } from "./SiteFooter";
+import { SalesOverviewPanel } from "./SalesOverviewPanel";
 import { ThemeToggle } from "./ThemeToggle";
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
@@ -54,6 +55,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
+  const [overviewOpen, setOverviewOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   // Subscriptions ship switched off while the one-off sale is being shaken
@@ -251,6 +253,17 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
             {greetingName && <p className="app-header__greeting">Привет, {greetingName}!</p>}
           </div>
           <div className="app-header__actions">
+            {!isMiniApp && (bots?.length ?? 0) > 0 && (
+              <button
+                type="button"
+                className="bot-payments-button"
+                onClick={() => setOverviewOpen(true)}
+                title="Продажи и нажатия на кнопки по всем ботам"
+              >
+                💰 <span className="bot-payments-button__long">Продажи</span>
+                <span className="bot-payments-button__short">💰</span>
+              </button>
+            )}
             {!isMiniApp && <ThemeToggle />}
             {/* Выхода не было нигде. На общем компьютере токен живёт 30
                 дней, а за ним — касса, список покупателей и кнопка снятия
@@ -504,6 +517,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       {/* Человек, у которого бот перестал продавать в субботу, не мог
           написать никому: контактов не было ни на сайте, ни здесь. */}
       {!isMiniApp && <SiteFooter compact />}
+      {overviewOpen && bots && <SalesOverviewPanel bots={bots} onClose={() => setOverviewOpen(false)} />}
     </div>
   );
 }

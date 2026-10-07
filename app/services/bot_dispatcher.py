@@ -1051,6 +1051,10 @@ async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UU
     buttons = (source_block.content or {}).get("buttons") or []
     if index >= len(buttons):
         return
+    await _record_click(
+        db, bot_id, source_block, index, str(buttons[index].get("label") or ""),
+        (callback_query.get("from") or {}).get("id"),
+    )
     target_raw = (buttons[index].get("target_block_id") or "").strip()
     if not target_raw:
         return  # this particular button isn't wired to anything
@@ -1062,6 +1066,31 @@ async def _handle_callback_query(bot: Bot, callback_query: dict, bot_id: uuid.UU
 
     tapped_by = (callback_query.get("from") or {}).get("id")
     await walk_chain(bot, chat_id, target_id, bot_id, db, telegram_user_id=tapped_by)
+
+
+async def _record_click(
+    db: AsyncSession, bot_id: uuid.UUID, block: BotBlock, index: int, label: str, user_id: int | None
+) -> None:
+    """Запомнить нажатие: статистика кнопок и выбор покупателя для заказа.
+    Сбой записи не должен мешать диалогу."""
+    from app.models.button_click import ButtonClick
+
+    try:
+        db.add(
+            ButtonClick(
+                bot_id=bot_id,
+                block_id=block.id,
+                button_index=index,
+                label=(label or "…")[:64],
+                collect_choice=bool((block.content or {}).get("collect_choice")),
+                telegram_user_id=user_id,
+            )
+        )
+        await db.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning("Bot %s: could not record a button click", bot_id, exc_info=True)
+        with contextlib.suppress(Exception):
+            await db.rollback()
 
 
 async def _handle_reply_button(
@@ -1080,7 +1109,7 @@ async def _handle_reply_button(
             .where(BotBlock.bot_id == bot_id, BotBlock.block_type == BlockType.buttons)
             .order_by(BotBlock.order_index, BotBlock.id)
         )
-    ).scalars()
+    ).scalars().all()
     for block in blocks:
         content = block.content or {}
         if content.get("keyboard") != "reply":
@@ -1088,6 +1117,8 @@ async def _handle_reply_button(
         for button in content.get("buttons") or []:
             if (button.get("label") or "").strip()[:64] != label:
                 continue
+            _clicked_index = (content.get("buttons") or []).index(button)
+            await _record_click(db, bot_id, block, _clicked_index, label, sender_id)
             if _is_url_button(button):
                 await bot.send_message(chat_id, button["action_value"].strip())
                 return True

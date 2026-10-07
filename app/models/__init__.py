@@ -1,6 +1,7 @@
 from app.models.bot import Bot, BotStatus
 from app.models.bot_block import BlockType, BotBlock
 from app.models.bot_subscriber import BotSubscriber
+from app.models.button_click import ButtonClick  # noqa: F401
 from app.models.client import Client
 from app.models.moderation import AbuseReport, ModerationAction
 from app.models.payment import Payment
