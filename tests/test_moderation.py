@@ -207,3 +207,81 @@ async def test_the_report_card_offers_actions_and_hides_nothing_private(db, owne
     callbacks = [b.callback_data for row in markup.inline_keyboard for b in row]
     assert {f"rb:{report.id.hex}", f"rn:{report.id.hex}", f"rd:{report.id.hex}"} <= set(callbacks)
     assert bot.id is not None and uuid.UUID(callbacks[0].split(":")[1])
+
+
+# ------------------------------------------------------------ быстрые команды оператора
+
+
+async def test_stats_find_and_export_for_the_operator(db, owner, make_bot):
+    bot, _ = await _named_bot(db, owner, make_bot, "findme_bot")
+    await moderation.block_bot(db, bot.id, actor="tg:1", reason="тест")
+
+    stats = await moderation.platform_stats(db)
+    assert stats["clients"] >= 1 and stats["blocked"] >= 1 and stats["bots"] >= 1
+
+    client, found = await moderation.find(db, str(owner.telegram_user_id))
+    assert client is not None and client.id == owner.id and found is None
+    client, found = await moderation.find(db, "@FindMe_Bot")
+    assert found is not None and found.id == bot.id and client.id == owner.id
+    assert await moderation.find(db, "@no_such_bot") == (None, None)
+
+    data = await moderation.export_client(db, owner.telegram_user_id, actor="tg:1")
+    assert data["client"]["telegram_user_id"] == owner.telegram_user_id
+    assert "bot_token_encrypted" not in data["bots"][0], "секреты в выгрузку не попадают"
+    assert "export_client" in [a.action for a in await moderation.journal(db)]
+
+
+async def test_the_find_card_has_the_right_buttons(db, owner, make_bot):
+    from meta_bot.handlers import admin
+
+    bot, _ = await _named_bot(db, owner, make_bot, "findme_bot")
+    text, markup = await admin._find_card(db, "@findme_bot")
+    callbacks = {b.callback_data for row in markup.inline_keyboard for b in row}
+    assert f"xb:{bot.id.hex}" in callbacks and f"xn:{owner.telegram_user_id}" in callbacks
+    assert f"xd:{owner.telegram_user_id}" in callbacks and f"xe:{owner.telegram_user_id}" in callbacks
+
+    await moderation.block_bot(db, bot.id, actor="tg:1")
+    _, markup = await admin._find_card(db, "@findme_bot")
+    callbacks = {b.callback_data for row in markup.inline_keyboard for b in row}
+    assert f"xr:{bot.id.hex}" in callbacks and f"xb:{bot.id.hex}" not in callbacks
+
+    text, markup = await admin._find_card(db, "@missing_bot")
+    assert markup is None and "Не нашёл" in text
+
+
+async def test_every_admin_command_has_a_handler_and_the_menu_goes_only_to_operators(monkeypatch):
+    from meta_bot.handlers import admin
+
+    monkeypatch.setattr(get_settings(), "admin_telegram_ids", "111,222", raising=False)
+    bot = AsyncMock()
+    await admin.set_admin_commands(bot)
+    chats = {call.kwargs["scope"].chat_id for call in bot.set_my_commands.call_args_list}
+    assert chats == {111, 222}
+
+    handled = {
+        "admin", "reports", "journal", "stats", "find", "block", "restore", "ban", "unban", "export", "delete",
+        "adminhelp",
+    }
+    assert {name for name, _ in admin.ADMIN_COMMANDS} == handled
+    assert all(len(text) <= 256 for _, text in admin.ADMIN_COMMANDS)
+
+
+async def test_deleting_an_account_is_logged_and_needs_the_confirm_step(db, owner, monkeypatch):
+    from app import admin as admin_cli
+    from meta_bot.handlers import admin
+
+    monkeypatch.setattr(get_settings(), "admin_telegram_ids", "777", raising=False)
+    monkeypatch.setattr(admin_cli, "delete", AsyncMock(return_value="Удалён"))
+
+    ask = AsyncMock()
+    ask.from_user.id = 777
+    ask.data = f"xd:{owner.telegram_user_id}"
+    await admin.ask_confirm_direct(ask)
+    admin_cli.delete.assert_not_called()
+
+    go = AsyncMock()
+    go.from_user.id = 777
+    go.data = f"xdc:{owner.telegram_user_id}"
+    await admin.do_direct_action(go)
+    admin_cli.delete.assert_awaited_once()
+    assert "delete_account" in [a.action for a in await moderation.journal(db)]

@@ -12,6 +12,7 @@ from aiogram import Bot, Dispatcher
 from app.config import get_settings
 from app.services.telegram_session import build_bot_session
 from meta_bot.handlers.admin import router as admin_router
+from meta_bot.handlers.admin import set_admin_commands
 from meta_bot.handlers.menu import router as menu_router
 from meta_bot.handlers.payments import router as payments_router
 from meta_bot.handlers.support import router as support_router
@@ -46,6 +47,8 @@ async def main() -> None:
 
     # Make sure we're not stuck on a leftover webhook from a previous deploy.
     await bot.delete_webhook(drop_pending_updates=False)
+
+    await set_admin_commands(bot)
 
     logger.info("Meta-bot starting (polling)...")
     await dp.start_polling(bot)

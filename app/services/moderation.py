@@ -17,7 +17,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bot import Bot
@@ -225,3 +225,71 @@ async def open_reports(db: AsyncSession, limit: int = 10) -> list[AbuseReport]:
 async def journal(db: AsyncSession, limit: int = 20) -> list[ModerationAction]:
     result = await db.execute(select(ModerationAction).order_by(ModerationAction.created_at.desc()).limit(limit))
     return list(result.scalars())
+
+
+async def platform_stats(db: AsyncSession) -> dict[str, int]:
+    """Сводка для оператора: сколько людей, ботов и жалоб. Только числа."""
+    from app.models.bot import BotStatus
+    from app.models.payment import Payment, PaymentStatus
+
+    async def count(stmt) -> int:
+        return int((await db.execute(stmt)).scalar_one() or 0)
+
+    return {
+        "clients": await count(select(func.count()).select_from(Client)),
+        "banned": await count(select(func.count()).select_from(Client).where(Client.banned_at.is_not(None))),
+        "bots": await count(select(func.count()).select_from(Bot)),
+        "active": await count(select(func.count()).select_from(Bot).where(Bot.status == BotStatus.active)),
+        "disabled": await count(select(func.count()).select_from(Bot).where(Bot.status == BotStatus.disabled)),
+        "paused": await count(select(func.count()).select_from(Bot).where(Bot.paused.is_(True))),
+        "blocked": await count(
+            select(func.count()).select_from(Bot).where(Bot.moderation_blocked_at.is_not(None))
+        ),
+        "paid_orders": await count(
+            select(func.count()).select_from(Payment).where(Payment.status == PaymentStatus.paid)
+        ),
+        "open_reports": await count(
+            select(func.count()).select_from(AbuseReport).where(AbuseReport.status == OPEN_STATUS)
+        ),
+    }
+
+
+async def find(db: AsyncSession, arg: str) -> tuple[Client | None, Bot | None]:
+    """Найти по Telegram id владельца (число) или по имени бота (@имя, ссылка)."""
+    value = (arg or "").strip()
+    if value.lstrip("-").isdigit():
+        client = (
+            await db.execute(select(Client).where(Client.telegram_user_id == int(value)))
+        ).scalar_one_or_none()
+        return client, None
+    bot = await find_bot_by_username(db, value)
+    if bot is None:
+        return None, None
+    client = (await db.execute(select(Client).where(Client.id == bot.client_id))).scalar_one_or_none()
+    return client, bot
+
+
+async def export_client(db: AsyncSession, telegram_id: int, *, actor: str) -> dict:
+    """Выгрузка данных владельца (без токенов и ключей), с записью в журнал."""
+    from app.admin import export
+
+    try:
+        data = await export(db, telegram_id)
+    except SystemExit as exc:
+        raise ModerationError(str(exc)) from exc
+    _log(db, action="export_client", actor=actor, client_telegram_id=telegram_id)
+    await db.commit()
+    return data
+
+
+async def delete_client(db: AsyncSession, telegram_id: int, *, actor: str, reason: str = "") -> str:
+    """Удалить аккаунт со всеми ботами (необратимо). Платёжные записи остаются обезличенными."""
+    from app.admin import delete
+
+    try:
+        summary = await delete(db, telegram_id)
+    except SystemExit as exc:
+        raise ModerationError(str(exc)) from exc
+    _log(db, action="delete_account", actor=actor, reason=reason, client_telegram_id=telegram_id)
+    await db.commit()
+    return summary
