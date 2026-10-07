@@ -104,12 +104,15 @@ async def offer_prices(api_key: str) -> list[dict]:
             items += payload.get("items", [])
     out = []
     for item in items:
-        data = item.get("data") or {}
+        # В схеме товар лежит под `data`, а настоящий ответ lava.top отдаёт его прямо в элементе списка
+        # (`items[].id/title/offers`) — разбираем оба вида.
+        data = item.get("data") or item
         for offer in data.get("offers") or []:
             for price in offer.get("prices") or []:
                 out.append(
                     {
                         "product_id": data.get("id"),
+                        "dynamic": bool(data.get("isDynamicPrice")),
                         "offer_id": offer["id"],
                         "product": data.get("title"),
                         "currency": price["currency"],
@@ -209,7 +212,10 @@ class LavaTopProvider(ProviderDefaults):
             logger.warning("lava.top: каталог офферов недоступен, проверка периода пропущена")
             prices = None
         offer_id = resolve_offer_id(offer_id, prices or [], request.currency.upper(), periodicity)
-        if prices is not None:
+        # У товара с динамической ценой сумма задаётся в самом счёте (`amount`), и тогда цена блока
+        # и есть цена продажи; у обычного — цена берётся из оффера и обязана совпасть с блоком.
+        dynamic = any(p["offer_id"] == offer_id and p.get("dynamic") for p in prices or [])
+        if prices is not None and not dynamic:
             await self._check_offer_price(
                 request.credentials, offer_id, request.currency.upper(), periodicity, request.amount_minor, prices=prices
             )
@@ -218,6 +224,7 @@ class LavaTopProvider(ProviderDefaults):
             "offerId": offer_id,
             "currency": request.currency.upper(),
             "periodicity": periodicity,
+            **({"amount": round(request.amount_minor / 100, 2)} if dynamic else {}),
             "buyerLanguage": "RU",
             # Lava has no order id field; utm_content is the one value that
             # makes the round trip into the webhook untouched.

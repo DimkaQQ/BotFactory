@@ -167,6 +167,51 @@ async def test_lava_catalogue_asks_for_hidden_products_and_follows_the_pages():
     assert {p["product_id"] for p in prices} == {"p1", "p2"}
 
 
+async def test_lava_reads_the_real_catalogue_shape_and_sends_the_amount_for_dynamic_prices(monkeypatch):
+    """Настоящий ответ lava.top кладёт товар прямо в элемент списка (без `data`), а у товара с
+    динамической ценой сумма уходит в самом счёте — иначе цена блока должна была бы совпадать с ценой оффера."""
+    import json as _json
+    import unittest.mock as mock
+
+    from app.services.payments import lavatop
+
+    catalogue = {"items": [{
+        "id": "843f7652-0494-41cb-b035-62f39380576a", "title": "T", "type": "DIGITAL_PRODUCT",
+        "isDynamicPrice": True,
+        "offers": [{"id": "f290485c-81e2-4a75-9719-9eac66dceb0e", "name": "T", "prices": [
+            {"currency": "RUB", "amount": 0.0, "periodicity": "ONE_TIME"}]}],
+    }]}
+    sent: list = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json=catalogue)
+        sent.append(_json.loads(request.content))
+        return httpx.Response(201, json={"id": "inv", "paymentUrl": "https://pay/inv", "amountTotal": {"amount": 77}})
+
+    real_client = httpx.AsyncClient
+
+    def factory(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(*args, **kwargs)
+
+    prices = None
+    with mock.patch.object(lavatop.httpx, "AsyncClient", factory):
+        prices = await lavatop.offer_prices("k")
+        checkout = await get_provider("lavatop").create_checkout(
+            request(
+                LAVA,
+                amount=7700,
+                extra={"offer_id": "https://app.lava.top/products/843f7652-0494-41cb-b035-62f39380576a/content"},
+            )
+        )
+
+    assert prices[0]["dynamic"] is True and prices[0]["product_id"] == "843f7652-0494-41cb-b035-62f39380576a"
+    assert sent[0]["offerId"] == "f290485c-81e2-4a75-9719-9eac66dceb0e", "ссылка на товар превращена в оффер"
+    assert sent[0]["amount"] == 77.0, "динамическая цена: сумма блока уходит в счёт"
+    assert checkout.url == "https://pay/inv"
+
+
 # ===================================================================== ioka
 
 IOKA = {"client_id": "cid", "client_secret": "sec"}
