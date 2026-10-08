@@ -7777,3 +7777,76 @@ details.live-problems > summary::-webkit-details-marker {
   min-height: 36px;
   font-size: 13px;
 }
+
+/* ---------- Идеи и обратная связь ---------- */
+.feedback-panel__hint {
+  margin: 0 0 var(--sp-3);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.feedback-panel__kinds {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.feedback-panel__kinds .payment-settings__mode {
+  align-items: center;
+  text-align: center;
+  white-space: nowrap;
+  min-height: 44px;
+  justify-content: center;
+}
+
+@media (max-width: 420px) {
+  .feedback-panel__kinds {
+    grid-template-columns: 1fr;
+  }
+}
+
+.feedback-panel__text {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.feedback-panel__error {
+  margin: var(--sp-2) 0 0;
+  font-size: 13px;
+  color: var(--accent-danger, #d33);
+}
+
+.feedback-panel__ok {
+  margin: var(--sp-2) 0 0;
+  font-size: 13px;
+  color: var(--accent-success);
+}
+
+.feedback-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feedback-panel__item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.feedback-panel__item small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+}

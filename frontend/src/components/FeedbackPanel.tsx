@@ -62,16 +62,18 @@ export function FeedbackPanel({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="edit-panel__body">
-          <p className="payment-editor__hint">
+          <p className="feedback-panel__hint">
             Чего не хватает в конструкторе? Что неудобно? Напишите — сообщение сразу приходит разработчику. Полезное
             добавляем быстро и сообщаем вам.
           </p>
-          <div className="overview-panel__filters">
+          <div className="feedback-panel__kinds" role="tablist" aria-label="Тип обращения">
             {CATEGORIES.map(([key, label]) => (
               <button
                 key={key}
                 type="button"
-                className={`overview-panel__filter${category === key ? " is-active" : ""}`}
+                role="tab"
+                aria-selected={category === key}
+                className={`payment-settings__mode${category === key ? " payment-settings__mode--active" : ""}`}
                 onClick={() => setCategory(key)}
               >
                 {label}
@@ -79,29 +81,30 @@ export function FeedbackPanel({ onClose }: { onClose: () => void }) {
             ))}
           </div>
           <textarea
-            className="payment-editor__input"
+            className="payment-editor__input feedback-panel__text"
             rows={5}
             maxLength={2000}
             placeholder="Опишите своими словами…"
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
-          {error && <p className="payment-editor__error">{error}</p>}
-          {sent && <p className="payment-editor__hint">Спасибо! Отправлено.</p>}
+          {error && <p className="feedback-panel__error" role="alert">{error}</p>}
+          {sent && <p className="feedback-panel__ok">Спасибо! Отправлено.</p>}
           <button
             type="button"
-            className="bot-payments-button"
+            className="payment-settings__save"
             disabled={busy || text.trim().length < 10}
             onClick={send}
           >
             {busy ? "Отправляем…" : "Отправить"}
           </button>
+          {text.trim().length < 10 && <p className="feedback-panel__hint">Напишите хотя бы 10 символов.</p>}
           {mine.length > 0 && (
             <>
               <h3 className="buttons-editor__field-label">Мои обращения</h3>
-              <ul className="overview-panel__list">
+              <ul className="feedback-panel__list">
                 {mine.map((i) => (
-                  <li key={i.id}>
+                  <li key={i.id} className="feedback-panel__item">
                     <div>{i.text}</div>
                     <small>{i.done ? "✅ " : ""}{i.status}</small>
                   </li>
