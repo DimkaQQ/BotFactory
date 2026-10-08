@@ -33,24 +33,37 @@ MAX_ACTIVE_PER_PERSON = 3
 
 class BookingLimitError(Exception):
     """У человека уже максимум активных записей."""
-DEFAULT_TZ = "Asia/Almaty"
+
+
+#: Часовой пояс по умолчанию, если владелец ничего не выбрал (редактор сам
+#: подставляет пояс из браузера владельца).
+DEFAULT_TZ = "UTC"
 WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 MONTHS = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
+MAX_INTERVALS_PER_DAY = 6
+MAX_EXCEPTIONS = 366
+
+Interval = tuple[time, time]
 
 
 @dataclass(frozen=True)
 class Schedule:
-    days: tuple[int, ...]
-    start: time
-    end: time
+    #: Рабочие часы по дням недели (0 = понедельник): несколько промежутков на день.
+    weekly: dict[int, tuple[Interval, ...]]
+    #: Исключения по датам: пустой список — день закрыт, иначе свои часы только на эту дату.
+    exceptions: dict[date, tuple[Interval, ...]]
     slot_minutes: int
     horizon_days: int
     notice_hours: int
     tz: ZoneInfo
     tz_name: str
 
+    @property
+    def days(self) -> tuple[int, ...]:
+        return tuple(sorted(d for d, intervals in self.weekly.items() if intervals))
 
-def _parse_time(value, default: time) -> time:
+
+def _parse_time(value, default: time | None = None) -> time | None:
     try:
         hours, minutes = str(value).split(":")[:2]
         return time(int(hours), int(minutes))
@@ -58,13 +71,57 @@ def _parse_time(value, default: time) -> time:
         return default
 
 
+def _parse_intervals(raw) -> tuple[Interval, ...]:
+    """[["10:00","13:00"], ["14:00","19:00"]] → отсортированные непересекающиеся промежутки."""
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    found: list[Interval] = []
+    for item in raw[:MAX_INTERVALS_PER_DAY * 2]:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            continue
+        start, end = _parse_time(item[0]), _parse_time(item[1])
+        if start is None or end is None or end <= start:
+            continue
+        found.append((start, end))
+    found.sort()
+    merged: list[Interval] = []
+    for start, end in found:
+        if merged and start < merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return tuple(merged[:MAX_INTERVALS_PER_DAY])
+
+
 def schedule_of(content: dict | None) -> Schedule:
     content = content or {}
-    raw_days = content.get("days")
-    if not isinstance(raw_days, (list, tuple)):
-        raw_days = [0, 1, 2, 3, 4]  # не задано (или записано не списком): будни, а не сбой диалога
-    # Список без единого дня — это «запись закрыта», а не «будни»: владелец снял все галочки.
-    days = tuple(sorted({int(d) for d in raw_days if str(d).isdigit() and 0 <= int(d) <= 6}))
+    weekly: dict[int, tuple[Interval, ...]] = {}
+    raw_weekly = content.get("weekly")
+    if isinstance(raw_weekly, dict):
+        for key, raw in raw_weekly.items():
+            if str(key).isdigit() and 0 <= int(key) <= 6:
+                weekly[int(key)] = _parse_intervals(raw)
+    else:
+        # Прежний формат: одни часы на выбранные дни недели.
+        raw_days = content.get("days")
+        if not isinstance(raw_days, (list, tuple)):
+            raw_days = [0, 1, 2, 3, 4]
+        start = _parse_time(content.get("start"), time(10, 0))
+        end = _parse_time(content.get("end"), time(19, 0))
+        # Список без единого дня — это «запись закрыта», а не «будни».
+        for d in {int(d) for d in raw_days if str(d).isdigit() and 0 <= int(d) <= 6}:
+            weekly[d] = _parse_intervals([[start.strftime("%H:%M"), end.strftime("%H:%M")]])
+
+    exceptions: dict[date, tuple[Interval, ...]] = {}
+    raw_exceptions = content.get("exceptions")
+    if isinstance(raw_exceptions, dict):
+        for key, raw in list(raw_exceptions.items())[:MAX_EXCEPTIONS]:
+            try:
+                day = date.fromisoformat(str(key))
+            except ValueError:
+                continue
+            exceptions[day] = _parse_intervals(raw)
+
     tz_name = str(content.get("tz") or DEFAULT_TZ)
     try:
         tz = ZoneInfo(tz_name)
@@ -83,9 +140,8 @@ def schedule_of(content: dict | None) -> Schedule:
     except (TypeError, ValueError):
         notice = 2
     return Schedule(
-        days=days,
-        start=_parse_time(content.get("start"), time(10, 0)),
-        end=_parse_time(content.get("end"), time(19, 0)),
+        weekly=weekly,
+        exceptions=exceptions,
         slot_minutes=max(15, min(slot, 480)),
         horizon_days=max(1, min(horizon, 60)),
         notice_hours=max(0, min(notice, 168)),
@@ -94,22 +150,46 @@ def schedule_of(content: dict | None) -> Schedule:
     )
 
 
+def intervals_for(schedule: Schedule, day: date) -> tuple[Interval, ...]:
+    if day in schedule.exceptions:
+        return schedule.exceptions[day]
+    return schedule.weekly.get(day.weekday(), ())
+
+
 def day_slots(schedule: Schedule, day: date) -> list[datetime]:
     """Все возможные начала слотов в этот день (UTC), без учёта занятости."""
-    if day.weekday() not in schedule.days:
-        return []
-    cursor = datetime.combine(day, schedule.start, tzinfo=schedule.tz)
-    end = datetime.combine(day, schedule.end, tzinfo=schedule.tz)
+    out: list[datetime] = []
     step = timedelta(minutes=schedule.slot_minutes)
-    out = []
-    while cursor + step <= end:
-        start = cursor.astimezone(timezone.utc)
-        # Переход на летнее время: «02:30» может не существовать — такой слот пропускаем,
-        # иначе кнопка вела бы на другое время, а запись бы отклонялась.
-        if start.astimezone(schedule.tz).replace(tzinfo=None) == cursor.replace(tzinfo=None) and start not in out:
-            out.append(start)
-        cursor += step
+    for start_t, end_t in intervals_for(schedule, day):
+        cursor = datetime.combine(day, start_t, tzinfo=schedule.tz)
+        end = datetime.combine(day, end_t, tzinfo=schedule.tz)
+        while cursor + step <= end:
+            start = cursor.astimezone(timezone.utc)
+            # Переход на летнее время: «02:30» может не существовать — такой слот пропускаем,
+            # иначе кнопка вела бы на другое время, а запись бы отклонялась.
+            if start.astimezone(schedule.tz).replace(tzinfo=None) == cursor.replace(tzinfo=None) and start not in out:
+                out.append(start)
+            cursor += step
+    out.sort()
     return out
+
+
+def clean_schedule(payload: dict) -> dict:
+    """Привести присланное из редактора к безопасному виду (для сохранения в блок)."""
+    schedule = schedule_of(payload)
+    return {
+        "weekly": {
+            str(d): [[a.strftime("%H:%M"), b.strftime("%H:%M")] for a, b in schedule.weekly.get(d, ())] for d in range(7)
+        },
+        "exceptions": {
+            day.isoformat(): [[a.strftime("%H:%M"), b.strftime("%H:%M")] for a, b in intervals]
+            for day, intervals in sorted(schedule.exceptions.items())
+        },
+        "slot_minutes": schedule.slot_minutes,
+        "horizon_days": schedule.horizon_days,
+        "notice_hours": schedule.notice_hours,
+        "tz": schedule.tz_name,
+    }
 
 
 def local_day(schedule: Schedule, moment: datetime) -> date:

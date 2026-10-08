@@ -6,11 +6,13 @@ import {
   type CalendarView,
   type CrmCard,
   type CrmCustomer,
+  type BlockContent,
   ApiError,
   builderApi,
   currencyUnit as unit,
   formatAmount,
 } from "../api/builderApi";
+import { ScheduleFields } from "./BookingEditor";
 import { confirmDialog } from "../confirm";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
@@ -297,6 +299,11 @@ function CalendarTab({ bots }: { bots: Bot[] }) {
   const [view, setView] = useState<CalendarView | null>(null);
   const [selected, setSelected] = useState<CalendarSlot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Расписание из блока «Запись»: правится здесь же, без похода в сценарий.
+  const [schedule, setSchedule] = useState<BlockContent | null>(null);
+  const [hasBlock, setHasBlock] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [savedAt, setSavedAt] = useState(false);
 
   // Ответ запоздавшего запроса (быстро сменили бот или неделю) не должен затирать свежий.
   const latest = useRef(0);
@@ -314,11 +321,47 @@ function CalendarTab({ bots }: { bots: Bot[] }) {
     }
   }, [botId, start]);
 
+  const loadSchedule = useCallback(async () => {
+    if (!botId) return;
+    try {
+      const res = await builderApi.getBookingSchedule(botId);
+      setHasBlock(res.configured);
+      setSchedule(res.configured ? (res as BlockContent) : null);
+    } catch {
+      setSchedule(null);
+    }
+  }, [botId]);
+
+  async function saveSchedule(next: BlockContent) {
+    try {
+      const res = await builderApi.saveBookingSchedule(botId, next);
+      setSchedule(res.configured ? (res as BlockContent) : null);
+      setSavedAt(true);
+      setTimeout(() => setSavedAt(false), 2000);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось сохранить расписание");
+    }
+  }
+
+  function toggleDay(date: string, closed: boolean) {
+    if (!schedule) return;
+    const exceptions = { ...(schedule.exceptions ?? {}) };
+    if (closed) delete exceptions[date];
+    else exceptions[date] = [];
+    void saveSchedule({ ...schedule, exceptions });
+  }
+
   useEffect(() => {
     setView(null);
     setSelected(null);
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setEditing(false);
+    void loadSchedule();
+  }, [loadSchedule]);
 
   async function act(fn: () => Promise<unknown>) {
     try {
@@ -356,6 +399,26 @@ function CalendarTab({ bots }: { bots: Bot[] }) {
         </div>
       </div>
       {error && <p className="publish-form__error">{error}</p>}
+      {hasBlock && schedule && (
+        <div className="calendar__schedule">
+          <button type="button" className="calendar__schedule-toggle" onClick={() => setEditing(!editing)} aria-expanded={editing}>
+            ⚙ Расписание: дни, часы, перерывы, часовой пояс {editing ? "▲" : "▼"}
+          </button>
+          {editing && (
+            <>
+              <ScheduleFields content={schedule} onChange={setSchedule} />
+              <button type="button" className="payment-settings__save" onClick={() => void saveSchedule(schedule)}>
+                {savedAt ? "✓ Сохранено" : "Сохранить расписание"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {!hasBlock && (
+        <p className="app-hint">
+          В сценарии этого бота нет блока «Запись». Добавьте его — и здесь появится расписание, которое вы настроите сами.
+        </p>
+      )}
       {!view && !error && <p className="app-hint">Загружаем…</p>}
       {view && !view.configured && (
         <p className="app-hint">
@@ -370,7 +433,18 @@ function CalendarTab({ bots }: { bots: Bot[] }) {
       )}
       {view?.days.map((day) => (
         <div className="calendar__day" key={day.date}>
-          <strong>{day.label}</strong>
+          <div className="calendar__day-head">
+            <strong>{day.label}</strong>
+            {schedule && (
+              <button
+                type="button"
+                className="calendar__day-toggle"
+                onClick={() => toggleDay(day.date, Boolean((schedule.exceptions ?? {})[day.date]?.length === 0))}
+              >
+                {(schedule.exceptions ?? {})[day.date]?.length === 0 ? "Открыть день" : "Закрыть день"}
+              </button>
+            )}
+          </div>
           {day.slots.length === 0 && <span className="overview-panel__sub">выходной</span>}
           <div className="calendar__slots">
             {day.slots.map((slot) => (

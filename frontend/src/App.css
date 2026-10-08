@@ -7678,3 +7678,102 @@ details.live-problems > summary::-webkit-details-marker {
     min-height: 44px;
   }
 }
+
+/* ---------- Расписание записи ---------- */
+.schedule__day {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+}
+
+.schedule__day--on {
+  border-color: color-mix(in srgb, var(--tg-button) 40%, var(--tg-separator));
+}
+
+.schedule__day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.schedule__day-head input {
+  width: 22px;
+  height: 22px;
+}
+
+.schedule__intervals {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.schedule__interval,
+.schedule__exception-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.schedule__interval .payment-editor__input,
+.schedule__exception-head .payment-editor__input {
+  min-width: 0;
+  flex: 1;
+}
+
+.schedule__remove,
+.schedule__add,
+.schedule__copy,
+.calendar__day-toggle,
+.calendar__schedule-toggle {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--tg-separator);
+  background: var(--tg-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.schedule__remove {
+  width: 44px;
+  padding: 0;
+}
+
+.schedule__add,
+.schedule__copy {
+  align-self: flex-start;
+  color: var(--tg-link);
+}
+
+.calendar__schedule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.calendar__schedule-toggle {
+  width: 100%;
+  text-align: left;
+  font-weight: 600;
+}
+
+.calendar__day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.calendar__day-toggle {
+  min-height: 36px;
+  font-size: 13px;
+}

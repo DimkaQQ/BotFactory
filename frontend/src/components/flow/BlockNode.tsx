@@ -2,6 +2,7 @@ import { memo } from "react";
 import { Handle, Position } from "@xyflow/react";
 
 import type { BotBlock } from "../../api/builderApi";
+import { scheduleSummary } from "../../booking";
 import { BLOCK_TYPE_BY_ID } from "../../blockTypes";
 import { useWideScreen } from "../../hooks/useWideScreen";
 import { humanDelay } from "../../humanDelay";
@@ -28,7 +29,7 @@ function preview(block: BotBlock): string {
     case "buttons":
       return c.text?.trim() || "Текст перед кнопками";
     case "booking":
-      return `📅 Запись: ${c.start ?? "10:00"}–${c.end ?? "19:00"}, слот ${c.slot_minutes ?? 60} мин`;
+      return `${scheduleSummary(c)}, запись ${c.slot_minutes ?? 60} мин`;
     case "contact":
       return c.ask_name || c.ask_phone
         ? `Спросим: ${[c.ask_name && "имя", c.ask_phone && "телефон"].filter(Boolean).join(" и ")}`

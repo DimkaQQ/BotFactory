@@ -33,6 +33,10 @@ export interface BlockContent {
   days?: number[];
   start?: string;
   end?: string;
+  /** Часы по дням недели («0» — понедельник): список промежутков [с, до]. Пустой — выходной. */
+  weekly?: Record<string, [string, string][]>;
+  /** Особые даты (YYYY-MM-DD): пустой список — закрыто, иначе свои часы. */
+  exceptions?: Record<string, [string, string][]>;
   slot_minutes?: number;
   horizon_days?: number;
   notice_hours?: number;
@@ -362,6 +366,20 @@ export const builderApi = {
     request<{ id: string }>(`/bots/${botId}/calendar/block`, { method: "POST", body: JSON.stringify({ starts_at: startsAt }) }),
   cancelBooking: (botId: string, bookingId: string) =>
     request<{ cancelled: boolean; informed: boolean }>(`/bots/${botId}/bookings/${bookingId}/cancel`, { method: "POST" }),
+  getBookingSchedule: (botId: string) => request<BookingSchedule>(`/bots/${botId}/booking-schedule`),
+  saveBookingSchedule: (botId: string, content: BlockContent) =>
+    request<BookingSchedule>(`/bots/${botId}/booking-schedule`, {
+      method: "PUT",
+      body: JSON.stringify({
+        weekly: content.weekly,
+        exceptions: content.exceptions ?? {},
+        slot_minutes: content.slot_minutes,
+        horizon_days: content.horizon_days,
+        notice_hours: content.notice_hours,
+        tz: content.tz,
+        reminders: content.reminders,
+      }),
+    }),
   buttonStats: (botId: string, days = 30) =>
     request<ButtonStats>(`/bots/${botId}/button-stats?days=${days}`),
   listSubscribers: (botId: string) => request<SubscribersReport>(`/bots/${botId}/subscribers`),
@@ -575,6 +593,8 @@ export interface CrmCard extends Omit<CrmCustomer, "orders" | "bookings"> {
     choices: string[];
   }[];
 }
+
+export type BookingSchedule = { configured: false } | ({ configured: true; block_id: string } & BlockContent);
 
 export interface CalendarSlot {
   starts_at: string;

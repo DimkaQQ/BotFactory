@@ -1,4 +1,5 @@
 import type { BlockContent, BlockType } from "./api/builderApi";
+import { defaultWeekly, localTimezone } from "./booking";
 
 export interface BotTemplate {
   /** Only offered when subscriptions are enabled. */
@@ -265,13 +266,12 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         block_type: "booking",
         content: {
           text: "Выберите день:",
-          days: [0, 1, 2, 3, 4],
-          start: "10:00",
-          end: "19:00",
+          weekly: defaultWeekly(),
+          exceptions: {},
           slot_minutes: 60,
           horizon_days: 14,
           notice_hours: 2,
-          tz: "Asia/Almaty",
+          tz: localTimezone(),
         },
       },
       {
@@ -331,13 +331,12 @@ export const BOT_TEMPLATES: BotTemplate[] = [
         block_type: "booking",
         content: {
           text: "Выберите день:",
-          days: [0, 1, 2, 3, 4],
-          start: "10:00",
-          end: "18:00",
+          weekly: { ...defaultWeekly(), "0": [["10:00", "18:00"]], "1": [["10:00", "18:00"]], "2": [["10:00", "18:00"]], "3": [["10:00", "18:00"]], "4": [["10:00", "18:00"]] },
+          exceptions: {},
           slot_minutes: 60,
           horizon_days: 14,
           notice_hours: 2,
-          tz: "Asia/Almaty",
+          tz: localTimezone(),
         },
       },
       { block_type: "delivery", content: { text: "Ждём вас! Если планы изменятся, напишите — перенесём 🙏" } },

@@ -231,3 +231,51 @@ async def test_one_person_cannot_hold_more_than_three_active_bookings(db, owner,
     # другой человек не затронут
     other = await bk.reserve(db, bot_id=bot_id, block=blocks[0], schedule=schedule, start=bk.day_slots(schedule, day + timedelta(days=1))[0], telegram_user_id=10, chat_id=10)
     assert other is not None
+
+
+def test_each_weekday_has_its_own_hours_with_a_break_and_dates_can_override():
+    schedule = bk.schedule_of(
+        {
+            "tz": "UTC",
+            "slot_minutes": 60,
+            "weekly": {"0": [["10:00", "12:00"], ["14:00", "16:00"]], "1": [["09:00", "10:00"]]},
+            "exceptions": {"2026-10-19": [], "2026-10-20": [["18:00", "20:00"]]},
+        }
+    )
+    monday, tuesday, wednesday = datetime(2026, 10, 12).date(), datetime(2026, 10, 13).date(), datetime(2026, 10, 14).date()
+    assert [s.strftime("%H:%M") for s in bk.day_slots(schedule, monday)] == ["10:00", "11:00", "14:00", "15:00"]
+    assert [s.strftime("%H:%M") for s in bk.day_slots(schedule, tuesday)] == ["09:00"]
+    assert bk.day_slots(schedule, wednesday) == []  # день не задан — выходной
+    assert bk.day_slots(schedule, datetime(2026, 10, 19).date()) == []  # понедельник закрыт датой
+    assert [s.strftime("%H:%M") for s in bk.day_slots(schedule, datetime(2026, 10, 20).date())] == ["18:00", "19:00"]
+
+
+def test_broken_intervals_are_ignored_and_default_timezone_is_not_almaty():
+    schedule = bk.schedule_of({"weekly": {"0": [["12:00", "10:00"], ["x", "y"], ["10:00", "11:00"], ["10:30", "12:00"]]}})
+    assert [(a.strftime("%H:%M"), b.strftime("%H:%M")) for a, b in schedule.weekly[0]] == [("10:00", "12:00")]
+    assert schedule.tz_name == "UTC"
+
+
+async def test_schedule_can_be_edited_from_the_calendar(api, auth, owner, stranger, make_bot, db):
+    bot, _blocks = await make_bot(owner, [(BlockType.booking, _cfg())])
+    bot_id = bot.id
+    mine, theirs = auth(owner), auth(stranger)
+
+    current = (await api.get(f"/api/bots/{bot_id}/booking-schedule", headers=mine)).json()
+    assert current["configured"] and current["weekly"]["0"]
+
+    saved = await api.put(
+        f"/api/bots/{bot_id}/booking-schedule",
+        headers=mine,
+        json={"weekly": {"0": [["09:00", "12:00"], ["13:00", "17:00"]], "5": []}, "exceptions": {"2026-12-31": []},
+              "tz": "Europe/Moscow", "slot_minutes": 30},
+    )
+    assert saved.status_code == 200
+    body = saved.json()
+    assert body["weekly"]["0"] == [["09:00", "12:00"], ["13:00", "17:00"]] and body["weekly"]["5"] == []
+    assert body["exceptions"] == {"2026-12-31": []} and body["tz"] == "Europe/Moscow" and body["slot_minutes"] == 30
+
+    bad_tz = await api.put(f"/api/bots/{bot_id}/booking-schedule", headers=mine, json={"tz": "Mars/Base"})
+    assert bad_tz.status_code == 400
+    assert (await api.get(f"/api/bots/{bot_id}/booking-schedule", headers=theirs)).status_code == 404
+    assert (await api.put(f"/api/bots/{bot_id}/booking-schedule", headers=theirs, json={"slot_minutes": 15})).status_code == 404

@@ -1,4 +1,5 @@
 import type { BlockContent, BlockType } from "./api/builderApi";
+import { defaultWeekly, localTimezone } from "./booking";
 
 export interface BlockTypeDef {
   type: BlockType;
@@ -106,13 +107,12 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     hint: "Клиент выбирает день и время в календаре",
     defaultContent: () => ({
       text: "Выберите день:",
-      days: [0, 1, 2, 3, 4],
-      start: "10:00",
-      end: "19:00",
+      weekly: defaultWeekly(),
+      exceptions: {},
       slot_minutes: 60,
       horizon_days: 14,
       notice_hours: 2,
-      tz: "Asia/Almaty",
+      tz: localTimezone(),
     }),
   },
   {

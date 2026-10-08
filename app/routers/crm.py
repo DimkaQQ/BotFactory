@@ -323,3 +323,67 @@ async def cancel_booking(
         except Exception:  # noqa: BLE001
             informed = False
     return {"cancelled": True, "informed": informed}
+
+
+# ------------------------------------------------------- расписание записи
+
+_SCHEDULE_KEYS = ("weekly", "exceptions", "slot_minutes", "horizon_days", "notice_hours", "tz", "reminders")
+
+
+def _schedule_view(block) -> dict:
+    content = block.content or {}
+    clean = bk.clean_schedule(content)
+    return {
+        "configured": True,
+        "block_id": str(block.id),
+        **clean,
+        "reminders": content.get("reminders") is not False,
+    }
+
+
+@router.get("/bots/{bot_id}/booking-schedule")
+async def get_booking_schedule(bot: Bot = Depends(get_owned_bot), db: AsyncSession = Depends(get_db)) -> dict:
+    """Расписание записи (из блока «Запись»), чтобы править его прямо в календаре."""
+    _schedule, block = await bk.first_schedule(db, bot.id)
+    if block is None:
+        return {"configured": False}
+    return _schedule_view(block)
+
+
+class SchedulePayload(BaseModel):
+    weekly: dict | None = None
+    exceptions: dict | None = None
+    slot_minutes: int | None = Field(default=None, ge=15, le=480)
+    horizon_days: int | None = Field(default=None, ge=1, le=60)
+    notice_hours: int | None = Field(default=None, ge=0, le=168)
+    tz: str | None = Field(default=None, max_length=64)
+    reminders: bool | None = None
+
+
+@router.put("/bots/{bot_id}/booking-schedule")
+async def put_booking_schedule(
+    payload: SchedulePayload, bot: Bot = Depends(get_owned_bot), db: AsyncSession = Depends(get_db)
+) -> dict:
+    _schedule, block = await bk.first_schedule(db, bot.id)
+    if block is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Сначала добавьте в сценарий блок «Запись»")
+    sent = payload.model_dump(exclude_none=True)
+    if "tz" in sent:
+        from zoneinfo import ZoneInfo
+
+        try:
+            ZoneInfo(sent["tz"])
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Неизвестный часовой пояс") from exc
+    merged = {**(block.content or {}), **sent}
+    cleaned = bk.clean_schedule(merged)
+    content = {**(block.content or {}), **cleaned}
+    # прежний формат (дни + одни часы) больше не нужен: расписание теперь в `weekly`
+    for legacy in ("days", "start", "end"):
+        content.pop(legacy, None)
+    if "reminders" in sent:
+        content["reminders"] = bool(sent["reminders"])
+    block.content = content
+    await db.commit()
+    await db.refresh(block)
+    return _schedule_view(block)
