@@ -567,7 +567,13 @@ async def recent_choices(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: 
 
 
 async def _open_platform_payment(
-    db: AsyncSession, *, bot_id: uuid.UUID, kind: PaymentKind, amount_minor: int, currency: str
+    db: AsyncSession,
+    *,
+    bot_id: uuid.UUID | None = None,
+    client_id: uuid.UUID | None = None,
+    kind: PaymentKind,
+    amount_minor: int,
+    currency: str,
 ) -> Payment | None:
     """This bot's still-open invoice of this kind, if there is one.
 
@@ -583,7 +589,7 @@ async def _open_platform_payment(
     result = await db.execute(
         select(Payment)
         .where(
-            Payment.bot_id == bot_id,
+            (Payment.client_id == client_id) if client_id is not None else (Payment.bot_id == bot_id),
             Payment.kind == kind,
             Payment.status == PaymentStatus.pending,
             Payment.amount_minor == amount_minor,
@@ -660,8 +666,10 @@ async def create_renewal_payment(
     if method.renewal_price_minor <= 0:
         raise ProviderError("Продление не требуется — бот оплачен бессрочно")
 
+    # Подписка одна на клиента: открытый счёт на неё переиспользуется, из какого
+    # бота ни нажали «Продлить».
     existing = await _open_platform_payment(
-        db, bot_id=bot.id, kind=PaymentKind.renewal,
+        db, client_id=client_id, kind=PaymentKind.renewal,
         amount_minor=method.renewal_price_minor, currency=method.currency,
     )
     if existing is not None:
@@ -676,7 +684,7 @@ async def create_renewal_payment(
         is_test=method.is_test,
         amount_minor=method.renewal_price_minor,
         currency=method.currency,
-        description=f"Работа бота, {period} дн. · {bot.name or 'Новый бот'}",
+        description=f"Подписка на все боты, {period} дн.",
         return_url=f"{settings.public_base_url.rstrip('/')}/?paid={bot.id}",
         bot_id=bot.id,
         client_id=client_id,
@@ -1562,33 +1570,34 @@ async def _extend_paid_period(db: AsyncSession, payment: Payment, now: datetime)
     if bot is None:
         logger.error("Payment %s settled for bot %s, which no longer exists", payment.id, payment.bot_id)
         return
+    # Подписка одна на все боты клиента: платёж двигает счётчик у всех сразу.
+    siblings = await platform_billing.client_bots(db, bot.client_id)
 
     if payment.kind == PaymentKind.publication:
         if bot.publication_paid_at is not None:
-            # A second launch payment for a bot already launched. Reusing an
-            # open invoice stops most of these, but two invoices created far
-            # enough apart can still both settle. This used to `return`,
-            # which took the money and gave nothing — so it buys a period
-            # instead. The client is out of pocket either way; at least now
-            # they own something for it, and the log says what happened.
+            # Второй платёж за запуск уже запущенного бота (два счёта, созданные
+            # с большим интервалом, оба могут сойтись). Деньги взяты, поэтому они
+            # засчитываются как продление подписки; в логе видно, что произошло.
             logger.warning(
-                "Payment %s is a second launch fee for bot %s — credited as a period instead",
+                "Payment %s is a second launch fee for bot %s — credited as a subscription period instead",
                 payment.id, bot.id,
             )
-            platform_billing.extend_period(bot, now)
-            return
-        bot.publication_paid_at = now
-        # The launch price includes the first period; charging for it again
-        # a moment later would be taking the same week twice.
-        platform_billing.open_first_period(bot, now)
-        return
-
-    platform_billing.extend_period(bot, now)
-    # Paying for the next period is also how a suspended bot comes back, and
-    # the owner should not have to find a second button for it. Committed
-    # inside, before the webhook is set, so the row says "active" by the
-    # time Telegram starts delivering again.
-    await platform_billing.resume(db, bot)
+            platform_billing.extend_all(siblings, bot, now)
+        else:
+            bot.publication_paid_at = now
+            # Запуск — разовый платёж за бота. Если подписки ещё нет (или она
+            # кончилась), он включает первый месяц для всех ботов клиента; если
+            # она идёт — бот просто встаёт под неё.
+            platform_billing.open_for_launch(siblings, bot, now)
+    else:
+        platform_billing.extend_all(siblings, bot, now)
+    await db.flush()
+    # Оплата подписки — это и возврат остановленных ботов, второй кнопки
+    # искать не нужно. Внутри `resume` коммит, до установки вебхука, чтобы к
+    # моменту, когда Telegram снова начнёт доставлять, строка уже говорила
+    # «в эфире».
+    for other in siblings:
+        await platform_billing.resume(db, other)
 
 
 async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str | None) -> bool:
@@ -1692,7 +1701,7 @@ async def _confirm_to_client(db: AsyncSession, payment: Payment) -> None:
             )
         else:
             until = dates.day(bot.paid_until) if bot.paid_until else ""
-            text = f"✅ Оплата получена: {amount}. Бот «{name}» работает" + (f" до {until}." if until else ".")
+            text = f"✅ Оплата получена: {amount}. Подписка на все ваши боты продлена" + (f" до {until}." if until else ".")
         await platform_billing._tell_owner(db, bot, text)
     except Exception:  # noqa: BLE001
         logger.info("Could not confirm payment %s to the client", payment.id, exc_info=True)

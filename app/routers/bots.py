@@ -271,6 +271,16 @@ async def publish_bot(
             ),
         )
 
+    # Подписка одна на все боты: бот, запуск которого оплачен давно, а подписка с тех
+    # пор кончилась, в эфир не выйдет — его сразу сняла бы проверка периода.
+    from app.services import platform_billing
+
+    if platform_billing.state_of(bot).state == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Подписка не продлена — продлите её, и боты вернутся в эфир.",
+        )
+
     try:
         me = await validate_bot_token(payload.token)
     except InvalidBotToken as exc:

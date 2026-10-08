@@ -176,9 +176,10 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
               conversation as a refund request. */}
           {info.renewal_price_minor > 0 && (
             <p className="paywall__terms">
-              Дальше — {price(info.renewal_price_minor, info.currency)} за каждые{" "}
-              {info.renewal_period_days} {plural(info.renewal_period_days, ["день", "дня", "дней"])} работы. Первый период входит в эту оплату: следующий счёт придёт
-              через {info.renewal_period_days} {plural(info.renewal_period_days, ["день", "дня", "дней"])}, и бот напомнит заранее.
+              Подписка — {price(info.renewal_price_minor, info.currency)} за каждые {info.renewal_period_days}{" "}
+              {plural(info.renewal_period_days, ["день", "дня", "дней"])}, и она одна на все ваши боты, сколько бы их ни
+              было. Если подписки ещё нет, первый период входит в эту оплату; каждый следующий бот оплачивается только
+              за запуск. Напомним заранее, до конца периода.
             </p>
           )}
         </div>

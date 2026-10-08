@@ -104,14 +104,14 @@ export function BillingBanner({ botId, billing, onRenewed }: Props) {
             <p className="billing__title">
               Оплаченный период заканчивается{billing.days_left === 0 ? " сегодня" : ` через ${billing.days_left} дн.`}
             </p>
-            <p className="billing__hint">Продли сейчас — бот продолжит работать без перерыва.</p>
+            <p className="billing__hint">Продли подписку сейчас — все боты продолжат работать без перерыва.</p>
           </>
         )}
         {billing.state === "grace" && (
           <>
             <p className="billing__title">Период закончился {day(billing.paid_until)}</p>
             <p className="billing__hint">
-              Бот пока работает — до {day(billing.grace_until)}, потом уйдёт с эфира. Сценарий, настройки и
+              Боты пока работают — до {day(billing.grace_until)}, потом уйдут с эфира. Сценарии, настройки и
               заказы останутся на месте.
             </p>
           </>
@@ -123,7 +123,7 @@ export function BillingBanner({ botId, billing, onRenewed }: Props) {
           <>
             <p className="billing__title">Период не продлён с {day(billing.paid_until)}</p>
             <p className="billing__hint">
-              Оплати продление — бот вернётся в строй сразу же, с тем же сценарием и той же кассой.
+              Оплати подписку — все боты вернутся в строй сразу же, с теми же сценариями и той же кассой.
             </p>
           </>
         )}
@@ -145,7 +145,7 @@ export function BillingBanner({ botId, billing, onRenewed }: Props) {
         </div>
       ) : (
         <button type="button" className="publish-button" onClick={handleRenew} disabled={starting}>
-          {starting ? "Готовим счёт…" : `Продлить на ${billing.period_days} ${plural(billing.period_days, ["день", "дня", "дней"])} · ${price}`}
+          {starting ? "Готовим счёт…" : `Продлить подписку на ${billing.period_days} ${plural(billing.period_days, ["день", "дня", "дней"])} · ${price}`}
         </button>
       )}
     </div>

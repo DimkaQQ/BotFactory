@@ -132,9 +132,10 @@ class Settings(BaseSettings):
     # Each entry carries its own price, because the same publication costs
     # $9, ₸4500 and 9 USDT — one number in one currency cannot express that.
     #
-    # `renewal_price_minor` is what the bot costs per period afterwards; 0
-    # (or absent) means this method sells the launch only and the bot then
-    # runs forever.
+    # `price_minor` is paid once for EVERY bot launched; `renewal_price_minor`
+    # is ONE subscription per period for ALL of a client's bots together. 0
+    # (or absent) means this method sells the launch only and the bots then
+    # run forever.
     #
     #   [{"provider": "stripe",    "price_minor": 9900,   "renewal_price_minor": 990,
     #     "currency": "USD",

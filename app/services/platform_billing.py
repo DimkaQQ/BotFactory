@@ -151,6 +151,65 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
+def shared_until(bots) -> datetime | None:
+    """До какого числа оплачена подписка клиента: она одна на все его боты,
+    поэтому у активных ботов дата общая; берём самую позднюю."""
+    dates_ = [_aware(b.paid_until) for b in bots if b.paid_until is not None]
+    return max(dates_) if dates_ else None
+
+
+def open_for_launch(bots, bot: BotModel, at: datetime) -> None:
+    """Запуск ещё одного бота оплачен.
+
+    Подписка одна на все боты клиента. Если она сейчас идёт, новый бот просто
+    встаёт под неё (запуск — разовый платёж за бота, лишнего месяца он не
+    покупает и ничего не продлевает). Если подписки нет или она кончилась,
+    запуск включает первый месяц — для всех ботов клиента сразу.
+    """
+    if not charges_per_period():
+        return
+    until = shared_until(bots)
+    if until is not None and until > at:
+        bot.paid_until = until
+        return
+    new_until = at + timedelta(days=period_days())
+    for other in bots:
+        if other is bot or other.paid_until is not None:
+            other.paid_until = new_until
+            other.billing_notice_stage = NOTICE_NONE
+
+
+def extend_all(bots, paying: BotModel, at: datetime) -> None:
+    """Продление подписки: ещё один период для всех ботов клиента сразу.
+
+    Считается от более позднего из «конца оплаченного» и «сейчас» — как и
+    `extend_period` для одного бота.
+    """
+    base = max(shared_until(bots) or at, at)
+    new_until = base + timedelta(days=period_days())
+    for other in bots:
+        if other is paying or other.paid_until is not None:
+            other.paid_until = new_until
+            other.billing_notice_stage = NOTICE_NONE
+
+
+async def client_bots(db: AsyncSession, client_id) -> list[BotModel]:
+    return list(
+        (
+            await db.execute(select(BotModel).where(BotModel.client_id == client_id).order_by(BotModel.created_at, BotModel.id))
+        ).scalars().all()
+    )
+
+
+async def _is_anchor(db: AsyncSession, bot: BotModel) -> bool:
+    """Предупреждения о подписке шлём один раз на клиента, а не по разу на каждый
+    его бот: «якорь» — самый ранний бот клиента, который стоит на счётчике."""
+    for other in await client_bots(db, bot.client_id):
+        if other.paid_until is not None:
+            return other.id == bot.id
+    return True
+
+
 def open_first_period(bot: BotModel, at: datetime) -> None:
     """The launch is paid — the first period starts now.
 
@@ -273,12 +332,15 @@ async def _act_on(db: AsyncSession, bot: BotModel) -> None:
                 await _tell_owner(db, bot, f"✅ Бот {_name(bot)} снова в эфире — оплата прошла.")
             return
 
+    anchor = await _is_anchor(db, bot)
+
     if status.state == "active":
-        await _notify_once(
-            db, bot, NOTICE_SOON,
-            f"⏳ Оплаченный период бота {_name(bot)} заканчивается через {status.days_left} дн. "
-            f"Продли в конструкторе — бот продолжит работать без перерыва.",
-        )
+        if anchor:
+            await _notify_once(
+                db, bot, NOTICE_SOON,
+                f"⏳ Оплаченный период заканчивается через {status.days_left} дн. "
+                f"Подписка одна на все ваши боты. Продли в конструкторе — боты продолжат работать без перерыва.",
+            )
         return
 
     if status.state == "grace":
@@ -287,23 +349,25 @@ async def _act_on(db: AsyncSession, bot: BotModel) -> None:
         # на самом деле проработает.
         remaining = status.grace_until - datetime.now(timezone.utc)
         left = max(0, -(-remaining // timedelta(days=1)))
-        await _notify_once(
-            db, bot, NOTICE_GRACE,
-            f"⚠️ Период бота {_name(bot)} закончился. Бот пока работает — "
-            f"ещё {left} дн., потом уйдёт с эфира. Продли в конструкторе, "
-            f"сценарий и заказы никуда не денутся.",
-        )
+        if anchor:
+            await _notify_once(
+                db, bot, NOTICE_GRACE,
+                f"⚠️ Период подписки закончился. Бот пока работает — "
+                f"ещё {left} дн., потом уйдёт с эфира (подписка одна на все ваши боты). Продли в конструкторе, "
+                f"сценарий и заказы никуда не денутся.",
+            )
         return
 
     # Suspended. The message goes out before the webhook is pulled, so the
     # owner is told by us rather than by a customer asking why the bot is
     # silent.
-    await _notify_once(
-        db, bot, NOTICE_SUSPENDED,
-        f"⛔️ Бот {_name(bot)} снят с эфира — период не продлён. "
-        f"Всё сохранено: сценарий, настройки, заказы. Оплати продление в конструкторе, "
-        f"и бот вернётся в строй сразу же.",
-    )
+    if anchor:
+        await _notify_once(
+            db, bot, NOTICE_SUSPENDED,
+            f"⛔️ Бот {_name(bot)} снят с эфира — подписка не продлена (она одна на все ваши боты). "
+            f"Всё сохранено: сценарий, настройки, заказы. Оплати продление в конструкторе, "
+            f"и боты вернутся в строй сразу же.",
+        )
     # Suspension does not wait for the message to land. An owner we cannot
     # reach is still an owner who has not paid, and the alternative — keeping
     # every unreachable shop on the air forever — is worse than a silent
