@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.services.telegram_session import build_bot_session
 from meta_bot.handlers.admin import router as admin_router
 from meta_bot.handlers.admin import set_admin_commands
+from meta_bot.handlers.ideas import router as ideas_router
 from meta_bot.handlers.menu import router as menu_router
 from meta_bot.handlers.payments import router as payments_router
 from meta_bot.handlers.support import router as support_router
@@ -32,6 +33,8 @@ def build_dispatcher() -> Dispatcher:
     # Модерация оператора: только свои id и свои команды, остальным не отвечает.
     dp.include_router(admin_router)
     dp.include_router(menu_router)
+    # Идеи: свои команды и «следующее сообщение — идея», поэтому раньше поддержки.
+    dp.include_router(ideas_router)
     # Последним: он ловит всё, что не команда, — команды должны достаться раньше.
     dp.include_router(support_router)
     return dp

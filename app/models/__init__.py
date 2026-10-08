@@ -10,6 +10,7 @@ from app.models.poll_answer import PollAnswer
 from app.models.poll_send import PollSend
 from app.models.scheduled_step import ScheduledStep, StepStatus
 from app.models.subscription import BillingMode, Subscription, SubscriptionStatus
+from app.models.suggestion import Suggestion  # noqa: F401
 from app.models.support_relay import SupportRelay
 
 __all__ = [

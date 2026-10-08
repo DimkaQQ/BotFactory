@@ -114,6 +114,7 @@ def main_screen(
             InlineKeyboardButton(text="💬 Поддержка", callback_data="sup:start"),
         ]
     )
+    rows.append([InlineKeyboardButton(text="💡 Предложить идею", callback_data="idea:start")])
     return greeting + body, InlineKeyboardMarkup(inline_keyboard=rows)
 
 

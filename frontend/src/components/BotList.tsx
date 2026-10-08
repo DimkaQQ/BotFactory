@@ -10,6 +10,7 @@ import { useEscape } from "../hooks/useEscape";
 import { BOT_TEMPLATES, blocksLabel } from "../templates";
 import { SiteFooter } from "./SiteFooter";
 import { CrmPanel } from "./CrmPanel";
+import { FeedbackPanel } from "./FeedbackPanel";
 import { SalesOverviewPanel } from "./SalesOverviewPanel";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -59,6 +60,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [crmOpen, setCrmOpen] = useState(false);
+  const [ideaOpen, setIdeaOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   // Subscriptions ship switched off while the one-off sale is being shaken
@@ -289,6 +291,17 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 title="Клиенты, их контакты и календарь записи"
               >
                 <span aria-hidden="true">👥</span> <span className="bot-payments-button__long">Клиенты</span>
+              </button>
+            )}
+            {!isMiniApp && (
+              <button
+                type="button"
+                className="bot-payments-button"
+                onClick={() => setIdeaOpen(true)}
+                aria-label="Предложить идею"
+                title="Есть идея или нашли ошибку? Напишите — я читаю всё"
+              >
+                <span aria-hidden="true">💡</span> <span className="bot-payments-button__long">Идея</span>
               </button>
             )}
             {!isMiniApp && <ThemeToggle />}
@@ -548,6 +561,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       {/* Человек, у которого бот перестал продавать в субботу, не мог
           написать никому: контактов не было ни на сайте, ни здесь. */}
       {!isMiniApp && <SiteFooter compact />}
+      {ideaOpen && <FeedbackPanel onClose={() => setIdeaOpen(false)} />}
       {crmOpen && bots && <CrmPanel bots={bots} onClose={() => setCrmOpen(false)} />}
       {overviewOpen && bots && <SalesOverviewPanel bots={bots} onClose={() => setOverviewOpen(false)} />}
     </div>

@@ -321,6 +321,7 @@ async def journal_command(message: Message) -> None:
 ADMIN_COMMANDS: list[tuple[str, str]] = [
     ("admin", "Меню оператора"),
     ("reports", "Открытые жалобы"),
+    ("ideas", "Идеи клиентов"),
     ("journal", "Журнал решений"),
     ("stats", "Сводка по платформе"),
     ("find", "Найти владельца или бота"),

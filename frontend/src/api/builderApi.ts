@@ -125,6 +125,15 @@ export interface ClientInfo {
 const API_BASE = "/api";
 const SESSION_STORAGE_KEY = "bf_session_token";
 
+export interface MySuggestion {
+  id: string;
+  category: string;
+  text: string;
+  status: string;
+  done: boolean;
+  created_at: string;
+}
+
 class ApiError extends Error {
   constructor(
     message: string,
@@ -243,6 +252,10 @@ export const builderApi = {
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   loginWithTelegram: (payload: TelegramLoginPayload) =>
     request<{ token: string }>("/auth/telegram-login", { method: "POST", body: JSON.stringify(payload) }),
+
+  sendSuggestion: (text: string, category: string) =>
+    request<MySuggestion>("/suggestions", { method: "POST", body: JSON.stringify({ text, category }) }),
+  mySuggestions: () => request<{ suggestions: MySuggestion[] }>("/suggestions"),
 
   listBots: () => request<Bot[]>("/bots"),
   createBot: () => request<Bot>("/bots", { method: "POST" }),

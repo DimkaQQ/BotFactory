@@ -260,7 +260,7 @@ async def test_every_admin_command_has_a_handler_and_the_menu_goes_only_to_opera
 
     handled = {
         "admin", "reports", "journal", "stats", "find", "block", "restore", "ban", "unban", "export", "delete",
-        "adminhelp",
+        "adminhelp", "ideas",
     }
     assert {name for name, _ in admin.ADMIN_COMMANDS} == handled
     assert all(len(text) <= 256 for _, text in admin.ADMIN_COMMANDS)
