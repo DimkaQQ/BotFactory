@@ -206,6 +206,9 @@ class ProdamusProvider(ProviderDefaults):
             "urlSuccess": request.return_url,
             "urlReturn": request.return_url,
             "do": "pay",
+            # Наименование сервиса-интегратора: Prodamus просит указывать BotFactory
+            # (письмо их проектного менеджера от 8 октября 2026).
+            "sys": "BotFactory",
         }
         data["signature"] = sign(data, secret)
         return Checkout(url=f"https://{domain}/?{urlencode(_flatten(data))}")
