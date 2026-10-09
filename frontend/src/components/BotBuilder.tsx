@@ -22,6 +22,7 @@ import { FlowCanvas } from "./flow/FlowCanvas";
 import { LivePreview } from "./LivePreview";
 import { BotProfilePanel } from "./BotProfilePanel";
 import { PaymentSettingsPanel } from "./PaymentSettingsPanel";
+import { SitePanel } from "./SitePanel";
 import { SalesPanel } from "./SalesPanel";
 import { PublishPaywall } from "./PublishPaywall";
 import { PublishButton } from "./PublishButton";
@@ -51,6 +52,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [paymentPanelOpen, setPaymentPanelOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [siteOpen, setSiteOpen] = useState(false);
   const [salesPanelOpen, setSalesPanelOpen] = useState(false);
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [paymentProviders, setPaymentProviders] = useState<PaymentProviderInfo[]>([]);
@@ -708,6 +710,17 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 <span className="bot-payments-button__short">Вид</span>
               </button>
             )}
+            {!isMiniApp && bot.status === "active" && (
+              <button
+                type="button"
+                className="bot-payments-button"
+                onClick={() => setSiteOpen(true)}
+                title="Страница с ценами и документами — для банка (Казахстан)"
+              >
+                🌐 <span className="bot-payments-button__long">Страница</span>
+                <span className="bot-payments-button__short">Сайт</span>
+              </button>
+            )}
             <button
               type="button"
               className="bot-delete-button"
@@ -919,6 +932,8 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           </a>
         </div>
       )}
+
+      {siteOpen && <SitePanel botId={bot.id} onClose={() => setSiteOpen(false)} />}
 
       {profileOpen && (
         <BotProfilePanel botId={bot.id} botUsername={bot.telegram_bot_username ?? ""} onClose={() => setProfileOpen(false)} />

@@ -125,6 +125,22 @@ export interface ClientInfo {
 const API_BASE = "/api";
 const SESSION_STORAGE_KEY = "bf_session_token";
 
+export interface BotSiteSettings {
+  slug: string;
+  enabled: boolean;
+  saved: boolean;
+  url: string;
+  can_publish: boolean;
+  title: string;
+  about: string;
+  seller_name: string;
+  seller_id: string;
+  seller_address: string;
+  email: string;
+  phone: string;
+  refund_text: string;
+}
+
 export interface MySuggestion {
   id: string;
   category: string;
@@ -253,6 +269,9 @@ export const builderApi = {
   loginWithTelegram: (payload: TelegramLoginPayload) =>
     request<{ token: string }>("/auth/telegram-login", { method: "POST", body: JSON.stringify(payload) }),
 
+  getSite: (botId: string) => request<BotSiteSettings>(`/bots/${botId}/site`),
+  saveSite: (botId: string, patch: Partial<BotSiteSettings>) =>
+    request<BotSiteSettings>(`/bots/${botId}/site`, { method: "PUT", body: JSON.stringify(patch) }),
   sendSuggestion: (text: string, category: string) =>
     request<MySuggestion>("/suggestions", { method: "POST", body: JSON.stringify({ text, category }) }),
   mySuggestions: () => request<{ suggestions: MySuggestion[] }>("/suggestions"),

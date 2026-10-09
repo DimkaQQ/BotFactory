@@ -8,7 +8,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.routers import auth, bot_profile, bots, builder, crm, legal, media, payments, reports, suggestions, webhook
+from app.routers import (
+    auth,
+    bot_profile,
+    bots,
+    builder,
+    crm,
+    legal,
+    media,
+    payments,
+    reports,
+    site,
+    suggestions,
+    webhook,
+)
 from app.services import (
     background,
     bot_registry,
@@ -67,6 +80,8 @@ app.include_router(bot_profile.router)
 app.include_router(builder.router)
 app.include_router(crm.router)
 app.include_router(legal.router)
+app.include_router(site.api)
+app.include_router(site.public)
 app.include_router(media.router)
 app.include_router(payments.router)
 app.include_router(reports.router)
