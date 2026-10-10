@@ -49,3 +49,4 @@ backups/
 
 # Сертификаты, скачанные deploy/install-russian-ca.sh
 certs/*.pem
+brag-output/
