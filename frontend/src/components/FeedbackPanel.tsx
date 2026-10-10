@@ -3,11 +3,12 @@ import { useEffect, useState } from "react";
 import { type MySuggestion, ApiError, builderApi } from "../api/builderApi";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
+import { Lightbulb, X } from "@phosphor-icons/react";
 
 const CATEGORIES: [string, string][] = [
-  ["idea", "💡 Идея"],
-  ["bug", "🐞 Ошибка"],
-  ["question", "❓ Вопрос"],
+  ["idea", "Идея"],
+  ["bug", "Ошибка"],
+  ["question", "Вопрос"],
 ];
 
 /** Обратная связь: клиент пишет идею, оператор видит её сразу в Telegram. */
@@ -54,11 +55,11 @@ export function FeedbackPanel({ onClose }: { onClose: () => void }) {
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--success" aria-hidden="true">
-            💡
+            <Lightbulb size={20} aria-hidden="true" />
           </span>
           <span className="edit-panel__title">Идеи и обратная связь</span>
           <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
         <div className="edit-panel__body">
@@ -106,7 +107,7 @@ export function FeedbackPanel({ onClose }: { onClose: () => void }) {
                 {mine.map((i) => (
                   <li key={i.id} className="feedback-panel__item">
                     <div>{i.text}</div>
-                    <small>{i.done ? "✅ " : ""}{i.status}</small>
+                    <small>{i.done ? "Сделано · " : ""}{i.status}</small>
                   </li>
                 ))}
               </ul>

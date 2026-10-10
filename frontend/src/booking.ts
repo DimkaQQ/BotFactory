@@ -51,9 +51,9 @@ const DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 export function scheduleSummary(content: BlockContent): string {
   const weekly = readWeekly(content);
   const working = DAYS.map((_, i) => ({ i, iv: weekly[String(i)] })).filter((d) => d.iv.length > 0);
-  if (working.length === 0) return "📅 Запись закрыта: не выбрано ни одного дня";
+  if (working.length === 0) return "Запись закрыта: не выбрано ни одного дня";
   const first = working[0].iv[0];
   const same = working.every((d) => JSON.stringify(d.iv) === JSON.stringify(working[0].iv));
   const days = working.length === 7 ? "каждый день" : working.map((d) => DAYS[d.i]).join(", ");
-  return same ? `📅 ${days} · ${first[0]}–${working[0].iv[working[0].iv.length - 1][1]}` : `📅 ${days} · часы по дням`;
+  return same ? `${days} · ${first[0]}–${working[0].iv[working[0].iv.length - 1][1]}` : `${days} · часы по дням`;
 }

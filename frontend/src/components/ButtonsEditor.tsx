@@ -2,6 +2,9 @@ import { useEffect, useRef } from "react";
 
 import type { BlockContent, BotBlock, ButtonAction } from "../api/builderApi";
 import { BLOCK_TYPE_BY_ID } from "../blockTypes";
+import { X } from "@phosphor-icons/react";
+import { ArrowBendDownRight, LinkSimple, Warning } from "@phosphor-icons/react";
+
 
 interface Props {
   content: BlockContent;
@@ -81,7 +84,7 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
       </div>
       {style === "inline" && content.clear_reply && (
         <p className="buttons-editor__warning" role="status">
-          ⚠️ Ты меняешь вид кнопок. Быстрые кнопки внизу экрана у покупателей уберутся сами, когда они получат этот блок в
+          <Warning size={15} className="inline-icon" aria-hidden="true" /> Ты меняешь вид кнопок. Быстрые кнопки внизу экрана у покупателей уберутся сами, когда они получат этот блок в
           следующий раз. Уже отправленные сообщения не меняются.
         </p>
       )}
@@ -157,7 +160,7 @@ interface RowProps {
 function targetSummary(block: BotBlock): string {
   const def = BLOCK_TYPE_BY_ID[block.block_type];
   const text = (block.content.text || block.content.question || "").trim();
-  return `${def.icon} ${def.label}${text ? ` — ${text.slice(0, 28)}${text.length > 28 ? "…" : ""}` : ""}`;
+  return `${def.label}${text ? `: ${text.slice(0, 28)}${text.length > 28 ? "…" : ""}` : ""}`;
 }
 
 function ButtonRow({ button, index, blocks, onUpdate, onSetMode, onRemove }: RowProps) {
@@ -198,7 +201,7 @@ function ButtonRow({ button, index, blocks, onUpdate, onSetMode, onRemove }: Row
       <div className="buttons-editor__item-head">
         <span className="buttons-editor__item-n">Кнопка {index + 1}</span>
         <button type="button" className="buttons-editor__remove" onClick={() => onRemove(index)} aria-label="Удалить кнопку">
-          ✕
+          <X size={18} aria-hidden="true" />
         </button>
       </div>
 
@@ -222,7 +225,7 @@ function ButtonRow({ button, index, blocks, onUpdate, onSetMode, onRemove }: Row
             className={`buttons-editor__mode ${!isUrl ? "buttons-editor__mode--active" : ""}`}
             onClick={() => onSetMode(index, "text")}
           >
-            <span className="buttons-editor__mode-title">➜ Продолжить сценарий</span>
+            <span className="buttons-editor__mode-title"><ArrowBendDownRight size={15} className="inline-icon" aria-hidden="true" /> Продолжить сценарий</span>
             <span className="buttons-editor__mode-hint">бот пришлёт следующий блок</span>
           </button>
           <button
@@ -232,7 +235,7 @@ function ButtonRow({ button, index, blocks, onUpdate, onSetMode, onRemove }: Row
             className={`buttons-editor__mode ${isUrl ? "buttons-editor__mode--active" : ""}`}
             onClick={() => onSetMode(index, "url")}
           >
-            <span className="buttons-editor__mode-title">🔗 Открыть ссылку</span>
+            <span className="buttons-editor__mode-title"><LinkSimple size={15} className="inline-icon" aria-hidden="true" /> Открыть ссылку</span>
             <span className="buttons-editor__mode-hint">сайт, оплата, запись</span>
           </button>
         </div>

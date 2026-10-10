@@ -12,7 +12,10 @@ import {
 import "./App.css";
 import { BotList } from "./components/BotList";
 import { LoginScreen } from "./components/LoginScreen";
+import { BrandMark } from "./icons";
 import { useTelegramWebApp } from "./hooks/useTelegramWebApp";
+import { WarningCircle, Wrench } from "@phosphor-icons/react";
+
 
 /** The builder drags in React Flow — by far the heaviest dependency here,
  * and one nobody needs until they actually open a bot. Split out, so the
@@ -128,7 +131,7 @@ export default function App() {
   if (bootState === "loading") {
     return (
       <div className="screen screen--center">
-        <div className="state-icon">🏭</div>
+        <div className="state-icon"><BrandMark size={52} /></div>
         <p>Загружаем Bot Factory…</p>
       </div>
     );
@@ -141,7 +144,7 @@ export default function App() {
   if (bootState === "error") {
     return (
       <div className="screen screen--center">
-        <div className="state-icon">😕</div>
+        <div className="state-icon"><WarningCircle size={44} weight="regular" /></div>
         <p>{bootError}</p>
       </div>
     );
@@ -162,7 +165,7 @@ export default function App() {
           <Suspense
             fallback={
               <div className="screen screen--center">
-                <div className="state-icon">🛠</div>
+                <div className="state-icon"><Wrench size={44} weight="regular" /></div>
                 <p>Открываем холст…</p>
               </div>
             }

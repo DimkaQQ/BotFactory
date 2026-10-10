@@ -95,13 +95,6 @@
   max-width: 280px;
 }
 
-.login-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
 .login-widget {
   margin-top: var(--sp-3);
 }
@@ -492,13 +485,13 @@
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--tg-button) 38%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tg-text) 14%, transparent);
   transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-base) var(--ease-smooth);
 }
 
 .empty-state__cta:hover {
   transform: translateY(-2px);
-  box-shadow: 0 14px 28px color-mix(in srgb, var(--tg-button) 42%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tg-text) 14%, transparent);
 }
 
 .empty-state__cta:active {
@@ -1497,7 +1490,6 @@
   content: none;
 }
 
-
 /* Buttons editor (inline, inside a bubble) */
 
 .buttons-editor {
@@ -1879,7 +1871,7 @@
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 8px 20px color-mix(in srgb, var(--tg-button) 35%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tg-text) 14%, transparent);
   transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-base) var(--ease-smooth);
 }
 
@@ -2044,7 +2036,7 @@
 
   .publish-button:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 12px 24px color-mix(in srgb, var(--tg-button) 42%, transparent);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--tg-text) 14%, transparent);
   }
 
   .chat-composer__button:hover {
@@ -2157,7 +2149,7 @@
     padding: 0 20px;
     border-radius: var(--radius-md);
     cursor: pointer;
-    box-shadow: 0 8px 20px color-mix(in srgb, var(--tg-button) 35%, transparent);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--tg-text) 14%, transparent);
     transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-base) var(--ease-smooth);
   }
 
@@ -2461,45 +2453,10 @@
 
 /* ---------- Hero ---------- */
 
-.landing-hero {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--radius-xl);
-  padding: var(--sp-6) var(--sp-4) var(--sp-7);
-  background: var(--tg-secondary-bg);
-}
-
 /* Two soft, slowly-drifting blobs instead of a static gradient — the
    kind of ambient motion that makes a landing screen feel alive without
    asking for any attention. GPU-friendly (transform only), and covered
    by the global prefers-reduced-motion override in index.css. */
-.landing-hero::before,
-.landing-hero::after {
-  content: "";
-  position: absolute;
-  width: 50vmax;
-  height: 50vmax;
-  border-radius: 50%;
-  filter: blur(70px);
-  opacity: 0.3;
-  z-index: 0;
-  pointer-events: none;
-  will-change: transform;
-}
-
-.landing-hero::before {
-  background: var(--tg-button);
-  top: -15%;
-  left: -15%;
-  animation: blob-drift-a 18s var(--ease-smooth) infinite alternate;
-}
-
-.landing-hero::after {
-  background: var(--accent-description);
-  bottom: -18%;
-  right: -12%;
-  animation: blob-drift-b 22s var(--ease-smooth) infinite alternate;
-}
 
 @keyframes blob-drift-a {
   from {
@@ -2519,104 +2476,9 @@
   }
 }
 
-.login-hero {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  max-width: 420px;
-  margin: 0 auto;
-}
-
-.landing-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  align-self: center;
-  background: color-mix(in srgb, var(--tg-button) 12%, var(--tg-bg));
-  /* --tg-link, not --tg-button: the button token is a *fill* that carries
-     white text, so in dark mode it is chosen to be dark — and reusing it as
-     a text colour on a dark ground measured 2.82:1. --tg-link is the token
-     that already has to be legible as text in both themes. */
-  color: var(--accent-on-surface);
-  border: 1px solid color-mix(in srgb, var(--accent-on-surface) 28%, transparent);
-  border-radius: var(--radius-full);
-  padding: 6px 14px;
-  font-size: 12.5px;
-  font-weight: 700;
-  margin-bottom: var(--sp-3);
-}
-
-.login-hero__pitch {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.login-hero__lead {
-  color: var(--text-secondary);
-  font-size: 15px;
-  line-height: 1.5;
-}
-
 /* The three free-of-charge promises under the headline. A row of ticks
    rather than a bulleted list: it has to read as a guarantee at a glance,
    not as one more feature list to skim. */
-.landing-promise {
-  list-style: none;
-  margin: var(--sp-4) 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--sp-2) var(--sp-3);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.landing-promise li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
-  border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--accent-success) 12%, var(--tg-bg));
-  border: 1px solid color-mix(in srgb, var(--accent-success) 28%, transparent);
-}
-
-.landing-promise li span {
-  color: var(--accent-success-ink);
-  font-weight: 800;
-}
-
-.login-card {
-  position: relative;
-  z-index: 1;
-  /* The single entry point to the product, sitting on the hero's dark
-     gradient. In dark mode --tg-bg is nearly black, which made the most
-     important element on the page the least visible one — so it gets a
-     surface of its own plus a rim, in both themes. */
-  background: var(--tg-secondary-bg);
-  border: 1px solid color-mix(in srgb, var(--tg-text) 12%, transparent);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-5);
-  box-shadow: var(--shadow-elevated);
-  text-align: center;
-  animation: login-card-in var(--dur-slow) var(--ease-out) 0.1s backwards;
-}
-
-.login-card__fallback a.publish-button {
-  text-decoration: none;
-}
-
-.login-card__fallback {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
 
 @keyframes login-card-in {
   from {
@@ -2629,275 +2491,24 @@
   }
 }
 
-.login-card__title {
-  margin: 0 0 var(--sp-3);
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.login-card__trust {
-  margin: var(--sp-3) 0 0;
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-}
-
 /* ---------- Hero mockup — a real, working chat preview, not a screenshot ---------- */
-
-.landing-hero__visual {
-  position: relative;
-  z-index: 1;
-  margin-top: var(--sp-6);
-  display: flex;
-  justify-content: center;
-}
-
-.landing-mockup {
-  width: 100%;
-  max-width: 340px;
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  background: var(--tg-bg);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--tg-text) 8%, transparent),
-    0 32px 64px -24px color-mix(in srgb, var(--tg-button) 40%, transparent);
-  animation: login-card-in var(--dur-slow) var(--ease-out) 0.2s backwards;
-}
-
-.landing-mockup__bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--tg-separator);
-}
-
-.landing-mockup__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--tg-separator);
-}
-
-.landing-mockup__title {
-  margin-left: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-}
-
-.landing-mockup__canvas {
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.landing-mockup__canvas .chat-row__avatar {
-  width: 28px;
-  height: 28px;
-}
 
 /* The "this is what you build it with" strip under the chat mockup — a
    plain-language stand-in for the flow canvas's actual arrows/handles,
    not a scaled-down React Flow render. */
-.landing-mockup__branches {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--sp-3) var(--sp-4);
-  border-top: 1px dashed var(--tg-separator);
-  background: color-mix(in srgb, var(--tg-button) 4%, var(--tg-bg));
-}
-
-.landing-mockup__branch-source {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-secondary);
-}
-
-.landing-mockup__branch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding-left: var(--sp-2);
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--accent-buttons);
-}
-
-.landing-mockup__branch-arrow {
-  color: var(--text-tertiary);
-  font-weight: 400;
-}
 
 /* ---------- Section shell, reused by feature/steps/templates blocks ---------- */
 
-.landing-section {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: var(--sp-7) var(--sp-4);
-}
-
-.landing-section--tint {
-  background: var(--tg-secondary-bg);
-  border-radius: var(--radius-xl);
-  margin: var(--sp-5) auto;
-  width: calc(100% - 2 * var(--sp-3));
-}
-
-.landing-section__head {
-  text-align: center;
-  max-width: 620px;
-  margin: 0 auto var(--sp-6);
-}
-
-.landing-section__eyebrow {
-  margin: 0 0 var(--sp-2);
-  font-size: 12.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--accent-on-surface);
-}
-
-.landing-section__title {
-  margin: 0 0 var(--sp-2);
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
-}
-
-.landing-section__lead {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 15px;
-  line-height: 1.5;
-}
-
 /* ---------- Feature grid ---------- */
 
-.landing-features {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--sp-3);
-}
-
-.landing-feature-card {
-  background: var(--tg-bg);
-  border: 1px solid var(--tg-separator);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-4);
-  box-shadow: var(--shadow-card);
-  transition: transform var(--dur-base) var(--ease-spring), box-shadow var(--dur-base) var(--ease-smooth);
-}
-
-.landing-feature-card__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  font-size: 19px;
-  margin-bottom: var(--sp-3);
-}
-
-.landing-feature-card__title {
-  margin: 0 0 4px;
-  font-size: 14.5px;
-  font-weight: 700;
-}
-
-.landing-feature-card__text {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-secondary);
-}
-
 /* ---------- Steps ---------- */
-
-.landing-steps {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  max-width: 640px;
-  margin: 0 auto;
-}
 
 /* Grid, not flex: the number badge owns its own column next to a stacked
    title/text on mobile, and the same three children re-stack into one
    column on desktop (see the min-width: 960px block) — without the title
    and body ever sitting side by side, which a plain flex row did. */
-.landing-step {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas:
-    "num title"
-    "num text";
-  column-gap: var(--sp-3);
-  row-gap: 4px;
-  align-items: start;
-  background: var(--tg-bg);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-4);
-  box-shadow: var(--shadow-card);
-}
-
-.landing-step__n {
-  grid-area: num;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--tg-button), color-mix(in srgb, var(--accent-description) 70%, var(--tg-button)));
-  color: #fff;
-  font-weight: 700;
-  font-size: 15px;
-}
-
-.landing-step__title {
-  grid-area: title;
-  margin: 0;
-  font-weight: 700;
-  font-size: 15px;
-  line-height: 1.3;
-}
-
-.landing-step__text {
-  grid-area: text;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13.5px;
-  line-height: 1.5;
-}
 
 /* ---------- Live-preview callout ---------- */
-
-.landing-callout {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-5);
-  text-align: center;
-  max-width: 1100px;
-  margin: var(--sp-5) auto;
-  width: calc(100% - 2 * var(--sp-3));
-  padding: var(--sp-6) var(--sp-4);
-  border-radius: var(--radius-xl);
-  background: radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--tg-button) 10%, transparent), transparent 60%),
-    var(--tg-secondary-bg);
-}
-
-.landing-callout__text {
-  max-width: 560px;
-}
-
-.landing-callout__demo {
-  width: 100%;
-  max-width: 380px;
-}
 
 /* ---------- The interactive demo chat (LandingDemo.tsx) ---------- */
 
@@ -3112,162 +2723,32 @@
 
 /* ---------- Templates ---------- */
 
-.landing-templates {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--sp-3);
-}
-
-.landing-template-card {
-  --tpl-accent: var(--tg-button);
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  overflow: hidden;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tpl-accent) 8%, transparent), transparent 46%), var(--tg-bg);
-  border: 1px solid color-mix(in srgb, var(--tpl-accent) 20%, var(--tg-separator));
-  border-radius: var(--radius-lg);
-  padding: var(--sp-4);
-  box-shadow: var(--shadow-card);
-  transition: transform var(--dur-base) var(--ease-spring), box-shadow var(--dur-base) var(--ease-smooth);
-}
-
-.landing-template-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: linear-gradient(90deg, var(--tpl-accent), color-mix(in srgb, var(--tpl-accent) 20%, transparent));
-}
-
-.landing-template-card__icon {
-  flex-shrink: 0;
-  width: 46px;
-  height: 46px;
-  margin-bottom: var(--sp-3);
-  border-radius: 15px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  background: color-mix(in srgb, var(--tpl-accent) 14%, var(--tg-bg));
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--tpl-accent) 20%, transparent);
-}
-
-.landing-template-card__title {
-  margin: 0 0 4px;
-  font-weight: 700;
-  font-size: 15px;
-  line-height: 1.25;
-}
-
-.landing-template-card__text {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--text-secondary);
-  line-height: 1.45;
-}
-
 /* margin-top: auto pins the footer to the card's bottom edge — grid rows
    stretch every card to the tallest one, so the badges line up across the
    row however differently the pitches wrap. */
-.landing-template-card__meta {
-  margin-top: auto;
-  padding-top: var(--sp-3);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-}
-
-.landing-template-card__count {
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-weight: 700;
-  background: color-mix(in srgb, var(--tpl-accent) 14%, transparent);
-  /* The bare accent measured 4.04:1 and 4.38:1 here — these are 11.5px bold,
-     which is not "large text", so they need the full 4.5. Pulling the accent
-     towards the body colour keeps the hue and clears the floor. */
-  color: color-mix(in srgb, var(--tpl-accent) 70%, var(--tg-text));
-}
 
 /* Shared accent palette for both the landing cards and the in-app picker. */
-.landing-template-card--delivery,
 .template-card--delivery {
   --tpl-accent: var(--accent-delivery);
 }
 
-.landing-template-card--buttons,
 .template-card--buttons {
   --tpl-accent: var(--accent-buttons);
 }
 
-.landing-template-card--poll,
 .template-card--poll {
   --tpl-accent: var(--accent-poll);
 }
 
-.landing-template-card--image,
 .template-card--image {
   --tpl-accent: var(--accent-image);
 }
 
-.landing-template-card--delay,
 .template-card--delay {
   --tpl-accent: var(--accent-delay);
 }
 
 /* ---------- Final CTA band ---------- */
-
-.landing-cta {
-  text-align: center;
-  max-width: 1100px;
-  margin: var(--sp-5) auto var(--sp-7);
-  width: calc(100% - 2 * var(--sp-3));
-  padding: var(--sp-7) var(--sp-4);
-  border-radius: var(--radius-xl);
-  /* The violet stop is pinned rather than taken from --accent-description:
-     that token is lifted to #a78bfa in dark mode, because its job there is to
-     read as an accent *on* a dark page. As a fill under white text it is the
-     wrong end of the scale — the far end of this gradient measured 3.34:1 for
-     the lead line. Both stops have to stay dark, in both themes, because the
-     text on them is always white. */
-  background: linear-gradient(135deg, var(--tg-button), color-mix(in srgb, #6d28d9 75%, var(--tg-button)));
-  color: #fff;
-  box-shadow: var(--shadow-elevated);
-}
-
-.landing-cta__title {
-  margin: 0 0 var(--sp-2);
-  font-size: 24px;
-  font-weight: 800;
-}
-
-.landing-cta__text {
-  margin: 0 0 var(--sp-4);
-  opacity: 0.88;
-  font-size: 14px;
-}
-
-.landing-cta__button {
-  border: none;
-  /* Fixed white in both themes, because it sits on the brand gradient — so
-     the label cannot use --accent-on-surface, which flips *light* in dark
-     mode and measured 1.99:1 here. The pill is its own surface; its text
-     colour has to be pinned to it, not to the page. */
-  background: #fff;
-  color: #4338ca;
-  font-weight: 700;
-  font-size: 15px;
-  padding: 14px 28px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  box-shadow: 0 12px 24px color-mix(in srgb, black 20%, transparent);
-  transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-base) var(--ease-smooth);
-}
 
 /* Подвал. Кто получает деньги, куда писать и по каким правилам — до этого
    ни одного из четырёх ответов на сайте не было. */
@@ -3305,148 +2786,6 @@
   margin: var(--sp-3) auto 0;
   max-width: 560px;
   font-size: 12.5px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .landing-feature-card:hover,
-  .landing-template-card:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--shadow-elevated);
-  }
-
-  .landing-cta__button:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 16px 30px color-mix(in srgb, black 24%, transparent);
-  }
-
-  .landing-mockup {
-    transform: perspective(1400px) rotateY(-6deg) rotateX(3deg);
-    transition: transform var(--dur-slow) var(--ease-smooth);
-  }
-
-  .landing-mockup:hover {
-    transform: perspective(1400px) rotateY(0deg) rotateX(0deg) scale(1.02);
-  }
-}
-
-@media (min-width: 560px) {
-  .landing-templates {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 700px) {
-  .landing-features {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (min-width: 960px) {
-  .landing-hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
-    align-items: center;
-    gap: var(--sp-7);
-    max-width: 1180px;
-    margin: 0 auto;
-    padding: var(--sp-8) var(--sp-6) var(--sp-7);
-  }
-
-  .login-hero {
-    max-width: none;
-    margin: 0;
-  }
-
-  .login-hero__pitch {
-    text-align: left;
-    align-items: flex-start;
-  }
-
-  .landing-eyebrow {
-    align-self: flex-start;
-  }
-
-  .login-hero__pitch .state-icon {
-    font-size: 48px;
-  }
-
-  .login-title {
-    font-size: 42px;
-  }
-
-  .login-hero__lead {
-    font-size: 17px;
-    max-width: 440px;
-  }
-
-  .landing-promise {
-    font-size: 15px;
-  }
-
-  .login-card {
-    align-self: flex-start;
-    max-width: 360px;
-    padding: var(--sp-6);
-  }
-
-  .landing-hero__visual {
-    margin-top: 0;
-  }
-
-  .landing-features {
-    /* Nine cards: four columns strand one on its own in the last row at
-       every width. Three divide evenly. */
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .landing-templates {
-    /* Nine cards: four columns strand one on its own in the last row at
-       every width. Three divide evenly. */
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .landing-steps {
-    max-width: none;
-    flex-direction: row;
-  }
-
-  .landing-step {
-    flex: 1;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "num"
-      "title"
-      "text";
-    row-gap: var(--sp-3);
-    padding: var(--sp-5) var(--sp-4);
-  }
-
-  /* A two-line slot for the title, so a heading that wraps ("Собери на
-     холсте — блоки и стрелки") doesn't push its own body text a line
-     below its neighbours' and leave the row looking crooked. */
-  .landing-step__title,
-  .landing-feature-card__title {
-    min-height: 2.6em;
-  }
-
-  .landing-callout {
-    flex-direction: row;
-    text-align: left;
-    justify-content: space-between;
-    padding: var(--sp-7);
-  }
-
-  .landing-callout__text {
-    max-width: 460px;
-  }
-
-  .landing-section__title {
-    font-size: 30px;
-  }
-
-  .landing-cta__title {
-    font-size: 32px;
-  }
 }
 
 /* =========================================================================
@@ -4935,7 +4274,6 @@
   text-align: center;
 }
 
-
 /* =========================================================================
    Confirmation dialog (src/confirm.ts)
 
@@ -5003,7 +4341,6 @@
 .confirm-dialog__button--danger:hover {
   background: color-mix(in srgb, var(--danger-fill) 85%, #000000);
 }
-
 
 /* The dismiss controls stay visually small — they are not the point of the
    sheet they sit on — but the finger gets its 44px either way. */
@@ -5181,7 +4518,6 @@
   margin: 0 0 var(--sp-2);
 }
 
-
 /* =========================================================================
    Platform billing (src/components/BillingBanner.tsx)
 
@@ -5276,48 +4612,12 @@
   font-weight: 600;
 }
 
-
 /* =========================================================================
    Landing — the sections added when the page was rebuilt around one promise:
    everything except going live is free.
    ========================================================================= */
 
 /* ---------- Who it's for ---------- */
-
-.landing-audiences {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--sp-3);
-}
-
-.landing-audience {
-  background: var(--tg-bg);
-  border: 1px solid var(--tg-separator);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-5) var(--sp-4);
-  box-shadow: var(--shadow-card);
-  text-align: center;
-}
-
-.landing-audience__icon {
-  display: block;
-  font-size: 30px;
-  line-height: 1;
-  margin-bottom: var(--sp-3);
-}
-
-.landing-audience__title {
-  margin: 0 0 6px;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.landing-audience__text {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--text-secondary);
-}
 
 /* ---------- The free promise ----------
 
@@ -5326,193 +4626,15 @@
    meets you with a price at the publish button has lied, and the person
    finds out at the exact moment they were about to trust us with money. */
 
-.landing-free {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--sp-3);
-}
-
-.landing-free__tile {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: var(--sp-4);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--accent-success) 7%, var(--tg-bg));
-  border: 1px solid color-mix(in srgb, var(--accent-success) 24%, transparent);
-}
-
-.landing-free__tile--paid {
-  background: color-mix(in srgb, var(--tg-button) 8%, var(--tg-bg));
-  border-color: color-mix(in srgb, var(--tg-button) 34%, transparent);
-}
-
-.landing-free__icon {
-  font-size: 22px;
-  line-height: 1;
-}
-
-.landing-free__title {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.landing-free__tag {
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  background: #047857;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.landing-free__tag--paid {
-  background: var(--tg-button);
-}
-
-.landing-free__text {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-
 /* ---------- Acquirers ----------
 
    The names come from the API (see /api/config), so this section cannot
    claim a gateway the code does not have. */
 
-.landing-gateways {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--sp-2);
-}
-
-.landing-gateways li {
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
-  background: var(--tg-secondary-bg);
-  border: 1px solid var(--tg-separator);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.landing-gateways__note {
-  margin: var(--sp-4) auto 0;
-  max-width: 620px;
-  text-align: center;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--text-secondary);
-}
-
 /* ---------- FAQ ---------- */
-
-.landing-faq {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  max-width: 760px;
-  margin: 0 auto;
-}
-
-.landing-faq__item {
-  background: var(--tg-bg);
-  border: 1px solid var(--tg-separator);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-3) var(--sp-4);
-}
-
-.landing-faq__q {
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 700;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
 
 /* Safari renders its own triangle from the shadow DOM and ignores
    list-style on the summary itself. */
-.landing-faq__q::-webkit-details-marker {
-  display: none;
-}
-
-.landing-faq__q::after {
-  content: "+";
-  flex-shrink: 0;
-  font-size: 20px;
-  font-weight: 400;
-  line-height: 1;
-  color: var(--accent-on-surface);
-  transition: transform var(--dur-base) var(--ease-smooth);
-}
-
-.landing-faq__item[open] .landing-faq__q::after {
-  transform: rotate(45deg);
-}
-
-.landing-faq__a {
-  margin: var(--sp-3) 0 0;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-}
-
-@media (min-width: 720px) {
-  .landing-audiences {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .landing-free {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-}
-
-@media (min-width: 960px) {
-  .landing-promise {
-    justify-content: flex-start;
-  }
-
-  /* Four free tiles across, and the paid one spanning the row beneath —
-     it is the one thing on this page that costs money, and putting it on
-     its own line is the difference between stating it and burying it. */
-  .landing-free {
-    grid-template-columns: repeat(4, 1fr);
-  }
-
-  .landing-free__tile--paid {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--sp-4);
-    flex-wrap: wrap;
-  }
-
-  .landing-free__tile--paid .landing-free__icon {
-    font-size: 30px;
-  }
-
-  .landing-free__tile--paid .landing-free__text {
-    flex: 1 1 320px;
-  }
-
-}
 
 /* Разовая покупка или повторяемая — выбор, который решает, получит ли
    продавец деньги за второй заказ. Радиокнопки, а не галочка: у обоих
@@ -5831,346 +4953,14 @@ html {
 }
 
 /* Якоря не должны уезжать под липкую шапку. */
-.landing-hero,
-.landing-section {
-  scroll-margin-top: 72px;
-}
-
-.landing-nav {
-  /* Плавающая «таблетка» ровно во всю ширину контента, а не полоса вплотную к
-     блоку ниже: раньше шапка была уже героя на 40 px с каждой стороны, и по
-     краям торчали обрывки её рамки. Теперь у неё своя рамка со всех сторон,
-     тень и зазор до героя — она выглядит отдельным элементом, а не швом. */
-  position: sticky;
-  top: var(--sp-3);
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  width: 100%;
-  /* Той же ширины, что и блок героя под ней (1180), — иначе края не сходятся. */
-  max-width: 1180px;
-  box-sizing: border-box;
-  margin: 0 auto var(--sp-3);
-  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
-  background: color-mix(in srgb, var(--tg-bg) 93%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--tg-separator);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-}
-
-.landing-nav__brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 800;
-  font-size: 15px;
-  color: var(--text-primary);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.landing-nav__links {
-  display: none;
-  flex: 1;
-  justify-content: center;
-  gap: var(--sp-4);
-}
-
-.landing-nav__links a {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-decoration: none;
-}
-
-.landing-nav__links a:hover {
-  color: var(--accent-on-surface);
-}
-
-@media (min-width: 860px) {
-  .landing-nav__links {
-    display: flex;
-  }
-}
-
-.landing-nav > .theme-toggle {
-  margin-left: auto;
-}
-
-@media (min-width: 860px) {
-  .landing-nav > .theme-toggle {
-    margin-left: 0;
-  }
-}
-
-.landing-nav__cta {
-  flex-shrink: 0;
-  border: none;
-  border-radius: var(--radius-full);
-  background: var(--tg-button);
-  color: var(--tg-button-text);
-  font-weight: 700;
-  font-size: 13.5px;
-  padding: 9px 16px;
-  cursor: pointer;
-}
-
-@media (max-width: 420px) {
-  .landing-nav__cta {
-    padding: 9px 12px;
-    font-size: 13px;
-  }
-}
-
-.landing-hero__links {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--sp-2) var(--sp-4);
-  margin: var(--sp-3) 0 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.landing-hero__links a {
-  color: var(--accent-on-surface);
-  text-decoration: none;
-}
-
-.landing-hero__links a:hover {
-  text-decoration: underline;
-}
-
-.landing-section--tight {
-  padding-top: var(--sp-5);
-  padding-bottom: var(--sp-5);
-}
 
 /* ---- Было / стало ---- */
 
-.landing-compare {
-  display: grid;
-  gap: var(--sp-3);
-  grid-template-columns: 1fr;
-}
-
-@media (min-width: 760px) {
-  .landing-compare {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.landing-compare__col {
-  border-radius: var(--radius-lg);
-  padding: var(--sp-5) var(--sp-4);
-  border: 1px solid var(--tg-separator);
-  background: var(--tg-bg);
-  box-shadow: var(--shadow-card);
-}
-
-.landing-compare__col--after {
-  background: color-mix(in srgb, var(--accent-success) 9%, var(--tg-bg));
-  border-color: color-mix(in srgb, var(--accent-success) 30%, transparent);
-}
-
-.landing-compare__head {
-  margin: 0 0 var(--sp-3);
-  font-size: 13px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-tertiary);
-}
-
-.landing-compare__col--after .landing-compare__head {
-  color: var(--accent-success-ink);
-}
-
-.landing-compare ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--sp-3);
-}
-
-.landing-compare li {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  font-size: 15px;
-  line-height: 1.4;
-  color: var(--text-primary);
-}
-
-.landing-compare li span {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 800;
-  margin-top: 1px;
-}
-
-.landing-compare__col--before li span {
-  background: color-mix(in srgb, var(--tg-destructive) 12%, transparent);
-  color: var(--tg-destructive);
-}
-
-.landing-compare__col--after li span {
-  background: color-mix(in srgb, var(--accent-success) 18%, transparent);
-  color: var(--accent-success-ink);
-}
-
 /* ---- Цена ---- */
-
-.landing-pricing {
-  display: grid;
-  gap: var(--sp-3);
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  max-width: 760px;
-  margin: 0 auto;
-}
-
-.landing-price {
-  text-align: center;
-  background: var(--tg-bg);
-  border: 1px solid var(--tg-separator);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-5) var(--sp-4);
-  box-shadow: var(--shadow-card);
-}
-
-.landing-price__method {
-  margin: 0 0 var(--sp-2);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-tertiary);
-}
-
-.landing-price__amount {
-  margin: 0;
-  font-size: 38px;
-  line-height: 1.1;
-  font-weight: 800;
-  color: var(--text-primary);
-}
-
-.landing-price__label {
-  margin: 4px 0 var(--sp-3);
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.landing-price__renewal {
-  margin: 0;
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--tg-separator);
-  font-size: 13.5px;
-  line-height: 1.4;
-  color: var(--text-secondary);
-}
 
 /* ---- Доверие ---- */
 
-.landing-trust {
-  display: grid;
-  gap: var(--sp-3);
-  grid-template-columns: 1fr;
-}
-
-@media (min-width: 640px) {
-  .landing-trust {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (min-width: 1000px) {
-  .landing-trust {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-.landing-trust__item {
-  background: var(--tg-bg);
-  border: 1px solid var(--tg-separator);
-  border-radius: var(--radius-lg);
-  padding: var(--sp-5) var(--sp-4);
-  box-shadow: var(--shadow-card);
-}
-
-.landing-trust__icon {
-  display: block;
-  font-size: 26px;
-  line-height: 1;
-  margin-bottom: var(--sp-3);
-}
-
-.landing-trust__title {
-  margin: 0 0 var(--sp-2);
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.landing-trust__text {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.45;
-  color: var(--text-secondary);
-}
-
 /* ---- Липкая кнопка (только телефон) ---- */
-
-.landing-sticky {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 45;
-  padding: var(--sp-2) var(--sp-3) calc(var(--sp-2) + env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--tg-bg) 92%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-top: 1px solid var(--tg-separator);
-  animation: sheet-in var(--dur-slow) var(--ease-out);
-}
-
-.landing-sticky button {
-  width: 100%;
-  min-height: 48px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: var(--tg-button);
-  color: var(--tg-button-text);
-  font-size: 15.5px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-@media (min-width: 860px) {
-  .landing-sticky {
-    display: none;
-  }
-}
-
-.login-card__consent {
-  margin: var(--sp-2) 0 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-tertiary);
-  text-align: center;
-}
-
-.login-card__consent a {
-  color: var(--accent-on-surface);
-}
 
 /* =====================================================================
    Подвал: заметная «Поддержка» и тихие документы
@@ -6192,7 +4982,7 @@ html {
   border-radius: var(--radius-full);
   /* Тот же фиксированный тёмный градиент, что у большой кнопки внизу
      лендинга: подпись на нём всегда белая, в обеих темах. */
-  background: linear-gradient(135deg, var(--tg-button), color-mix(in srgb, #6d28d9 75%, var(--tg-button)));
+  background: linear-gradient(135deg, var(--tg-button), color-mix(in srgb, #0f766e 70%, var(--tg-button)));
   color: #fff;
   text-decoration: none;
   box-shadow: var(--shadow-elevated);
@@ -6201,7 +4991,7 @@ html {
 
 .support-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 28px color-mix(in srgb, var(--tg-button) 38%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tg-text) 14%, transparent);
 }
 
 .support-button:focus-visible {
@@ -6270,7 +5060,6 @@ html {
   text-decoration: underline;
 }
 
-
 /* ---------- Правки по ревью дизайна ---------- */
 
 /* Подробная панель публикации на телефоне занимала три четверти экрана и
@@ -6282,16 +5071,7 @@ html {
     overscroll-behavior: contain;
   }
 
-  .landing-features {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (min-width: 720px) {
-  .landing-promise {
-    flex-wrap: nowrap;
-    font-size: 13px;
-  }
+  
 }
 
 /* Подсказка пустого холста не должна лежать на узле «Старт». */
@@ -6348,13 +5128,6 @@ html {
   }
 }
 
-.landing-price__who {
-  margin: 6px 0 0;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--text-secondary);
-}
-
 /* ---------- Ещё правки по ревью дизайна ---------- */
 
 /* Список ботов: не жмётся в левый угол на широком экране. */
@@ -6383,16 +5156,6 @@ html {
   background: transparent;
 }
 
-@media (min-width: 960px) {
-  .login-hero__lead {
-    max-width: 520px;
-  }
-
-  .landing-hero {
-    padding-top: var(--sp-6);
-  }
-}
-
 /* ---------- Пейволл: свёрнутая строка и кнопки-действия ---------- */
 
 .paywall__collapsed {
@@ -6410,7 +5173,7 @@ html {
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--tg-button) 35%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tg-text) 14%, transparent);
 }
 
 .paywall__collapsed-price {
@@ -6468,14 +5231,6 @@ html {
 
 .payment-settings__providers {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-}
-
-.landing-price__renewal {
-  text-wrap: balance;
-}
-
-.landing-pricing {
-  align-items: stretch;
 }
 
 @media (min-width: 960px) {
@@ -6568,7 +5323,7 @@ html {
   font-size: 15.5px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--tg-button) 30%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tg-text) 14%, transparent);
 }
 
 /* ---------- Ещё полировка ---------- */
@@ -6576,15 +5331,6 @@ html {
 .edit-panel__textarea {
   min-height: 64px;
   max-height: 45dvh;
-}
-
-@media (max-width: 719px) {
-  /* Внизу уже есть липкая кнопка — вторая такая же сверху лишняя. */
-  .landing-sticky ~ * .landing-nav__cta,
-  .landing-nav__cta {
-    padding: 8px 12px;
-    font-size: 13.5px;
-  }
 }
 
 /* Для тех, кто отключил анимацию, и пока демо ждёт появления в зоне видимости,
@@ -6597,7 +5343,6 @@ html {
   font-size: 14px;
   text-align: center;
 }
-
 
 /* ---------- Третья волна правок по ревью дизайна ---------- */
 
@@ -6678,58 +5423,20 @@ html {
 
 /* Лендинг: телефон */
 @media (max-width: 719px) {
-  .landing-nav__cta {
-    display: none;
-  }
+  
 
   .screen--login {
     padding-bottom: 88px;
   }
 
-  .landing-features {
-    grid-template-columns: 1fr 1fr;
-    gap: var(--sp-2);
-  }
+  
 
-  .landing-features > * {
-    padding: var(--sp-3);
-  }
+  
 
-  .landing-promise {
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-  }
-}
-
-.landing-trust {
-  align-items: stretch;
-}
-
-.landing-gateways {
-  justify-content: center;
+  
 }
 
 /* Цена */
-.landing-pricing {
-  max-width: none;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-
-.landing-price {
-  display: flex;
-  flex-direction: column;
-}
-
-.landing-price__who {
-  min-height: 3.2em;
-  font-size: 13.5px;
-  color: var(--text-secondary);
-}
-
-.landing-price__renewal {
-  margin-top: auto;
-}
 
 .payback {
   max-width: none;
@@ -6763,57 +5470,12 @@ html {
   color: var(--text-primary);
 }
 
-.landing-gateways__note {
-  font-size: 14.5px;
-  color: var(--text-secondary);
-}
-
-@media (max-width: 719px) {
-  .login-hero__lead {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-}
-
 .paywall__collapsed,
 .paywall__collapsed span {
   white-space: nowrap;
 }
 
-
 /* ---------- Четвёртая волна ---------- */
-
-.login-hero__lead--short {
-  display: none;
-}
-
-@media (max-width: 719px) {
-  .login-hero__lead--wide {
-    display: none;
-  }
-
-  .login-hero__lead--short {
-    display: block;
-    -webkit-line-clamp: unset;
-  }
-
-  .landing-promise {
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .landing-promise li {
-    font-size: 12.5px;
-    padding: 4px 9px;
-  }
-
-  .landing-features > :last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
-}
 
 /* Пейволл: способы оплаты сразу под ценой, затемнение фона, прокрутка. */
 .paywall--open > * {
@@ -6854,33 +5516,11 @@ html {
 
   .flow-node--selected {
     outline: 2px solid var(--tg-button);
-    box-shadow: 0 6px 20px color-mix(in srgb, var(--tg-button) 28%, transparent);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--tg-text) 14%, transparent);
   }
 }
-
 
 /* ---------- Правки по полной проверке дизайна ---------- */
-
-.landing-promise__label {
-  margin: var(--sp-3) 0 0;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent-success-ink);
-}
-
-@media (max-width: 719px) {
-  .landing-promise {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    gap: 6px;
-    margin-top: 6px;
-  }
-
-  .landing-promise li {
-    padding: 4px 8px;
-    font-size: 12.5px;
-  }
-}
 
 /* Чек-лист замечаний у опубликованного бота — одной строкой, раскрывается. */
 details.live-problems > summary {
@@ -6891,10 +5531,6 @@ details.live-problems > summary {
 
 details.live-problems > summary::-webkit-details-marker {
   display: none;
-}
-
-.login-card a {
-  color: var(--accent-on-surface);
 }
 
 .paywall__method {
@@ -6982,42 +5618,6 @@ details.live-problems > summary::-webkit-details-marker {
 }
 
 /* Узкий экран 360×640: вход виден без прокрутки. */
-@media (max-width: 400px) {
-  .landing-eyebrow {
-    font-size: 11.5px;
-    padding: 4px 10px;
-    white-space: normal;
-  }
-
-  .login-title {
-    font-size: 26px;
-    line-height: 1.15;
-  }
-
-  .login-hero__lead--short {
-    font-size: 14px;
-  }
-
-  .login-card {
-    padding: var(--sp-3);
-  }
-
-  .login-card .publish-button {
-    font-size: 14.5px;
-    padding: 12px 10px;
-  }
-
-  .landing-promise__label {
-    margin-top: 2px;
-  }
-}
-
-@media (max-width: 400px) {
-  .landing-hero__links {
-    display: none;
-  }
-}
-
 
 /* Оплата запуска: рекомендация, объяснение «что будет» */
 .paywall__method-badge {
@@ -7042,10 +5642,10 @@ details.live-problems > summary::-webkit-details-marker {
   max-width: 720px;
   margin: 0 auto 24px;
   padding: 16px 20px;
-  border: 1px solid var(--accent, #4f46e5);
+  border: 1px solid var(--accent, var(--tg-button));
   border-radius: 14px;
   text-align: center;
-  background: color-mix(in srgb, var(--accent, #4f46e5) 8%, transparent);
+  background: color-mix(in srgb, var(--accent, var(--tg-button)) 8%, transparent);
 }
 
 .landing-offer__title {
@@ -7238,10 +5838,6 @@ details.live-problems > summary::-webkit-details-marker {
 
 /* «Открыть бота» в карточке входа — кнопка, а не ссылка: без этого цвет ссылки
    совпадал с фоном кнопки и текст пропадал. */
-.login-card a.publish-button,
-.login-card__fallback a.publish-button {
-  color: var(--tg-button-text, #fff);
-}
 
 /* Быстрые кнопки в предпросмотре: клавиатура под чатом, как в Telegram. */
 .live-preview__keyboard {
@@ -7636,27 +6232,22 @@ details.live-problems > summary::-webkit-details-marker {
    Выше нельзя, ниже нельзя: поэтому у мелких кнопок задан минимум. */
 @media (pointer: coarse), (max-width: 959px) {
   .header-logout-button,
-  .edit-panel__close,
-  .edit-panel__delete,
-  .sheet__close,
-  .live-preview__close,
-  .buttons-editor__remove,
-  .buttons-editor__add,
-  .poll-editor__remove,
-  .calendar__nav button,
-  .chat-buttons__pill--tappable,
-  .live-preview__skip,
-  .live-preview__key,
-  .landing-nav__cta {
+.edit-panel__close,
+.edit-panel__delete,
+.sheet__close,
+.live-preview__close,
+.buttons-editor__remove,
+.buttons-editor__add,
+.poll-editor__remove,
+.calendar__nav button,
+.chat-buttons__pill--tappable,
+.live-preview__skip,
+.live-preview__key {
     min-width: 44px;
     min-height: 44px;
   }
 
-  .landing-nav__brand {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-  }
+  
 
   .payment-editor__input,
   .buttons-editor__label,
@@ -7849,4 +6440,255 @@ details.live-problems > summary::-webkit-details-marker {
   display: block;
   margin-top: 4px;
   color: var(--text-secondary);
+}
+
+/* ---------- Знак бренда ---------- */
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: var(--radius-md);
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+}
+
+/* Иконки Phosphor внутри строки текста. */
+.inline-icon {
+  display: inline-block;
+  vertical-align: -0.2em;
+  margin-right: 0.25em;
+  flex: none;
+}
+
+/* =========================================================================
+   Обновление оформления приложения (октябрь 2026).
+   Одна система: кнопки и поля 12px, карточки 16px, панели 22px, чипы 999px.
+   Один акцент, тени без цветного свечения, иконки Phosphor вместо эмодзи.
+   Правила ниже перекрывают старые по порядку в файле.
+   ========================================================================= */
+
+.app-header__icon,
+.bot-card__icon,
+.empty-state__icon {
+  color: var(--accent-on-surface);
+  background: color-mix(in srgb, var(--tg-button) 12%, var(--tg-bg));
+}
+
+.bot-card__icon--draft {
+  color: var(--text-tertiary);
+  background: var(--tg-secondary-bg);
+}
+
+.app-header h1,
+.app-header__name {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+/* Кнопки шапки: иконка и подпись в одну строку с зазором. */
+.bot-payments-button,
+.header-logout-button,
+.theme-toggle {
+  gap: 7px;
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  transition:
+    background-color var(--dur-fast) var(--ease-smooth),
+    border-color var(--dur-fast) var(--ease-smooth),
+    color var(--dur-fast) var(--ease-smooth);
+}
+
+.header-logout-button {
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.bot-payments-button:hover,
+.header-logout-button:hover,
+.theme-toggle:hover {
+  background: var(--tg-secondary-bg);
+  border-color: color-mix(in srgb, var(--tg-text) 18%, transparent);
+  color: var(--text-primary);
+}
+
+.header-logout-button:hover {
+  color: var(--tg-destructive);
+  border-color: color-mix(in srgb, var(--tg-destructive) 50%, transparent);
+}
+
+.bot-payments-button svg {
+  flex: none;
+}
+
+.bot-payments-button--on {
+  border-color: color-mix(in srgb, var(--tg-button) 40%, transparent);
+  background: color-mix(in srgb, var(--tg-button) 10%, var(--tg-bg));
+  color: var(--accent-on-surface);
+}
+
+/* Карточки ботов: светлая поверхность с линией, а не серая плита. */
+.bot-card {
+  border: 1px solid var(--tg-separator);
+  background: var(--surface-raised);
+  box-shadow: none;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-smooth),
+    box-shadow var(--dur-base) var(--ease-smooth);
+}
+
+.bot-card:hover {
+  border-color: color-mix(in srgb, var(--tg-text) 22%, transparent);
+  box-shadow: var(--shadow-card);
+}
+
+.bot-card__name {
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.bot-card__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  background: var(--tg-secondary-bg);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bot-card__status--active {
+  background: color-mix(in srgb, var(--accent-success) 16%, var(--tg-bg));
+}
+
+.bot-card__dot {
+  display: none;
+}
+
+/* Главные кнопки: плоские, без цветного свечения. */
+.publish-button,
+.empty-state__cta {
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  letter-spacing: -0.005em;
+}
+
+.empty-state__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.publish-button:hover:not(:disabled),
+.empty-state__cta:hover {
+  background: color-mix(in srgb, var(--tg-button) 88%, #000);
+  box-shadow: none;
+  transform: none;
+}
+
+.state-icon {
+  display: grid;
+  place-items: center;
+  color: var(--accent-on-surface);
+}
+
+/* Блоки на холсте. */
+.flow-node {
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+.flow-node--selected {
+  border-color: var(--tg-button);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.block-library {
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  box-shadow: none;
+}
+
+.block-library__title {
+  letter-spacing: 0.06em;
+}
+
+.block-library__item {
+  border-radius: var(--radius-md);
+  transition: background-color var(--dur-fast) var(--ease-smooth);
+}
+
+.block-library__item:hover {
+  background: var(--tg-secondary-bg);
+}
+
+/* Значки типов блоков: тонкая иконка в мягкой плашке цвета типа. */
+.block-card__icon--welcome,
+.block-card__icon--description,
+.block-card__icon--image,
+.block-card__icon--video,
+.block-card__icon--buttons,
+.block-card__icon--poll,
+.block-card__icon--delivery,
+.block-card__icon--delay,
+.block-card__icon--success {
+  display: inline-grid;
+  place-items: center;
+}
+
+/* Окна: единый вид. */
+.edit-panel {
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-xl);
+  background: var(--tg-bg);
+  box-shadow: var(--shadow-elevated);
+}
+
+.edit-panel__icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+.edit-panel__close,
+.edit-panel__delete {
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
+}
+
+.edit-panel__close:hover,
+.edit-panel__delete:hover {
+  background: var(--tg-secondary-bg);
+  color: var(--text-primary);
+}
+
+.payment-editor__input,
+.app-header__name-input {
+  border-radius: var(--radius-md);
+}
+
+.save-status {
+  font-size: 12.5px;
+}
+
+.header-create-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+/* Точка входа «Старт»: заливка акцентом (перекрывает общий фон узла выше). */
+.flow-node.flow-node--start {
+  border: 0;
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  box-shadow: var(--shadow-card);
 }

@@ -4,6 +4,9 @@ import { type PublicationInfo, ApiError, builderApi, formatAmount } from "../api
 import { openExternal } from "../hooks/useTelegramWebApp";
 import { BotFatherSteps } from "./BotFatherSteps";
 import { plural } from "../plural";
+import { RocketLaunch } from "@phosphor-icons/react";
+import { Warning } from "@phosphor-icons/react";
+
 
 interface Props {
   botId: string;
@@ -136,7 +139,7 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
     const first = methods[0];
     return (
       <button type="button" className="paywall__collapsed" onClick={() => setOpen(true)}>
-        <span>🚀 Опубликовать</span>
+        <span><RocketLaunch size={18} className="inline-icon" aria-hidden="true" /> Опубликовать</span>
         <span className="paywall__collapsed-price">
           {first.price_minor > 0 ? `от ${price(first.price_minor, first.currency)} ›` : "›"}
           {problems.length > 0 && (
@@ -145,7 +148,7 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
               title={`Замечаний перед оплатой: ${problems.length}`}
               aria-label={`Замечаний перед оплатой: ${problems.length}`}
             >
-              ⚠ {problems.length}
+              <Warning size={15} className="inline-icon" aria-hidden="true" /> {problems.length}
             </span>
           )}
         </span>
@@ -159,11 +162,11 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
   return (
     <div className="paywall paywall--open">
       <button type="button" className="paywall__fold" onClick={() => setOpen(false)}>
-        Свернуть ✕
+        Свернуть
       </button>
       <div className="paywall__head">
         <span className="paywall__icon" aria-hidden="true">
-          🚀
+          <RocketLaunch size={18} aria-hidden="true" />
         </span>
         <div>
           <p className="paywall__title">Публикация бота</p>

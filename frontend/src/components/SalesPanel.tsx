@@ -12,6 +12,7 @@ import {
 import { confirmDialog } from "../confirm";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
+import { CurrencyCircleDollar, X } from "@phosphor-icons/react";
 
 interface Props {
   botId: string;
@@ -161,11 +162,11 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--payment" aria-hidden="true">
-            💰
+            <CurrencyCircleDollar size={20} aria-hidden="true" />
           </span>
           <span className="edit-panel__title">Продажи</span>
           <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
@@ -218,7 +219,7 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
                       disabled={busyOrder === order.id}
                       onClick={() => decide(order, true)}
                     >
-                      ✅ Оплачен
+                      Оплачен
                     </button>
                     <button
                       type="button"
@@ -308,7 +309,7 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
                         {order.status === "paid" && !order.delivered && (
                           <span className="orders__undelivered">
                             {order.delivery_gave_up
-                              ? " · ⛔️ товар не выдан"
+                              ? " · товар не выдан"
                               : " · ⏳ товар ещё не доставлен"}
                           </span>
                         )}

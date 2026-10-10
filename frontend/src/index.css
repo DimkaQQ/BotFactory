@@ -1,59 +1,37 @@
 :root {
   color-scheme: light dark;
 
-  /* Telegram theme tokens (injected at runtime inside the Mini App).
-     Outside Telegram — the standalone web constructor — none of the
-     --tg-theme-* variables exist, so these fallbacks become the actual
-     Bot Factory web brand palette. Inside the Mini App, Telegram's
-     injected values win automatically; nothing here needs to know which
-     mode it's running in.
-
-     Deep, desaturated "jewel tone" palette instead of bright startup
-     candy colors — a near-black with a violet undertone, a richer
-     indigo brand color, and off-white surfaces instead of stark
-     #ffffff (a flat pure white is what reads as cheap/unfinished; real
-     premium products almost never use it edge to edge). */
-  --tg-bg: var(--tg-theme-bg-color, #fdfcfe);
-  --tg-text: var(--tg-theme-text-color, #14121f);
-  /* Measured against the painted pixels, #83829a came out at 3.65:1 on
-     the off-white ground — under the 4.5:1 floor for text this size, and
-     this token carries "Привет, …", "Черновик" and every field hint.
-     It has to clear that floor on *both* light surfaces, not just the
-     page: #6b6a80 measured 5.13:1 on the background but 4.47:1 on the
-     tinted card, which is where "Черновик" and the block count live.
-     #63627a clears both and still reads as secondary. */
-  --tg-hint: var(--tg-theme-hint-color, #63627a);
-  --tg-link: var(--tg-theme-link-color, #4338ca);
-  --tg-button: var(--tg-theme-button-color, #4338ca);
+  /* Палитра: холодные нейтрали и один акцент (изумруд). Внутри Telegram Mini App
+     значения --tg-theme-* приходят от самого Telegram и перекрывают эти запасные,
+     поэтому здесь описан именно «веб-вид» Bot Factory. Чистый #fff и #000 не
+     используются: плоский белый по всей площади выглядит недоделанным. */
+  --tg-bg: var(--tg-theme-bg-color, #fafafa);
+  --tg-text: var(--tg-theme-text-color, #0f1115);
+  /* Вторичный текст: 6.1:1 на фоне страницы и 5.6:1 на карточке. */
+  --tg-hint: var(--tg-theme-hint-color, #565c68);
+  --tg-link: var(--tg-theme-link-color, #047857);
+  --tg-button: var(--tg-theme-button-color, #047857);
   --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
-  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #eeebf7);
+  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f0f1f3);
   --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
-  --tg-separator: var(--tg-theme-section-separator-color, rgba(20, 18, 31, 0.1));
+  --tg-separator: var(--tg-theme-section-separator-color, rgba(15, 17, 21, 0.09));
   --tg-destructive: var(--tg-theme-destructive-text-color, #dc2626);
-  /* Destructive as a *fill* behind white text, which is a different job from
-     --tg-destructive. That one has to stay legible as text on the page, so
-     in dark mode it is a light red (#f87171) — and white on #f87171 measured
-     2.77:1 on the "Удалить" button of the confirm dialog. This one is fixed
-     across both themes: white on it is 4.83:1, and it is 3.91:1 against the
-     dark page, so the button's own edge stays visible too. */
+  /* Красная заливка под белым текстом: 4.83:1 в обеих темах. */
   --danger-fill: #dc2626;
   --danger-on-fill: #ffffff;
 
-  /* Text hierarchy via opacity of the base text color. */
   --text-primary: var(--tg-text);
-  /* 62% of the body colour measured 3.99:1 on the landing lead — just
-     under AA. 72% clears it without flattening the hierarchy. */
-  --text-secondary: color-mix(in srgb, var(--tg-text) 72%, transparent);
+  --text-secondary: color-mix(in srgb, var(--tg-text) 74%, transparent);
   --text-tertiary: var(--tg-hint);
-  /* The brand colour *as text on a surface*, which is a different job
-     from --tg-button. That one is a fill that carries white text, so in
-     dark mode it has to be dark — and every place that borrowed it for
-     an accent label went unreadable there (2.65:1 on the preview button,
-     2.82:1 on the landing badge). This role has to stay legible against
-     the page in both themes, which is exactly what --tg-link already is. */
+  /* Цвет бренда как ТЕКСТ на поверхности: тот же, что --tg-link. */
   --accent-on-surface: var(--tg-link);
 
-  /* 8pt spacing scale */
+  /* Поверхности: страница, приподнятая карточка, утопленное поле. */
+  --surface-raised: color-mix(in srgb, var(--tg-bg) 60%, #ffffff);
+  --surface-sunken: color-mix(in srgb, var(--tg-secondary-bg) 70%, var(--tg-bg));
+  --ring: color-mix(in srgb, var(--tg-button) 32%, transparent);
+
+  /* Шкала отступов 8pt */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -63,62 +41,43 @@
   --sp-7: 48px;
   --sp-8: 64px;
 
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  /* Единая шкала скруглений: поля и кнопки 12, карточки 16, большие панели 22,
+     «таблетки» и чипы 999. Другие значения не вводим. */
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
   --radius-full: 999px;
 
-  /* Soft, background-tinted shadow — never pure black. */
-  --shadow-card: 0 1px 2px color-mix(in srgb, var(--tg-text) 6%, transparent),
-    0 8px 24px color-mix(in srgb, var(--tg-text) 6%, transparent);
-  --shadow-elevated: 0 2px 4px color-mix(in srgb, var(--tg-text) 5%, transparent),
-    0 24px 48px -12px color-mix(in srgb, var(--tg-text) 16%, transparent);
+  --font-sans: "Onest Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Category accents — fixed hues, independent of Telegram's dynamic
-     theme, used as small decorative badges throughout the app and the
-     landing page's feature grid. Deep jewel tones (indigo, violet,
-     magenta, wine, bronze, teal, emerald, slate) instead of a bright
-     8-color "startup rainbow" — restraint and depth read as expensive,
-     a wall of saturated hues reads as a toy. */
-  --accent-welcome: #4338ca;
-  --accent-description: #6d28d9;
-  --accent-image: #a21caf;
-  --accent-video: #9f1239;
+  /* Тени подкрашены под цвет текста, не чёрные. */
+  --shadow-card: 0 1px 2px color-mix(in srgb, var(--tg-text) 5%, transparent),
+    0 6px 20px -6px color-mix(in srgb, var(--tg-text) 8%, transparent);
+  --shadow-elevated: 0 2px 4px color-mix(in srgb, var(--tg-text) 5%, transparent),
+    0 28px 56px -16px color-mix(in srgb, var(--tg-text) 20%, transparent);
+
+  /* Цвета типов блоков: функциональные метки, а не декор. Приглушённые 700-е тона,
+     различимые между собой, без «радуги». */
+  --accent-welcome: #0369a1;
+  --accent-description: #4d7c0f;
+  --accent-image: #be185d;
+  --accent-video: #b91c1c;
   --accent-buttons: #b45309;
   --accent-poll: #0e7490;
-  --accent-delivery: #047857;
-  --accent-delay: #475569;
+  --accent-delivery: #15803d;
+  --accent-delay: #52525b;
   --accent-success: #059669;
-  /* "Something needs doing soon", between success and destructive. Used by
-     the billing banner, where red would say the bot is already off and
-     green would say nothing is wrong — and both would be untrue. */
   --accent-warning: #d97706;
-  /* The same green as *text*. #059669 is chosen to read as a fill/dot on the
-     off-white page; set as a label on its own 16% tint — the "START" badge on
-     the start block — it measured 3.68:1, under AA for a 9.5px bold label.
-     A darker ink clears it at 6.2:1 and still reads as the same green. In
-     dark mode the accent is already light enough to double as ink. */
   --accent-success-ink: #065f46;
   --accent-warning-ink: #92400e;
 
-  /* Desktop shell (web constructor only — the Mini App never reaches
-     these widths).
-
-     Two widths, because the two screens want different things. The bot
-     list is a card grid that reads better with a limit — past ~1440px the
-     cards either stretch into letterboxes or the eye has to travel too far
-     across a row. The builder is a *canvas*: at 1920 the old shared 1180px
-     limit left 740px of empty page while the graph sat squeezed into an
-     876px column, which is the opposite of what a diagram wants. */
+  /* Оболочка для десктопа (только веб-конструктор). */
   --shell-max: 1440px;
   --shell-max-canvas: 1760px;
   --sidebar-w: 272px;
 
-  /* Motion system — a small, consistent vocabulary instead of ad-hoc
-     "ease"/0.1s everywhere. "smooth" for ordinary state changes, "out"
-     (expo-out) for things entering the screen, "spring" for anything
-     that should feel like it has a little weight/bounce (presses,
-     pops, success states). */
+  /* Движение: «smooth» для состояний, «out» для появления, «spring» для нажатий. */
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -127,22 +86,9 @@
   --dur-slow: 0.45s;
 }
 
-/* Dark theme for the web constructor.
-
-   Keyed on the *resolved* theme attribute rather than a
-   `prefers-color-scheme` media query. src/theme.ts (and the inline
-   bootstrap in index.html, which runs before first paint) always writes
-   `data-theme="light"` or `"dark"` onto <html> — from the stored
-   preference when there is one, otherwise from Telegram's colorScheme or
-   the OS. That keeps this palette in exactly one place: a media query
-   would have to be repeated for the manual switch, and two copies of
-   twenty colour tokens drift.
-
-   Only the source tokens are redefined; everything else in the palette is
-   derived from them, so the whole app follows. These are *fallbacks*
-   inside `var(--tg-theme-*, …)`, which means the Mini App is untouched:
-   when Telegram injects its own theme, its values win here exactly as they
-   do in light mode. */
+/* Тёмная тема. Ключом служит атрибут data-theme на <html> (его ставит
+   index.html до первой отрисовки и src/theme.ts), а не media-запрос: палитра
+   в одном месте, ручной переключатель работает так же, как системная тема. */
 :root[data-theme="light"] {
   color-scheme: light;
 }
@@ -150,37 +96,34 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --tg-bg: var(--tg-theme-bg-color, #0f0e16);
-  --tg-text: var(--tg-theme-text-color, #f2f0fa);
-  --tg-hint: var(--tg-theme-hint-color, #9997ad);
-  --tg-link: var(--tg-theme-link-color, #a5b4fc);
-  /* #6366f1 measured 3.84:1 for the brand badge and 4.47:1 for white
-     text on the primary button — both just under AA on this ground.
-     #4f46e5 is darker behind white text (5.4:1) and the badge now
-     takes --tg-link, which was already light enough. */
-  --tg-button: var(--tg-theme-button-color, #4f46e5);
+  --tg-bg: var(--tg-theme-bg-color, #0b0c0f);
+  --tg-text: var(--tg-theme-text-color, #eceef2);
+  --tg-hint: var(--tg-theme-hint-color, #9aa1ad);
+  --tg-link: var(--tg-theme-link-color, #34d399);
+  /* Заливка кнопки остаётся тёмно-зелёной: белый текст на ней 5.5:1. */
+  --tg-button: var(--tg-theme-button-color, #047857);
   --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
-  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #1a1826);
+  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #14161b);
   --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
-  --tg-separator: var(--tg-theme-section-separator-color, rgba(242, 240, 250, 0.12));
+  --tg-separator: var(--tg-theme-section-separator-color, rgba(236, 238, 242, 0.1));
   --tg-destructive: var(--tg-theme-destructive-text-color, #f87171);
 
-  /* Shadows are mixed from --tg-text, which is now nearly white — left
-     alone they would light the cards up instead of lifting them. On a
-     dark ground depth comes from a darker shadow, not a softer one. */
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.36);
-  --shadow-elevated: 0 2px 4px rgba(0, 0, 0, 0.45), 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+  --surface-raised: color-mix(in srgb, var(--tg-bg) 94%, #ffffff);
+  --surface-sunken: color-mix(in srgb, var(--tg-bg) 70%, #000000);
+  --ring: color-mix(in srgb, var(--tg-link) 40%, transparent);
 
-  /* The jewel tones are chosen to sit on off-white; at these depths they
-     disappear into a dark background. Same hues, lifted. */
-  --accent-welcome: #818cf8;
-  --accent-description: #a78bfa;
-  --accent-image: #e879f9;
-  --accent-video: #fb7185;
+  /* На тёмном фоне глубина идёт от более тёмной тени, а не от мягкой. */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 24px -8px rgba(0, 0, 0, 0.5);
+  --shadow-elevated: 0 2px 4px rgba(0, 0, 0, 0.5), 0 28px 56px -16px rgba(0, 0, 0, 0.7);
+
+  --accent-welcome: #38bdf8;
+  --accent-description: #a3e635;
+  --accent-image: #f472b6;
+  --accent-video: #f87171;
   --accent-buttons: #fbbf24;
   --accent-poll: #22d3ee;
-  --accent-delivery: #34d399;
-  --accent-delay: #94a3b8;
+  --accent-delivery: #4ade80;
+  --accent-delay: #a1a1aa;
   --accent-success: #34d399;
   --accent-success-ink: #34d399;
   --accent-warning: #fbbf24;
@@ -248,7 +191,7 @@ html {
 body {
   margin: 0;
   min-height: 100%;
-  font-family: "Manrope Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.45;
   letter-spacing: -0.005em;
@@ -290,7 +233,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--tg-button);
+  outline: 2px solid var(--accent-on-surface);
   outline-offset: 2px;
   border-radius: var(--radius-md);
 }

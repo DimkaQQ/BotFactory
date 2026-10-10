@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 
 import { currencyUnit, type BlockContent, type PaymentProviderInfo } from "../api/builderApi";
+import { Warning } from "@phosphor-icons/react";
+
 
 interface Props {
   /** Only used to keep this block's radio group to itself. */
@@ -147,14 +149,14 @@ export function PaymentEditor({
       {!provider ? (
         <button type="button" className="payment-editor__warning" onClick={onOpenSettings}>
           <span>
-            ⚠️ Платёжная система не подключена — бот не сможет принять деньги, и этот блок остановит сценарий.
+            <Warning size={15} className="inline-icon" aria-hidden="true" /> Платёжная система не подключена — бот не сможет принять деньги, и этот блок остановит сценарий.
           </span>
           <span className="payment-editor__warning-cta">Подключить кассу →</span>
         </button>
       ) : missingFields && missingFields.length > 0 ? (
         <button type="button" className="payment-editor__warning" onClick={onOpenSettings}>
           <span>
-            ⚠️ В кассе не заполнено: {missingFields.join(", ")}. Оплата не откроется, покупатель увидит
+            <Warning size={15} className="inline-icon" aria-hidden="true" /> В кассе не заполнено: {missingFields.join(", ")}. Оплата не откроется, покупатель увидит
             ошибку.
           </span>
           <span className="payment-editor__warning-cta">Дозаполнить →</span>
@@ -166,7 +168,7 @@ export function PaymentEditor({
         // в шапке горело зелёное «Касса подключена», чек-лист молчал — а
         // первый покупатель получал «не получилось открыть оплату».
         <p className="payment-editor__warning payment-editor__warning--static">
-          ⚠️ Не заполнено:{" "}
+          <Warning size={15} className="inline-icon" aria-hidden="true" /> Не заполнено:{" "}
           {blockFields
             .filter((f) => !blockFieldValue(content, f.key))
             .map((f) => f.label.toLowerCase())
@@ -259,7 +261,7 @@ export function PaymentEditor({
           ошибку. Продавец — никогда. */}
       {content.price !== undefined && !(Number(String(content.price).replace(",", ".")) > 0) && (
         <p className="payment-editor__note payment-editor__note--manual">
-          ⚠️ Без цены бот не сможет выставить счёт — покупатель увидит ошибку вместо оплаты.
+          <Warning size={15} className="inline-icon" aria-hidden="true" /> Без цены бот не сможет выставить счёт — покупатель увидит ошибку вместо оплаты.
         </p>
       )}
 
@@ -269,7 +271,7 @@ export function PaymentEditor({
           говорили, и первым замечал покупатель. */}
       {staleLabel && (
         <p className="payment-editor__note payment-editor__note--manual">
-          ⚠️ На кнопке написана другая сумма, а счёт уйдёт на {content.price} {currency}.{" "}
+          <Warning size={15} className="inline-icon" aria-hidden="true" /> На кнопке написана другая сумма, а счёт уйдёт на {content.price} {currency}.{" "}
           <button
             type="button"
             className="payment-editor__fix-link"
@@ -352,12 +354,12 @@ export function PaymentEditor({
                 {!isStars && <PeriodField content={content} onChange={onChange} />}
                 <p className="payment-editor__note payment-editor__note--good">
                   {isStars
-                    ? "⭐️ Telegram сам спишет звёзды раз в 30 дней, пока подписчик не отменит — отменяет он тоже внутри Telegram. Период фиксированный: 30 дней, другого Telegram не поддерживает."
-                    : `✅ ${providerInfo?.title ?? "Касса"} сама ведёт подписку: спишет следующий период без участия покупателя, сама повторит попытку при отказе карты и даст ему страницу, где отписаться.`}
+                    ? "Telegram сам спишет звёзды раз в 30 дней, пока подписчик не отменит — отменяет он тоже внутри Telegram. Период фиксированный: 30 дней, другого Telegram не поддерживает."
+                    : `${providerInfo?.title ?? "Касса"} сама ведёт подписку: спишет следующий период без участия покупателя, сама повторит попытку при отказе карты и даст ему страницу, где отписаться.`}
                 </p>
                 {providerInfo?.slug === "prodamus" && (
                   <p className="payment-editor__note payment-editor__note--manual">
-                    ⚠️ Цену и периодичность задаёт карточка подписки в кабинете Prodamus — поле «Цена» выше на
+                    <Warning size={15} className="inline-icon" aria-hidden="true" /> Цену и периодичность задаёт карточка подписки в кабинете Prodamus — поле «Цена» выше на
                     подписку не влияет, и первый платёж может отличаться от регулярного. «Период доступа» здесь
                     отвечает только за то, до какого числа бот держит доступ открытым, поэтому поставь тот же
                     интервал, что в карточке. И учти: первый платёж Prodamus не считает автосписанием —
@@ -369,7 +371,7 @@ export function PaymentEditor({
               <>
                 <PeriodField content={content} onChange={onChange} />
                 <p className="payment-editor__note payment-editor__note--good">
-                  ✅ Первая оплата сохранит карту, дальше бот сам списывает в конце каждого периода. Если карта
+                  Первая оплата сохранит карту, дальше бот сам списывает в конце каждого периода. Если карта
                   откажет — подписчику придёт сообщение, а доступ закроется в конце оплаченного срока.
                   {providerInfo?.slug === "yookassa" &&
                     " В ЮKassa автоплатежи включает менеджер — если их нет, бот перейдёт на счета."}
@@ -386,9 +388,9 @@ export function PaymentEditor({
                   {/* "Мы не умеем", не "касса не умеет": у половины этих
                       шлюзов рекуррент есть, просто мы его ещё не подключили,
                       и врать про чужой продукт незачем. */}
-                  ⚠️ Автосписание через {providerInfo?.title ?? "эту кассу"} бот пока не умеет. Он пришлёт новый
+                  <Warning size={15} className="inline-icon" aria-hidden="true" /> Автосписание через {providerInfo?.title ?? "эту кассу"} бот пока не умеет. Он пришлёт новый
                   счёт за 2 дня до конца периода и напомнит; доступ продлится, если счёт оплатят. Списывают
-                  сами двенадцать касс — они помечены 🔁 в списке.
+                  сами двенадцать касс — они помечены значком повтора в списке.
                 </p>
               </>
             )}

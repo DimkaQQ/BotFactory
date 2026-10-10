@@ -27,6 +27,8 @@ import { SalesPanel } from "./SalesPanel";
 import { PublishPaywall } from "./PublishPaywall";
 import { PublishButton } from "./PublishButton";
 import { ThemeToggle } from "./ThemeToggle";
+import { Check, CreditCard, DeviceMobile, Globe, Palette, PencilSimple, Robot, Trash, Warning, WarningCircle, Wrench } from "@phosphor-icons/react";
+
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
 
@@ -625,7 +627,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   if (loadState === "loading") {
     return (
       <div className="screen screen--center">
-        <div className="state-icon">🛠</div>
+        <div className="state-icon"><Wrench size={44} /></div>
         <p>Загружаем бота…</p>
       </div>
     );
@@ -634,7 +636,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   if (loadState === "error" || !bot) {
     return (
       <div className="screen screen--center">
-        <div className="state-icon">😕</div>
+        <div className="state-icon"><WarningCircle size={44} /></div>
         <p>{loadError ?? "Бот не найден"}</p>
         <button type="button" className="back-link" onClick={onBack}>
           ← Назад к списку
@@ -686,7 +688,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 {/* Три состояния, а не два. «Касса подключена» по факту
                     выбранного провайдера было прямой ложью: ключи пустые,
                     оплата не откроется, а владелец видит зелёное. */}
-                {paymentSettings?.live ? "💳" : paymentSettings?.provider ? "⚠️" : "💳"}{" "}
+                {paymentSettings?.live || !paymentSettings?.provider ? <CreditCard size={16} aria-hidden="true" /> : <Warning size={16} aria-hidden="true" />}{" "}
                 <span className="bot-payments-button__long">
                   {paymentSettings?.live
                     ? "Касса подключена"
@@ -706,7 +708,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 onClick={() => setProfileOpen(true)}
                 title="Фото, имя и описание бота в Telegram"
               >
-                🎨 <span className="bot-payments-button__long">Оформление</span>
+                <Palette size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Оформление</span>
                 <span className="bot-payments-button__short">Вид</span>
               </button>
             )}
@@ -717,7 +719,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 onClick={() => setSiteOpen(true)}
                 title="Страница с ценами и документами — для банка (Казахстан)"
               >
-                🌐 <span className="bot-payments-button__long">Страница</span>
+                <Globe size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Страница</span>
                 <span className="bot-payments-button__short">Сайт</span>
               </button>
             )}
@@ -728,13 +730,13 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               disabled={deleting}
               aria-label="Удалить бота"
             >
-              🗑
+              <Trash size={18} aria-hidden="true" />
             </button>
           </div>
         </div>
         <div className="app-header__top">
           <div className="app-header__icon" aria-hidden="true">
-            🛠
+            <Robot size={22} weight="fill" />
           </div>
           <div className="app-header__titles">
             {editingName ? (
@@ -765,7 +767,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                   {bot.name || (bot.telegram_bot_username ? `@${bot.telegram_bot_username}` : "Новый бот")}
                 </span>
                 <span className="app-header__edit-hint" aria-hidden="true">
-                  ✎
+                  <PencilSimple size={14} />
                 </span>
               </h1>
             )}
@@ -793,7 +795,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
 
       {isMiniApp && (
         <div className="miniapp-banner">
-          <p>📱 Здесь виден сценарий и кнопка публикации. Редактировать — в браузере, с телефона тоже удобно.</p>
+          <p><DeviceMobile size={16} aria-hidden="true" /> Здесь виден сценарий и кнопка публикации. Редактировать — в браузере, с телефона тоже удобно.</p>
           <button type="button" onClick={() => openExternal(`${window.location.origin}/`)}>
             Открыть в браузере →
           </button>
@@ -803,7 +805,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       {bot.status === "active" ? (
         <div className="published-banner">
           <div className="published-banner__badge" aria-hidden="true">
-            ✓
+            <Check size={18} weight="bold" />
           </div>
           <div>
             <p className="published-banner__title">
@@ -866,7 +868,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       {bot.status !== "draft" && publishProblems.length > 0 && (
         <details className="live-problems" role="status">
           <summary className="live-problems__title">
-            ⚠ {publishProblems.length}{" "}
+            <Warning size={15} aria-hidden="true" /> {publishProblems.length}{" "}
             {bot.status === "active"
               ? `${plural(publishProblems.length, ["замечание", "замечания", "замечаний"])} у бота в эфире — покупатели уже это видят`
               : `${plural(publishProblems.length, ["замечание", "замечания", "замечаний"])} до следующего запуска`}

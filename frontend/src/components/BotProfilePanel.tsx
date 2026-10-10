@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, builderApi } from "../api/builderApi";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
+import { Palette, X } from "@phosphor-icons/react";
 
 interface Props {
   botId: string;
@@ -103,11 +104,11 @@ export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--welcome" aria-hidden="true">
-            🎨
+            <Palette size={20} aria-hidden="true" />
           </span>
           <span className="edit-panel__title">Оформление @{botUsername}</span>
           <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
         <div className="edit-panel__body">
@@ -122,7 +123,7 @@ export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPhoto} />
               <div className="publish-form__actions">
                 <button type="button" onClick={() => fileRef.current?.click()} disabled={photoBusy}>
-                  {photoBusy ? "Загружаем…" : "📤 Загрузить фото"}
+                  {photoBusy ? "Загружаем…" : "Загрузить фото"}
                 </button>
                 <button
                   type="button"
@@ -179,7 +180,7 @@ export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
 
               {error && <p className="publish-form__error">{error}</p>}
               <button type="button" className="payment-settings__save" onClick={save} disabled={saving}>
-                {saving ? "Сохраняем…" : saved ? "✓ Сохранено" : "Сохранить"}
+                {saving ? "Сохраняем…" : saved ? "Сохранено" : "Сохранить"}
               </button>
             </>
           )}

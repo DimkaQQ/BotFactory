@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { type PublicConfig, builderApi } from "../api/builderApi";
+import { ChatCircleDots } from "@phosphor-icons/react";
 
 interface Props {
   /** Уже загруженный конфиг — у лендинга он есть, лишний запрос ни к чему. */
@@ -54,7 +55,7 @@ export function SiteFooter({ config: given, compact = false }: Props) {
               rel="noreferrer"
             >
               <span className="support-button__icon" aria-hidden="true">
-                💬
+                <ChatCircleDots size={20} aria-hidden="true" />
               </span>
               <span className="support-button__text">
                 <span className="support-button__title">Поддержка</span>
@@ -94,8 +95,8 @@ export function SiteFooter({ config: given, compact = false }: Props) {
       </nav>
       {!compact && (
         <p className="landing-footer__note">
-          Деньги покупателей идут напрямую на счёт владельца бота — сервис их не принимает и не хранит.
-          Bot Factory — независимый сервис и не связан с Telegram Messenger Inc.
+          Деньги покупателей идут напрямую на счёт владельца бота. Сервис их не принимает и не хранит.
+          Bot Factory независимый сервис и не связан с Telegram Messenger Inc.
         </p>
       )}
     </footer>

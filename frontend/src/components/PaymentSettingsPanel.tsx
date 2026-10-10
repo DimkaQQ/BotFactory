@@ -8,6 +8,9 @@ import {
 } from "../api/builderApi";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
+import { CreditCard, X } from "@phosphor-icons/react";
+import { ArrowsClockwise, CurrencyCircleDollar, Flask, LinkSimple, Prohibit } from "@phosphor-icons/react";
+
 
 interface Props {
   botId: string;
@@ -117,11 +120,11 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--delivery" aria-hidden="true">
-            💳
+            <CreditCard size={20} aria-hidden="true" />
           </span>
           <span className="edit-panel__title">Приём оплаты</span>
           <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
@@ -144,8 +147,8 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                         ? "демо — деньги не принимаются"
                         : connected.has_test_mode
                           ? settings?.is_test
-                            ? "🧪 тестовый режим — деньги не списываются"
-                            : "💰 боевой режим — настоящие деньги"
+                            ? "тестовый режим: деньги не списываются"
+                            : "боевой режим: настоящие деньги"
                           : "подключено"}
                     </span>
                   </>
@@ -161,7 +164,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                 <h3 className="payment-settings__heading">1. Выбери, куда получать деньги</h3>
                 {subscriptionsEnabled && (
                   <p className="app-hint payment-settings__recurring-legend">
-                    🔁 — умеет списывать подписку сама. У остальных бот присылает новый счёт каждый период.
+                    Значок повтора: касса умеет списывать подписку сама. У остальных бот присылает новый счёт каждый период.
                   </p>
                 )}
                 <div className="payment-settings__providers">
@@ -178,7 +181,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                       <span className="payment-settings__provider-title">
                         {provider.title}
                         {subscriptionsEnabled && provider.recurring !== "none" && (
-                          <span className="payment-settings__recurring"> 🔁</span>
+                          <span className="payment-settings__recurring"> <ArrowsClockwise size={13} className="inline-icon" aria-label="подписки" /></span>
                         )}
                       </span>
                       {SHORT[provider.slug] && (
@@ -194,7 +197,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                     className={`payment-settings__other ${slug === "link" ? "payment-settings__other--active" : ""}`}
                     onClick={() => setSlug("link")}
                   >
-                    <strong>🔗 Своя ссылка на оплату</strong>
+                    <strong><LinkSimple size={15} className="inline-icon" aria-hidden="true" /> Своя ссылка на оплату</strong>
                     <span>
                       Нет подключённой кассы? Бот пришлёт покупателю твою ссылку (например, на перевод по номеру
                       карты), а ты сам подтвердишь оплату — деньги он получит только после этого.
@@ -206,7 +209,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                   className={`payment-settings__other ${slug === "" ? "payment-settings__other--active" : ""}`}
                   onClick={() => setSlug("")}
                 >
-                  <strong>➖ Пока без оплаты</strong>
+                  <strong><Prohibit size={15} className="inline-icon" aria-hidden="true" /> Пока без оплаты</strong>
                   <span>Бот только общается и раздаёт бесплатное. Блок «Оплата» в сценарии не сработает.</span>
                 </button>
 
@@ -218,7 +221,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                       className={`payment-settings__other ${slug === "test" ? "payment-settings__other--active" : ""}`}
                       onClick={() => setSlug("test")}
                     >
-                      <strong>🧪 Демо-оплата</strong>
+                      <strong><Flask size={15} className="inline-icon" aria-hidden="true" /> Демо-оплата</strong>
                       <span>
                         Это не касса: покупатель нажимает «оплатить» и сразу получает товар, деньги никуда не идут.
                         Включай только чтобы проверить сценарий — перед запуском выбери настоящую кассу.
@@ -277,7 +280,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                           className={`payment-settings__mode${isTest ? " payment-settings__mode--active" : ""}`}
                           onClick={() => setIsTest(true)}
                         >
-                          <strong>🧪 Тестовый</strong>
+                          <strong><Flask size={15} className="inline-icon" aria-hidden="true" /> Тестовый</strong>
                           <span>Деньги не списываются. Для проверки (нужны тестовые ключи кассы).</span>
                         </button>
                         <button
@@ -287,7 +290,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                           className={`payment-settings__mode${!isTest ? " payment-settings__mode--active" : ""}`}
                           onClick={() => setIsTest(false)}
                         >
-                          <strong>💰 Боевой</strong>
+                          <strong><CurrencyCircleDollar size={15} className="inline-icon" aria-hidden="true" /> Боевой</strong>
                           <span>Покупатели платят по-настоящему, деньги идут тебе. Нужны боевые ключи.</span>
                         </button>
                       </div>
@@ -308,7 +311,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
               {error && <p className="publish-form__error">{error}</p>}
 
               <button type="button" className="payment-settings__save" onClick={handleSave} disabled={saving}>
-                {saving ? "Сохраняем…" : saved ? "✓ Сохранено" : "Сохранить"}
+                {saving ? "Сохраняем…" : saved ? "Сохранено" : "Сохранить"}
               </button>
 
               {/* Сами продажи живут на своём экране: настройки кассы
@@ -316,7 +319,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                   проскроллить ради них семнадцать плиток было незачем. */}
               {onOpenSales && (
                 <button type="button" className="payment-settings__sales-link" onClick={onOpenSales}>
-                  💰 Продажи и заказы →
+                  Продажи и заказы →
                 </button>
               )}
             </>

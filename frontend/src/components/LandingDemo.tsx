@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Coffee } from "@phosphor-icons/react";
 import { scrollBehavior } from "../motion";
 
 interface DemoChoice {
@@ -134,7 +135,7 @@ export function LandingDemo() {
     <div className="demo-chat" ref={rootRef}>
       <div className="demo-chat__bar">
         <span className="demo-chat__avatar" aria-hidden="true">
-          ☕
+          <Coffee size={18} weight="fill" />
         </span>
         <span className="demo-chat__name">
           Кофейня «Сова»
@@ -170,7 +171,7 @@ export function LandingDemo() {
       </div>
 
       <p className="demo-chat__hint">
-        {choices.length > 0 ? "👆 Нажми на кнопку — сценарий пойдёт по твоей ветке" : "Демо крутится само — но кнопки живые"}
+        {choices.length > 0 ? "Нажми на кнопку, и сценарий пойдёт по твоей ветке" : "Демо крутится само, но кнопки живые"}
       </p>
     </div>
   );

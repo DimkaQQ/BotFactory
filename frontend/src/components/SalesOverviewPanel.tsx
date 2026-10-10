@@ -12,6 +12,9 @@ import {
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
 import { plural } from "../plural";
+import { CurrencyCircleDollar, X } from "@phosphor-icons/react";
+import { CursorClick } from "@phosphor-icons/react";
+
 
 interface Props {
   bots: Bot[];
@@ -107,11 +110,11 @@ export function SalesOverviewPanel({ bots, onClose }: Props) {
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--success" aria-hidden="true">
-            💰
+            <CurrencyCircleDollar size={20} aria-hidden="true" />
           </span>
           <span className="edit-panel__title">Продажи и кнопки</span>
           <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
         <div className="edit-panel__body">
@@ -151,7 +154,7 @@ export function SalesOverviewPanel({ bots, onClose }: Props) {
               className={`payment-settings__mode${tab === "sales" ? " payment-settings__mode--active" : ""}`}
               onClick={() => setTab("sales")}
             >
-              <strong>💰 Продажи</strong>
+              <strong><CurrencyCircleDollar size={15} className="inline-icon" aria-hidden="true" /> Продажи</strong>
               <span>Заказы и выручка</span>
             </button>
             <button
@@ -161,7 +164,7 @@ export function SalesOverviewPanel({ bots, onClose }: Props) {
               className={`payment-settings__mode${tab === "clicks" ? " payment-settings__mode--active" : ""}`}
               onClick={() => setTab("clicks")}
             >
-              <strong>👆 Нажатия кнопок</strong>
+              <strong><CursorClick size={15} className="inline-icon" aria-hidden="true" /> Нажатия кнопок</strong>
               <span>Что выбирают чаще</span>
             </button>
           </div>

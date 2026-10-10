@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 
 import type { BlockContent } from "../api/builderApi";
 import { ApiError, builderApi } from "../api/builderApi";
+import { FilmSlate, Image as ImageIcon, Paperclip, Play, Warning } from "@phosphor-icons/react";
+
 
 interface Props {
   /** "file" — для блока «Выдача»: методичка, архив, аудио. Лендинг обещает
@@ -89,24 +91,24 @@ export function MediaEditor({ kind, botId, content, onChange }: Props) {
         ) : url && !broken ? (
           kind === "file" ? (
             <div className="media-editor__video-badge">
-              <span aria-hidden="true">📎</span>
+              <Paperclip size={18} aria-hidden="true" />
               <span className="media-editor__video-url">{displayFileName(url)}</span>
             </div>
           ) : kind === "image" ? (
             <img src={url} alt="" onError={() => setBroken(true)} />
           ) : (
             <div className="media-editor__video-badge">
-              <span aria-hidden="true">▶</span>
+              <Play size={18} weight="fill" aria-hidden="true" />
               <span className="media-editor__video-url">{url}</span>
             </div>
           )
         ) : url && broken ? (
           <span className="media-editor__placeholder media-editor__placeholder--error" aria-hidden="true">
-            ⚠️ Не удалось загрузить — проверь ссылку
+            <Warning size={15} className="inline-icon" aria-hidden="true" /> Не удалось загрузить — проверь ссылку
           </span>
         ) : (
           <span className="media-editor__placeholder" aria-hidden="true">
-            {kind === "image" ? "🖼️" : kind === "video" ? "🎬" : "📎"}
+            {kind === "image" ? <ImageIcon size={22} aria-hidden="true" /> : kind === "video" ? <FilmSlate size={22} aria-hidden="true" /> : <Paperclip size={22} aria-hidden="true" />}
           </span>
         )}
       </div>
@@ -127,7 +129,7 @@ export function MediaEditor({ kind, botId, content, onChange }: Props) {
           onPointerDown={(e) => e.stopPropagation()}
           onClick={() => fileInputRef.current?.click()}
         >
-          {uploading ? "Загружаем…" : `📤 Загрузить ${NOUN[kind]}`}
+          {uploading ? "Загружаем…" : `Загрузить ${NOUN[kind]}`}
         </button>
       </div>
       {uploadError && <p className="media-editor__upload-error">{uploadError}</p>}

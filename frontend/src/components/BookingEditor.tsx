@@ -1,5 +1,6 @@
 import type { BlockContent } from "../api/builderApi";
 import { type Interval, localTimezone, readWeekly, timezones } from "../booking";
+import { X } from "@phosphor-icons/react";
 
 interface Props {
   content: BlockContent;
@@ -42,7 +43,7 @@ function IntervalList({
             aria-label="Убрать промежуток"
             onClick={() => onChange(intervals.filter((_, i) => i !== index))}
           >
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
       ))}
@@ -140,7 +141,7 @@ export function ScheduleFields({ content, onChange }: Props) {
                 <option value="custom">Свои часы</option>
               </select>
               <button type="button" className="schedule__remove" aria-label="Убрать дату" onClick={() => setException(date, null)}>
-                ✕
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
             {intervals.length > 0 && <IntervalList intervals={intervals} onChange={(next) => setException(date, next)} />}

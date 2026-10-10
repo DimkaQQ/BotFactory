@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { builderApi } from "../api/builderApi";
 import { BotFatherSteps } from "./BotFatherSteps";
 import { scrollBehavior } from "../motion";
+import { RocketLaunch, Warning } from "@phosphor-icons/react";
+
 
 interface Props {
   disabled?: boolean;
@@ -70,7 +72,7 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
   if (!open) {
     return (
       <button type="button" className="publish-button" disabled={disabled} onClick={() => setOpen(true)}>
-        🚀 Опубликовать
+        <RocketLaunch size={18} aria-hidden="true" /> Опубликовать
       </button>
     );
   }
@@ -118,7 +120,7 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
       )}
       {problems.length === 0 && orphanCount > 0 && (
         <p className="publish-form__warning">
-          ⚠️ {orphanCount === 1 ? "Один блок ни с чем не соединён" : `Блоков ни с чем не соединено: ${orphanCount}`}
+          <Warning size={15} className="inline-icon" aria-hidden="true" /> {orphanCount === 1 ? "Один блок ни с чем не соединён" : `Блоков ни с чем не соединено: ${orphanCount}`}
           {" — "}бот их не покажет. Опубликовать можно, но сначала проверь стрелки на холсте.
         </p>
       )}

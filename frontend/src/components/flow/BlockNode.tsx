@@ -6,7 +6,11 @@ import { scheduleSummary } from "../../booking";
 import { BLOCK_TYPE_BY_ID } from "../../blockTypes";
 import { useWideScreen } from "../../hooks/useWideScreen";
 import { humanDelay } from "../../humanDelay";
+import { BlockIcon } from "../../icons";
 import { useFlowActions } from "./flowActions";
+import { X } from "@phosphor-icons/react";
+import { LinkSimple, Warning } from "@phosphor-icons/react";
+
 
 export interface BlockNodeData {
   block: BotBlock;
@@ -36,7 +40,7 @@ function preview(block: BotBlock): string {
         : "Только данные из Telegram";
     case "payment":
       return c.price?.trim()
-        ? `💳 ${c.title?.trim() || "Оплата"} — ${c.price} ${c.currency ?? ""}`.trim()
+        ? `${c.title?.trim() || "Оплата"}: ${c.price} ${c.currency ?? ""}`.trim()
         : "Цена не указана";
     default:
       return c.text?.trim() || "Пусто — нажми, чтобы написать";
@@ -83,7 +87,7 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
 
       <div className="flow-node__head">
         <span className={`flow-node__icon block-card__icon--${def.accent}`} aria-hidden="true">
-          {def.icon}
+          <BlockIcon type={def.type} size={16} />
         </span>
         <span className="flow-node__label">{def.label}</span>
         {isStart && <span className="flow-node__start-badge">START</span>}
@@ -105,12 +109,12 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
             onDelete(id);
           }}
         >
-          ✕
+          <X size={18} aria-hidden="true" />
         </button>
       </div>
 
       <p className={`flow-node__preview ${isEmpty ? "flow-node__preview--empty" : ""}`}>{preview(block)}</p>
-      {isEmpty && block.block_type !== "delay" && <p className="flow-node__warning">⚠️ бот пропустит это сообщение</p>}
+      {isEmpty && block.block_type !== "delay" && <p className="flow-node__warning"><Warning size={15} className="inline-icon" aria-hidden="true" /> бот пропустит это сообщение</p>}
 
       {isButtons && buttons.length > 0 && (
         <div className="flow-node__buttons">
@@ -132,7 +136,7 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
               >
                 <span className="flow-node__button-label">{button.label || "…"}</span>
                 {isUrl ? (
-                  <span className="flow-node__button-tag">🔗 ссылка</span>
+                  <span className="flow-node__button-tag"><LinkSimple size={12} aria-hidden="true" /> ссылка</span>
                 ) : (
                   <span className={`flow-node__button-tag ${wired ? "" : "flow-node__button-tag--todo"}`}>
                     {wired ? "ведёт" : "тяни"} →

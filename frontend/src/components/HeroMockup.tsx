@@ -1,74 +1,57 @@
-/** A real, working preview — not a fake screenshot — built from the exact
- * same chat-bubble markup/CSS the constructor itself uses, so the promise
- * ("live chat preview") is demonstrated rather than just claimed. Bubbles
- * stagger in via the same --stagger/bubble-in mechanism as the real canvas.
- *
- * The chat card sells "this is what your client sees"; the small branch
- * strip underneath sells the other half of the pitch — "this is what you
- * build it with" — without pulling in React Flow just for a decoration. */
-export function HeroMockup() {
-  return (
-    <div className="landing-mockup">
-      <div className="landing-mockup__bar">
-        <span className="landing-mockup__dot" />
-        <span className="landing-mockup__dot" />
-        <span className="landing-mockup__dot" />
-        <span className="landing-mockup__title">@your_bot</span>
-      </div>
-      <div className="chat-canvas landing-mockup__canvas">
-        <div className="chat-row" style={{ "--stagger": 0 } as React.CSSProperties}>
-          <div className="chat-row__avatar" />
-          <div className="chat-row__content">
-            <div className="chat-bubble">
-              <p className="chat-bubble__text">Привет! Рады видеть тебя здесь 👋</p>
-            </div>
-          </div>
-        </div>
-        <div className="chat-row" style={{ "--stagger": 1 } as React.CSSProperties}>
-          <div className="chat-row__avatar" />
-          <div className="chat-row__content">
-            <div className="chat-bubble">
-              <p className="chat-bubble__text">Расскажи, что внутри и кому это подойдёт.</p>
-            </div>
-          </div>
-        </div>
-        <div className="chat-row" style={{ "--stagger": 2 } as React.CSSProperties}>
-          <div className="chat-row__avatar" />
-          <div className="chat-row__content">
-            <div className="chat-bubble">
-              <div className="chat-bubble__media-thumb" aria-hidden="true">
-                🖼️
-              </div>
-              <p className="chat-bubble__text">Как это выглядит</p>
-            </div>
-          </div>
-        </div>
-        <div className="chat-row" style={{ "--stagger": 3 } as React.CSSProperties}>
-          <div className="chat-row__avatar">
-            <span className="chat-avatar">🤖</span>
-          </div>
-          <div className="chat-row__content">
-            <div className="chat-bubble">
-              <p className="chat-bubble__text">Готов начать?</p>
-            </div>
-            <div className="chat-buttons">
-              <div className="chat-buttons__preview">
-                <span className="chat-buttons__pill">Да, интересно 🛒</span>
-                <span className="chat-buttons__pill">Пока нет</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+import { CreditCard, FilePdf, Robot } from "@phosphor-icons/react";
+import { motion, useReducedMotion } from "framer-motion";
 
-      <div className="landing-mockup__branches" aria-hidden="true">
-        <span className="landing-mockup__branch-source">🔘 Готов начать?</span>
-        <span className="landing-mockup__branch">
-          <span className="landing-mockup__branch-arrow">↳</span> «Да» → Оплата
+/** Живое превью того, что видит покупатель: диалог с продажей от кнопки до выдачи.
+ * Собрано из настоящей разметки чата (те же пузыри и кнопки, что в конструкторе),
+ * поэтому это не картинка, а честный образец. Цифры в нём примерные. */
+export function HeroMockup() {
+  const reduce = useReducedMotion();
+  const step = (i: number) => ({
+    initial: reduce ? false : { opacity: 0, y: 14, scale: 0.98 },
+    animate: { opacity: 1, y: 0, scale: 1 },
+    transition: { duration: 0.5, delay: reduce ? 0 : 0.5 + i * 0.7, ease: [0.16, 1, 0.3, 1] as const },
+  });
+
+  return (
+    <div className="lp-phone" role="img" aria-label="Пример диалога бота: покупатель выбирает товар, платит и получает файл">
+      <div className="lp-phone__bar">
+        <span className="lp-phone__avatar" aria-hidden="true">
+          <Robot size={18} weight="fill" />
         </span>
-        <span className="landing-mockup__branch">
-          <span className="landing-mockup__branch-arrow">↳</span> «Пока нет» → Напоминание через день
+        <span className="lp-phone__who">
+          <strong>Ваш бот</strong>
+          <small>бот</small>
         </span>
+      </div>
+      <div className="lp-phone__chat">
+        <motion.div className="lp-msg lp-msg--bot" {...step(0)}>
+          Здравствуйте! Что вас интересует?
+          <span className="lp-msg__btns">
+            <span className="lp-msg__btn">Купить гайд</span>
+            <span className="lp-msg__btn">Записаться на консультацию</span>
+          </span>
+        </motion.div>
+        <motion.div className="lp-msg lp-msg--user" {...step(1)}>
+          Купить гайд
+        </motion.div>
+        <motion.div className="lp-msg lp-msg--bot" {...step(2)}>
+          Гайд «Старт», 1 990 ₸. После оплаты файл придёт сюда.
+          <span className="lp-msg__btns">
+            <span className="lp-msg__btn lp-msg__btn--pay">
+              <CreditCard size={16} aria-hidden="true" /> Оплатить
+            </span>
+          </span>
+        </motion.div>
+        <motion.div className="lp-msg lp-msg--bot" {...step(3)}>
+          Оплата прошла, спасибо! Вот ваш гайд.
+          <span className="lp-msg__file">
+            <FilePdf size={22} weight="regular" aria-hidden="true" />
+            <span>
+              <strong>start-guide.pdf</strong>
+              <small>2,4 МБ</small>
+            </span>
+          </span>
+        </motion.div>
       </div>
     </div>
   );

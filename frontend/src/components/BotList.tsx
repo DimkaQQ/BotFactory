@@ -12,7 +12,12 @@ import { SiteFooter } from "./SiteFooter";
 import { CrmPanel } from "./CrmPanel";
 import { FeedbackPanel } from "./FeedbackPanel";
 import { SalesOverviewPanel } from "./SalesOverviewPanel";
+import { TemplateIcon } from "../icons";
 import { ThemeToggle } from "./ThemeToggle";
+import { CurrencyCircleDollar, Lightbulb, Plus, UsersThree } from "@phosphor-icons/react";
+import { DeviceMobile, Robot, Sparkle, Trash, X } from "@phosphor-icons/react";
+
+
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
@@ -264,7 +269,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       <header className="app-header">
         <div className="app-header__top">
           <div className="app-header__icon" aria-hidden="true">
-            🏭
+            <Robot size={22} weight="fill" />
           </div>
           <div className="app-header__titles">
             <h1>Мои боты</h1>
@@ -279,7 +284,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 aria-label="Продажи"
                 title="Продажи и нажатия на кнопки по всем ботам"
               >
-                <span aria-hidden="true">💰</span> <span className="bot-payments-button__long">Продажи</span>
+                <CurrencyCircleDollar size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Продажи</span>
               </button>
             )}
             {!isMiniApp && (bots?.length ?? 0) > 0 && (
@@ -290,7 +295,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 aria-label="Клиенты"
                 title="Клиенты, их контакты и календарь записи"
               >
-                <span aria-hidden="true">👥</span> <span className="bot-payments-button__long">Клиенты</span>
+                <UsersThree size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Клиенты</span>
               </button>
             )}
             {!isMiniApp && (
@@ -301,7 +306,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 aria-label="Предложить идею"
                 title="Есть идея или нашли ошибку? Напишите — я читаю всё"
               >
-                <span aria-hidden="true">💡</span> <span className="bot-payments-button__long">Идея</span>
+                <Lightbulb size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Идея</span>
               </button>
             )}
             {!isMiniApp && <ThemeToggle />}
@@ -328,14 +333,14 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
             )}
             {!isMiniApp && (
               <button type="button" className="header-create-button" onClick={handleCreateClick}>
-                + Новый бот
+                <Plus size={16} weight="bold" aria-hidden="true" /> Новый бот
               </button>
             )}
           </div>
         </div>
         {isMiniApp && (
           <p className="app-hint" style={{ marginTop: "var(--sp-3)" }}>
-            📱 Здесь виден статус и кнопка публикации. Собирать бота — в браузере: открой {window.location.host},
+            <DeviceMobile size={16} aria-hidden="true" /> Здесь виден статус и кнопка публикации. Собирать бота — в браузере: открой {window.location.host},
             с телефона это тоже работает.
           </p>
         )}
@@ -407,7 +412,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
 
                 <div className="empty-state">
                   <div className="empty-state__icon" aria-hidden="true">
-                    🏭
+                    <Robot size={34} weight="fill" />
                   </div>
                   <p className="empty-state__title">Здесь появятся твои боты</p>
                   <p className="empty-state__hint">
@@ -419,7 +424,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                   {!isMiniApp && (
                     <>
                       <button type="button" className="empty-state__cta" onClick={handleCreateClick}>
-                        ✨ Собрать первого бота
+                        <Sparkle size={16} weight="fill" aria-hidden="true" /> Собрать первого бота
                       </button>
                       <ol className="empty-state__steps">
                         <li>
@@ -456,7 +461,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                   disabled={deletingId === bot.id}
                 >
                   <span className={`bot-card__icon bot-card__icon--${bot.status}`} aria-hidden="true">
-                    🤖
+                    <Robot size={22} weight="fill" />
                   </span>
                   <span className="bot-card__info">
                     <span className="bot-card__name">{botTitle(bot)}</span>
@@ -489,7 +494,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                   onClick={(e) => handleDelete(bot, e)}
                   disabled={deletingId === bot.id}
                 >
-                  🗑
+                  <Trash size={18} aria-hidden="true" />
                 </button>
               </motion.div>
             ))}
@@ -522,7 +527,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 aria-label="Закрыть"
                 onClick={() => !creatingTemplateId && setPickerOpen(false)}
               >
-                ✕
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
             <div className="template-list">
@@ -535,7 +540,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                   disabled={creatingTemplateId !== null}
                 >
                   <span className="template-card__icon" aria-hidden="true">
-                    {template.icon}
+                    <TemplateIcon id={template.id} size={22} />
                   </span>
                   <span className="template-card__text">
                     <span className="template-card__label">{template.label}</span>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { type BlockContent, type PollResult, builderApi } from "../api/builderApi";
+import { X } from "@phosphor-icons/react";
 
 interface Props {
   content: BlockContent;
@@ -68,7 +69,7 @@ export function PollEditor({ content, onChange, botId, blockId }: Props) {
           />
           {options.length > MIN_OPTIONS && (
             <button type="button" className="poll-editor__remove" onClick={() => removeOption(index)} aria-label="Удалить вариант">
-              ✕
+              <X size={18} aria-hidden="true" />
             </button>
           )}
         </div>

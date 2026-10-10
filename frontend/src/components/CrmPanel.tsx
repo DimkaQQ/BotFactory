@@ -17,6 +17,9 @@ import { confirmDialog } from "../confirm";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
 import { plural } from "../plural";
+import { UsersThree, X } from "@phosphor-icons/react";
+import { CalendarCheck, CaretDown, CaretUp, GearSix, Prohibit } from "@phosphor-icons/react";
+
 
 interface Props {
   bots: Bot[];
@@ -66,11 +69,11 @@ export function CrmPanel({ bots, onClose }: Props) {
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--poll" aria-hidden="true">
-            👥
+            <UsersThree size={20} aria-hidden="true" />
           </span>
           <span className="edit-panel__title">Клиенты и записи</span>
           <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
         <div className="edit-panel__body">
@@ -82,7 +85,7 @@ export function CrmPanel({ bots, onClose }: Props) {
               className={`payment-settings__mode${tab === "clients" ? " payment-settings__mode--active" : ""}`}
               onClick={() => setTab("clients")}
             >
-              <strong>👥 Клиенты</strong>
+              <strong><UsersThree size={15} className="inline-icon" aria-hidden="true" /> Клиенты</strong>
               <span>Контакты и история</span>
             </button>
             <button
@@ -92,7 +95,7 @@ export function CrmPanel({ bots, onClose }: Props) {
               className={`payment-settings__mode${tab === "calendar" ? " payment-settings__mode--active" : ""}`}
               onClick={() => setTab("calendar")}
             >
-              <strong>📅 Календарь</strong>
+              <strong><CalendarCheck size={15} className="inline-icon" aria-hidden="true" /> Календарь</strong>
               <span>Записи по дням</span>
             </button>
           </div>
@@ -257,7 +260,7 @@ function CustomerCard({ botId, userId, onBack }: { botId: string; userId: number
             />
           </label>
           <button type="button" className="payment-settings__save" onClick={save}>
-            {saved ? "✓ Сохранено" : "Сохранить"}
+            {saved ? "Сохранено" : "Сохранить"}
           </button>
 
           <p className="edit-panel__section-label">Записи</p>
@@ -402,13 +405,13 @@ function CalendarTab({ bots }: { bots: Bot[] }) {
       {hasBlock && schedule && (
         <div className="calendar__schedule">
           <button type="button" className="calendar__schedule-toggle" onClick={() => setEditing(!editing)} aria-expanded={editing}>
-            ⚙ Расписание: дни, часы, перерывы, часовой пояс {editing ? "▲" : "▼"}
+            <GearSix size={15} className="inline-icon" aria-hidden="true" /> Расписание: дни, часы, перерывы, часовой пояс {editing ? <CaretUp size={13} className="inline-icon" aria-hidden="true" /> : <CaretDown size={13} className="inline-icon" aria-hidden="true" />}
           </button>
           {editing && (
             <>
               <ScheduleFields content={schedule} onChange={setSchedule} />
               <button type="button" className="payment-settings__save" onClick={() => void saveSchedule(schedule)}>
-                {savedAt ? "✓ Сохранено" : "Сохранить расписание"}
+                {savedAt ? "Сохранено" : "Сохранить расписание"}
               </button>
             </>
           )}
@@ -476,7 +479,7 @@ function CalendarTab({ bots }: { bots: Bot[] }) {
           )}
           {selected.state === "free" && (
             <button type="button" onClick={() => act(() => builderApi.blockSlot(botId, selected.starts_at))}>
-              🚫 Закрыть это время
+              <Prohibit size={15} className="inline-icon" aria-hidden="true" /> Закрыть это время
             </button>
           )}
           {selected.booking_id && (

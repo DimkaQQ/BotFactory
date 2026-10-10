@@ -1,0 +1,1287 @@
+/* =========================================================================
+   Лендинг (LoginScreen.tsx). Префикс lp-. Один акцент (изумруд из --tg-button),
+   нейтрали из index.css, скругления только 12 / 16 / 22 / 999.
+   ========================================================================= */
+
+.lp {
+  --lp-max: 1180px;
+  --lp-gutter: clamp(18px, 4vw, 40px);
+  --lp-section: clamp(64px, 9vw, 112px);
+  display: block;
+  min-height: 100dvh;
+  padding: 0;
+  max-width: none;
+  background: var(--tg-bg);
+  color: var(--text-primary);
+}
+
+.lp *,
+.lp *::before,
+.lp *::after {
+  box-sizing: border-box;
+}
+
+.lp :where(h1, h2, h3, p, ul, ol) {
+  margin: 0;
+  padding: 0;
+}
+
+.lp :where(ul, ol) {
+  list-style: none;
+}
+
+.lp a {
+  color: var(--accent-on-surface);
+}
+
+.lp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- Кнопки ---------- */
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-smooth),
+    box-shadow var(--dur-fast) var(--ease-smooth);
+}
+
+.lp-btn:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+.lp-btn--primary {
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+}
+
+.lp-btn--primary:hover {
+  background: color-mix(in srgb, var(--tg-button) 88%, #000);
+}
+
+.lp-btn--light {
+  min-height: 52px;
+  padding: 0 28px;
+  background: #fafafa;
+  color: #0b3d2e;
+  font-size: 16px;
+}
+
+.lp-btn--light:hover {
+  background: #fff;
+}
+
+/* ---------- Шапка ---------- */
+.lp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 64px;
+  padding: 0 max(var(--lp-gutter), calc((100% - var(--lp-max)) / 2));
+  background: color-mix(in srgb, var(--tg-bg) 82%, transparent);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border-bottom: 1px solid var(--tg-separator);
+}
+
+.lp-nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+  color: var(--text-primary) !important;
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.lp-nav__links {
+  display: none;
+  gap: 4px;
+  margin-right: 12px;
+}
+
+.lp-nav__links a {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color var(--dur-fast), background-color var(--dur-fast);
+}
+
+.lp-nav__links a:hover {
+  color: var(--text-primary);
+  background: var(--tg-secondary-bg);
+}
+
+.lp-nav__cta {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+@media (min-width: 900px) {
+  .lp-nav__links {
+    display: flex;
+  }
+}
+
+/* ---------- Общие куски секций ---------- */
+.lp-section,
+.lp-facts,
+.lp-hero {
+  width: min(100%, var(--lp-max) + 2 * var(--lp-gutter));
+  margin-inline: auto;
+  padding-inline: var(--lp-gutter);
+}
+
+.lp-section {
+  padding-block: var(--lp-section);
+}
+
+.lp-h2 {
+  max-width: 22ch;
+  font-size: clamp(28px, 4.2vw, 44px);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.lp-h2--wide {
+  max-width: 28ch;
+}
+
+.lp-h3 {
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.lp-lead {
+  max-width: 62ch;
+  margin-top: 16px;
+  color: var(--text-secondary);
+  font-size: clamp(16px, 1.6vw, 18px);
+  line-height: 1.6;
+}
+
+.lp-note {
+  max-width: 62ch;
+  margin-top: 16px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* ---------- Hero ---------- */
+.lp-hero {
+  display: grid;
+  gap: clamp(32px, 6vw, 72px);
+  align-items: center;
+  padding-top: clamp(32px, 6vw, 72px);
+  padding-bottom: clamp(40px, 6vw, 72px);
+}
+
+@media (min-width: 960px) {
+  .lp-hero {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr);
+  }
+}
+
+.lp-hero__title {
+  max-width: 20ch;
+  font-size: clamp(34px, 4.6vw, 54px);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+}
+
+.lp-hero__lead {
+  max-width: 46ch;
+  margin-top: 20px;
+  color: var(--text-secondary);
+  font-size: clamp(17px, 1.8vw, 20px);
+  line-height: 1.5;
+}
+
+.lp-hero__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 20px;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.lp-hero__more:hover {
+  text-decoration: underline;
+}
+
+.lp-hero__visual {
+  display: flex;
+  justify-content: center;
+}
+
+/* ---------- Вход через Telegram ---------- */
+.lp-login {
+  margin-top: 28px;
+  padding: 20px;
+  max-width: 420px;
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.lp-login__title {
+  font-size: 15px;
+  font-weight: 650;
+  margin-bottom: 12px;
+}
+
+.lp-login__hint {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.lp-login__fallback {
+  display: grid;
+  gap: 12px;
+}
+
+.lp-login__error {
+  margin-top: 10px;
+  color: var(--tg-destructive);
+  font-size: 14px;
+}
+
+.lp-login__consent {
+  margin-top: 14px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ---------- Превью телефона ---------- */
+.lp-phone {
+  width: min(100%, 360px);
+  overflow: hidden;
+  border: 1px solid var(--tg-separator);
+  border-radius: 28px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-elevated);
+}
+
+.lp-phone__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--tg-separator);
+  background: var(--tg-secondary-bg);
+}
+
+.lp-phone__avatar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+}
+
+.lp-phone__who {
+  display: grid;
+  line-height: 1.2;
+}
+
+.lp-phone__who strong {
+  font-size: 15px;
+}
+
+.lp-phone__who small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.lp-phone__chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 430px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--tg-button) 5%, var(--tg-bg));
+}
+
+.lp-msg {
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14.5px;
+  line-height: 1.4;
+}
+
+.lp-msg--bot {
+  align-self: flex-start;
+  border-bottom-left-radius: 6px;
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+}
+
+.lp-msg--user {
+  align-self: flex-end;
+  border-bottom-right-radius: 6px;
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+}
+
+.lp-msg__btns {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.lp-msg__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tg-button) 12%, var(--tg-bg));
+  color: var(--accent-on-surface);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.lp-msg__btn--pay {
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+}
+
+.lp-msg__file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--tg-secondary-bg);
+}
+
+.lp-msg__file span {
+  display: grid;
+  line-height: 1.2;
+}
+
+.lp-msg__file small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* ---------- Три факта ---------- */
+.lp-facts {
+  display: grid;
+  gap: 0;
+  padding-block: 0;
+  border-block: 1px solid var(--tg-separator);
+}
+
+.lp-facts li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.lp-facts li + li {
+  border-top: 1px solid var(--tg-separator);
+}
+
+.lp-facts svg {
+  flex: none;
+  color: var(--accent-on-surface);
+}
+
+@media (min-width: 820px) {
+  .lp-facts {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+  }
+  .lp-facts li + li {
+    border-top: 0;
+  }
+}
+
+/* ---------- Для кого: строки, не карточки ---------- */
+.lp-who {
+  display: grid;
+  gap: 40px;
+}
+
+.lp-who__list {
+  display: grid;
+}
+
+.lp-who__row {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 20px;
+  padding: 28px 0;
+  border-top: 1px solid var(--tg-separator);
+}
+
+.lp-who__row:last-child {
+  border-bottom: 1px solid var(--tg-separator);
+}
+
+.lp-who__row p {
+  max-width: 60ch;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.lp-who__icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--tg-button) 12%, var(--tg-bg));
+  color: var(--accent-on-surface);
+}
+
+@media (min-width: 960px) {
+  .lp-who {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: 72px;
+  }
+  .lp-who__row:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+}
+
+/* ---------- Как работает: шаги и живое демо ---------- */
+.lp-how {
+  display: grid;
+  gap: 48px;
+  align-items: start;
+}
+
+.lp-timeline {
+  display: grid;
+  gap: 0;
+  margin-top: 36px;
+  counter-reset: step;
+}
+
+.lp-timeline__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 18px;
+  padding-bottom: 28px;
+}
+
+.lp-timeline__item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 19px;
+  top: 40px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--tg-separator);
+}
+
+.lp-timeline__n {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.lp-timeline__item p {
+  max-width: 52ch;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.lp-how__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 52ch;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.lp-how__note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-on-surface);
+}
+
+.lp-how__demo {
+  position: sticky;
+  top: 96px;
+}
+
+.lp-how__demo .demo-chat {
+  border: 1px solid var(--tg-separator);
+  border-radius: 28px;
+  box-shadow: var(--shadow-elevated);
+}
+
+.lp-how__demo .demo-chat__body {
+  height: 340px;
+}
+
+@media (min-width: 960px) {
+  .lp-how {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+    gap: 80px;
+  }
+}
+
+/* ---------- Витрина возможностей ---------- */
+.lp-bento {
+  display: grid;
+  gap: 16px;
+  margin-top: 40px;
+}
+
+.lp-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px;
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+
+.lp-cell__text p {
+  max-width: 46ch;
+  margin-top: 8px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.lp-cell--pay {
+  background: color-mix(in srgb, var(--tg-button) 9%, var(--tg-bg));
+}
+
+.lp-cell--slots {
+  background: var(--surface-sunken);
+}
+
+.lp-cell--branch {
+  background: color-mix(in srgb, var(--accent-buttons) 8%, var(--tg-bg));
+}
+
+@media (min-width: 900px) {
+  .lp-bento {
+    grid-template-columns: repeat(6, 1fr);
+  }
+  .lp-cell--pay {
+    grid-column: span 4;
+    flex-direction: row;
+    align-items: stretch;
+  }
+  .lp-cell--pay .lp-cell__text {
+    flex: 1;
+    align-self: flex-start;
+  }
+  .lp-cell--pay .lp-mini {
+    flex: 1.1;
+    align-self: center;
+  }
+  .lp-cell--slots {
+    grid-column: span 2;
+  }
+  .lp-cell--contacts,
+  .lp-cell--branch,
+  .lp-cell--remind {
+    grid-column: span 2;
+  }
+}
+
+.lp-mini {
+  display: flex;
+}
+
+.lp-mini--pay {
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+}
+
+.lp-mini--pay .lp-msg {
+  max-width: 100%;
+}
+
+.lp-slots__days,
+.lp-slots__times {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.lp-mini--slots {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lp-slots__day,
+.lp-slots__time {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--tg-separator);
+  background: var(--tg-bg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.lp-slots__day small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.lp-slots__time {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.is-on {
+  border-color: var(--tg-button) !important;
+  background: var(--tg-button) !important;
+  color: var(--tg-button-text) !important;
+}
+
+.is-on small {
+  color: inherit !important;
+}
+
+.lp-slots__time.is-taken {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+  background: transparent;
+}
+
+.lp-mini--contacts,
+.lp-mini--remind {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--tg-separator);
+  border-radius: 999px;
+  background: var(--tg-bg);
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.lp-chip--accent {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tg-button) 14%, var(--tg-bg));
+  color: var(--accent-on-surface);
+}
+
+.lp-mini--branch {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lp-branch__src {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--tg-bg);
+  border: 1px solid var(--tg-separator);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.lp-branch__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 14px;
+  color: var(--text-tertiary);
+}
+
+.lp-branch__to {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.lp-blocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.lp-blocks li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--tg-separator);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* ---------- Кассы ---------- */
+.lp-pay {
+  display: grid;
+  gap: 36px;
+  border-top: 1px solid var(--tg-separator);
+}
+
+.lp-gateways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lp-gateways li {
+  padding: 10px 18px;
+  border: 1px solid var(--tg-separator);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+@media (min-width: 960px) {
+  .lp-pay {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 72px;
+    align-items: start;
+  }
+}
+
+/* ---------- Шаблоны: лента ---------- */
+.lp-tpl-strip {
+  display: flex;
+  gap: 14px;
+  margin: 36px calc(var(--lp-gutter) * -1) 0;
+  padding: 4px var(--lp-gutter) 20px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--lp-gutter);
+}
+
+.lp-tpl {
+  flex: 0 0 min(280px, 78vw);
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px;
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+.lp-tpl__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--tpl, var(--tg-button)) 14%, var(--tg-bg));
+  color: var(--tpl, var(--accent-on-surface));
+}
+
+.lp-tpl__title {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.lp-tpl__text {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.lp-tpl__meta {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* ---------- Цена ---------- */
+.lp-price__grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 40px;
+}
+
+.lp-price__free,
+.lp-price__paid {
+  padding: clamp(22px, 3vw, 32px);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+}
+
+.lp-price__paid {
+  background: color-mix(in srgb, var(--tg-button) 8%, var(--tg-bg));
+}
+
+.lp-price__free ul {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.lp-price__free li {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 14px;
+}
+
+.lp-price__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--tg-button) 12%, var(--tg-bg));
+  color: var(--accent-on-surface);
+}
+
+.lp-price__free p {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.lp-prices {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.lp-prices__item {
+  padding: 18px 20px;
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  background: var(--tg-bg);
+}
+
+.lp-prices__method {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lp-prices__amount {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.lp-prices__label,
+.lp-prices__who,
+.lp-prices__renewal {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+@media (min-width: 900px) {
+  .lp-price__grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  }
+}
+
+.lp .payback {
+  display: grid;
+  gap: 24px;
+  margin-top: 16px;
+  padding: clamp(22px, 3vw, 32px);
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised);
+  box-shadow: none;
+  text-align: left;
+}
+
+.lp .payback__title {
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.lp .payback__headline {
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.lp .payback__label {
+  display: block;
+  margin-top: 18px;
+  color: var(--text-secondary);
+}
+
+.lp .payback__range {
+  width: 100%;
+  margin-top: 10px;
+  accent-color: var(--tg-button);
+}
+
+.lp .payback__scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.lp .payback__results {
+  display: grid;
+  gap: 12px;
+}
+
+.lp .payback__result {
+  display: grid;
+  gap: 2px;
+  padding: 16px 20px;
+  border: 1px solid var(--tg-separator);
+  border-radius: var(--radius-lg);
+  background: var(--tg-bg);
+  text-align: left;
+}
+
+.lp .payback__big {
+  color: var(--accent-on-surface);
+  font-family: var(--font-mono);
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.lp .payback__small {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.lp .payback__sum {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.lp .payback__note {
+  color: var(--text-tertiary);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.lp .payback__cta {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+@media (min-width: 900px) {
+  .lp .payback {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    column-gap: 56px;
+  }
+  .lp .payback__note,
+  .lp .payback__cta {
+    grid-column: 1 / -1;
+  }
+}
+
+.lp .landing-offer {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--tg-button) 35%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--tg-bg);
+  text-align: left;
+}
+
+.lp .landing-offer__title {
+  font-weight: 650;
+}
+
+.lp .landing-offer__text {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.lp .landing-offer__timer {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ---------- Доверие ---------- */
+.lp-trust__grid {
+  display: grid;
+  margin-top: 40px;
+}
+
+.lp-trust__item {
+  padding: 26px 0;
+  border-top: 1px solid var(--tg-separator);
+}
+
+.lp-trust__item p {
+  max-width: 48ch;
+  margin-top: 8px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.lp-trust__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--tg-button) 12%, var(--tg-bg));
+  color: var(--accent-on-surface);
+}
+
+@media (min-width: 760px) {
+  .lp-trust__grid {
+    grid-template-columns: 1fr 1fr;
+    column-gap: 64px;
+  }
+}
+
+/* ---------- FAQ ---------- */
+.lp-faq {
+  display: grid;
+  gap: 36px;
+}
+
+.lp-faq__item {
+  border-top: 1px solid var(--tg-separator);
+}
+
+.lp-faq__item:last-child {
+  border-bottom: 1px solid var(--tg-separator);
+}
+
+.lp-faq__q {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  padding: 14px 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  list-style: none;
+  cursor: pointer;
+}
+
+.lp-faq__q::-webkit-details-marker {
+  display: none;
+}
+
+.lp-faq__plus {
+  flex: none;
+  color: var(--text-tertiary);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.lp-faq__item[open] .lp-faq__plus {
+  transform: rotate(45deg);
+}
+
+.lp-faq__a {
+  max-width: 62ch;
+  padding: 0 0 22px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+@media (min-width: 960px) {
+  .lp-faq {
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+    gap: 72px;
+    align-items: start;
+  }
+  .lp-faq__head {
+    position: sticky;
+    top: 96px;
+  }
+}
+
+/* ---------- Финал ---------- */
+.lp-final {
+  width: min(calc(100% - 2 * var(--lp-gutter)), var(--lp-max));
+  margin: 0 auto var(--lp-section);
+  padding: clamp(40px, 7vw, 80px) clamp(24px, 5vw, 64px);
+  border-radius: var(--radius-xl);
+  background: #0b3d2e;
+  color: #f1f5f3;
+  text-align: left;
+}
+
+.lp-final__title {
+  max-width: 18ch;
+  font-size: clamp(30px, 4.6vw, 52px);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+}
+
+.lp-final__text {
+  max-width: 52ch;
+  margin: 16px 0 28px;
+  color: #c7d8d1;
+  font-size: 17px;
+  line-height: 1.55;
+}
+
+/* ---------- Липкая кнопка (телефон) ---------- */
+.lp-sticky {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 45;
+  padding: 10px var(--lp-gutter) calc(10px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--tg-bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--tg-separator);
+}
+
+.lp-sticky .lp-btn {
+  width: 100%;
+  min-height: 50px;
+}
+
+@media (min-width: 820px) {
+  .lp-sticky {
+    display: none;
+  }
+}
+
+/* ---------- Подвал в новой оболочке ---------- */
+.lp .landing-footer {
+  width: min(100%, var(--lp-max) + 2 * var(--lp-gutter));
+  margin-inline: auto;
+  padding-inline: var(--lp-gutter);
+}
+
+.lp .support-button {
+  border-radius: var(--radius-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-btn,
+  .lp-faq__plus {
+    transition: none;
+  }
+}
+
+/* Цели нажатия не меньше 44px (телефон и планшет). */
+.lp-nav__brand,
+.lp-nav__cta,
+.lp-hero__more {
+  min-height: 44px;
+}
+
+.lp-nav__links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+}

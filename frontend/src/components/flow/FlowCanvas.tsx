@@ -16,10 +16,14 @@ import { useEscape } from "../../hooks/useEscape";
 import { blocksAfterPayment, reachableBlockIds } from "../../reachability";
 import { confirmDialog } from "../../confirm";
 import { BLOCK_TYPES, BLOCK_TYPE_BY_ID } from "../../blockTypes";
+import { BlockIcon } from "../../icons";
 import { BlockEditPanel } from "./BlockEditPanel";
 import { BlockNode, type BlockNodeData } from "./BlockNode";
 import { FlowActionsContext, type FlowActions } from "./flowActions";
 import { StartNode } from "./StartNode";
+import { X } from "@phosphor-icons/react";
+import { Play } from "@phosphor-icons/react";
+
 
 const START_ID = "__start__";
 const START_POSITION = { x: 40, y: 40 };
@@ -426,17 +430,17 @@ function Inner({
         <div className="flow-notice" role="alert">
           <span>{notice}</span>
           <button type="button" aria-label="Закрыть" onClick={() => setNotice(null)}>
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
       )}
       {!disabled && (
         <aside className="block-library" aria-label="Библиотека блоков">
           <p className="block-library__title">Добавить блок</p>
-          {BLOCK_TYPES.map(({ type, label, icon, accent, hint }) => (
+          {BLOCK_TYPES.map(({ type, label, accent, hint }) => (
             <button key={type} type="button" className="block-library__item" onClick={() => handleAdd(type)}>
               <span className={`block-library__icon block-card__icon--${accent}`} aria-hidden="true">
-                {icon}
+                <BlockIcon type={type} size={18} />
               </span>
               <span className="block-library__text">
                 <span className="block-library__label">{label}</span>
@@ -485,7 +489,7 @@ function Inner({
             {/* Two labels, one shown at a time by CSS — the long form pushed
                 this strip onto a second row on a 390px phone, costing more
                 canvas than folding it in here had just saved. */}
-            ▶ <span className="flow-canvas__tool-long">Смотреть, как в реальности</span>
+            <Play size={14} weight="fill" aria-hidden="true" /> <span className="flow-canvas__tool-long">Смотреть, как в реальности</span>
             <span className="flow-canvas__tool-short">Как в чате</span>
           </button>
         )}
@@ -522,10 +526,10 @@ function Inner({
           <div className="flow-canvas__empty">
             <p className="flow-canvas__empty-wide">
               Пока пусто. Добавь первый блок — кнопкой «+ Добавить блок» под холстом или из списка слева — и
-              от него потянется стрелка «▶ Старт».
+              от него потянется стрелка «Старт».
             </p>
             <p className="flow-canvas__empty-narrow">
-              Пока пусто. Нажми «+ Добавить блок» под холстом — и от него потянется стрелка «▶ Старт».
+              Пока пусто. Нажми «+ Добавить блок» под холстом — и от него потянется стрелка «Старт».
             </p>
           </div>
         )}
@@ -537,10 +541,10 @@ function Inner({
           <div className="sheet" ref={addSheetRef}>
             <p className="sheet__title">Что добавить?</p>
             <div className="block-chips">
-              {BLOCK_TYPES.map(({ type, label, icon, accent, hint }) => (
+              {BLOCK_TYPES.map(({ type, label, accent, hint }) => (
                 <button key={type} type="button" className="block-chip" onClick={() => handleAdd(type)}>
                   <span className={`block-chip__icon block-card__icon--${accent}`} aria-hidden="true">
-                    {icon}
+                    <BlockIcon type={type} size={18} />
                   </span>
                   <span className="block-chip__text">
                     <span className="block-chip__label">{label}</span>

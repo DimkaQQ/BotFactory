@@ -11,6 +11,8 @@ import { PaymentEditor } from "../PaymentEditor";
 import { BookingEditor, ContactEditor } from "../BookingEditor";
 import { DelayEditor } from "../DelayEditor";
 import { PollEditor } from "../PollEditor";
+import { BlockIcon } from "../../icons";
+import { Trash, X } from "@phosphor-icons/react";
 
 const PLACEHOLDER: Record<BotBlock["block_type"], string> = {
   welcome: "Привет! Рады видеть тебя здесь 👋",
@@ -97,14 +99,14 @@ export function BlockEditPanel({
           {...dragProps}
         >
           <span className={`edit-panel__icon block-card__icon--${def.accent}`} aria-hidden="true">
-            {def.icon}
+            <BlockIcon type={def.type} size={20} />
           </span>
           <span className="edit-panel__title">{def.label}</span>
           <button type="button" className="edit-panel__delete" aria-label="Удалить блок" onClick={onDelete}>
-            🗑
+            <Trash size={18} aria-hidden="true" />
           </button>
           <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 

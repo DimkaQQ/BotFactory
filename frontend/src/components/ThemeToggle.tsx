@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { apply, readPref, writePref, type ThemePref } from "../theme";
+import { Moon, Sun } from "@phosphor-icons/react";
+
 
 const LABEL: Record<ThemePref, string> = {
   light: "светлая",
@@ -33,7 +35,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       aria-label={`Тема: ${LABEL[pref]}. Включить ${LABEL[next]}`}
     >
       <span className="theme-toggle__glyph" aria-hidden="true">
-        {pref === "dark" ? "🌙" : "☀️"}
+        {pref === "dark" ? <Moon size={18} weight="regular" /> : <Sun size={18} weight="regular" />}
       </span>
     </button>
   );

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { type BotSiteSettings, ApiError, builderApi } from "../api/builderApi";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
+import { Globe, X } from "@phosphor-icons/react";
 
 type Draft = Omit<BotSiteSettings, "saved" | "url" | "can_publish">;
 
@@ -59,11 +60,11 @@ export function SitePanel({ botId, onClose }: { botId: string; onClose: () => vo
       <div className="edit-panel overview-panel" ref={panelRef}>
         <div className="edit-panel__header" title="Потяни, чтобы переместить окно" {...dragProps}>
           <span className="edit-panel__icon block-card__icon--success" aria-hidden="true">
-            🌐
+            <Globe size={20} aria-hidden="true" />
           </span>
           <span className="edit-panel__title">Страница для банка</span>
           <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
         <div className="edit-panel__body">
