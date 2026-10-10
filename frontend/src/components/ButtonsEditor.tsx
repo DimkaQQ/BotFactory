@@ -9,7 +9,7 @@ import { ArrowBendDownRight, LinkSimple, Warning } from "@phosphor-icons/react";
 interface Props {
   content: BlockContent;
   onChange: (content: BlockContent) => void;
-  /** Every block of this bot — used to name the block a button leads to
+  /** Every block of this bot, used to name the block a button leads to
    * ("ведёт к: 🎁 Выдача") instead of showing a raw uuid or nothing at all. */
   blocks?: BotBlock[];
 }
@@ -21,7 +21,7 @@ function emptyButton(): ButtonAction {
 const URL_SCHEME_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//;
 
 /** Editor for a buttons block's button list. Each button is one card: what
- * it says, and what tapping it does — either "opens a link" (Telegram's own
+ * it says, and what tapping it does, either "opens a link" (Telegram's own
  * URL button) or "continues the scenario", which is the arrow drawn from
  * that button on the canvas. */
 export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
@@ -64,7 +64,7 @@ export function ButtonsEditor({ content, onChange, blocks = [] }: Props) {
           aria-checked={style === "inline"}
           className={`payment-settings__mode${style === "inline" ? " payment-settings__mode--active" : ""}`}
           onClick={() =>
-            // Был быстрый вид — запоминаем, чтобы бот убрал клавиатуру внизу у покупателей.
+            // Был быстрый вид: запоминаем, чтобы бот убрал клавиатуру внизу у покупателей.
             onChange({ ...content, keyboard: "inline", clear_reply: style === "reply" ? true : content.clear_reply })
           }
         >
@@ -172,13 +172,13 @@ function ButtonRow({ button, index, blocks, onUpdate, onSetMode, onRemove }: Row
   const targetId = (button.target_block_id || "").trim();
   const target = targetId ? blocks.find((b) => b.id === targetId) : undefined;
 
-  // A native listener, not React's onBlur — a holdover from when this
+  // A native listener, not React's onBlur, a holdover from when this
   // editor lived inline in a chat bubble, where the bubble's own
   // pointerdown-based outside-tap handler fired *before* the browser
   // resolved this field's blur, and React's synthetic onBlur lost that
   // race. It now lives in BlockEditPanel instead (a plain click-outside
   // backdrop, no such race), but the native listener is still correct —
-  // just no longer load-bearing — so it stays rather than being ripped
+  // just no longer load-bearing, so it stays rather than being ripped
   // out mid-migration.
   useEffect(() => {
     const el = valueRef.current;
@@ -258,7 +258,7 @@ function ButtonRow({ button, index, blocks, onUpdate, onSetMode, onRemove }: Row
         </p>
       ) : (
         <p className="buttons-editor__target buttons-editor__target--empty">
-          Пока никуда не ведёт — потяни стрелку от этой кнопки на холсте к нужному блоку
+          Пока никуда не ведёт: потяни стрелку от этой кнопки на холсте к нужному блоку
         </p>
       )}
     </div>

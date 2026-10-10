@@ -3,7 +3,7 @@ import type { BotBlock } from "./api/builderApi";
 /**
  * Which blocks the bot can actually reach from /start.
  *
- * A block dragged in from the library lands unconnected — that is how the
+ * A block dragged in from the library lands unconnected, that is how the
  * canvas works, and it is correct while you are still wiring things up. What
  * was wrong is that nothing ever said so: someone building four weekly
  * videos could connect none of them, publish, and ship a bot that sends one
@@ -47,7 +47,7 @@ export function orphanBlocks(blocks: BotBlock[], startBlockId: string | null): B
 /**
  * Петля из стрелок «дальше», по которой бот пойдёт по кругу.
  *
- * Движок такую петлю переживает — он помнит пройденное и останавливается, —
+ * Движок такую петлю переживает, он помнит пройденное и останавливается, —
  * но останавливается МОЛЧА: покупатель видит оборванный разговор, владелец
  * не узнаёт ничего. Для соседней беды (больше пятидесяти блоков подряд)
  * владельцу уходит предупреждение, а для петли не уходило ничего. Если
@@ -55,7 +55,7 @@ export function orphanBlocks(blocks: BotBlock[], startBlockId: string | null): B
  * «купить», и это будет выглядеть как отсутствие спроса.
  *
  * Считаются только стрелки «дальше»: ветвление кнопками, которое сходится
- * обратно, — нормальный приём, там человек нажимает и выбирает сам.
+ * обратно,: нормальный приём, там человек нажимает и выбирает сам.
  */
 export function loopedBlocks(blocks: BotBlock[], startBlockId: string | null): BotBlock[] {
   const byId = new Map(blocks.map((block) => [block.id, block]));
@@ -79,7 +79,7 @@ export function loopedBlocks(blocks: BotBlock[], startBlockId: string | null): B
   }
 
   // Порядок холста, и только то, до чего бот вообще дойдёт: петля в
-  // неподключённой ветке — это не то, о чём стоит кричать, про неё уже
+  // неподключённой ветке: это не то, о чём стоит кричать, про неё уже
   // сказано «не подключён».
   const reachable = reachableBlockIds(blocks, startBlockId);
   return blocks.filter((block) => looped.has(block.id) && reachable.has(block.id));
@@ -91,7 +91,7 @@ export function loopedBlocks(blocks: BotBlock[], startBlockId: string | null): B
  * Продукт зовёт править живого бота, и удаление блока из цепочки выдачи
  * выглядит ровно как любое другое удаление: блок исчезает молча. А
  * покупатель после этого платит и получает «Спасибо за покупку!» вместо
- * товара — заказ при этом считается доставленным, потому что цепочка
+ * товара: заказ при этом считается доставленным, потому что цепочка
  * отработала без единой ошибки.
  *
  * Считается так же, как ходит движок: стрелка «дальше» плюс цели кнопок,
@@ -117,7 +117,7 @@ export function blocksAfterPayment(blocks: BotBlock[]): Set<string> {
     after.add(id);
     const block = byId.get(id);
     if (!block) continue;
-    // Следующий блок оплаты — это уже следующая продажа, а не выдача этой.
+    // Следующий блок оплаты: это уже следующая продажа, а не выдача этой.
     if (block.block_type === "payment") continue;
     if (block.next_block_id) queue.push(block.next_block_id);
     for (const button of block.content.buttons ?? []) {

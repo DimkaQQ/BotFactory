@@ -1,4 +1,4 @@
-/** "1 неделя", "3 дня", "5 сек" — a pause as a person would say it.
+/** "1 неделя", "3 дня", "5 сек": a pause as a person would say it.
  *
  * Shared between the canvas node label and the block editor so the two can
  * never disagree about what a stored number of seconds means. Both used to
@@ -31,7 +31,7 @@ export function humanDelay(seconds: number): string {
     }
   }
   // Anything that doesn't divide evenly stays in the largest whole unit it
-  // fits into, rounded — "90 минут" beats "5400 сек" on a node label.
+  // fits into, rounded: "90 минут" beats "5400 сек" on a node label.
   for (const step of STEPS) {
     if (value >= step.limit) {
       const n = Math.round(value / step.unit);

@@ -51,7 +51,7 @@ export function FeedbackPanel({ onClose }: { onClose: () => void }) {
       <div className="edit-panel overview-panel" ref={panelRef}>
         <div
           className="edit-panel__header"
-          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          title="Потяни, чтобы переместить окно (двойной щелчок, вернуть на место)"
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--success" aria-hidden="true">
@@ -64,7 +64,7 @@ export function FeedbackPanel({ onClose }: { onClose: () => void }) {
         </div>
         <div className="edit-panel__body">
           <p className="feedback-panel__hint">
-            Чего не хватает в конструкторе? Что неудобно? Напишите — сообщение сразу приходит разработчику. Полезное
+            Чего не хватает в конструкторе? Что неудобно? Напишите: сообщение сразу приходит разработчику. Полезное
             добавляем быстро и сообщаем вам.
           </p>
           <div className="feedback-panel__kinds" role="tablist" aria-label="Тип обращения">

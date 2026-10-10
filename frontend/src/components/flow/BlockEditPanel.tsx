@@ -31,7 +31,7 @@ const PLACEHOLDER: Record<BotBlock["block_type"], string> = {
 interface Props {
   block: BotBlock;
   botId: string;
-  /** The bot's other blocks — ButtonsEditor names the block each button
+  /** The bot's other blocks, ButtonsEditor names the block each button
    * leads to, instead of leaving "куда ведёт" an unanswered question. */
   blocks: BotBlock[];
   onChange: (content: BotBlock["content"]) => void;
@@ -40,7 +40,7 @@ interface Props {
   /** Payment blocks need to know whether the bot can actually take money. */
   paymentProvider: string | null;
   paymentCurrencies: string[];
-  /** The chosen provider's catalogue entry — drives the per-product fields
+  /** The chosen provider's catalogue entry, drives the per-product fields
    * the payment block asks for. */
   paymentProviderInfo?: PaymentProviderInfo | null;
   paymentMissingFields?: string[];
@@ -51,7 +51,7 @@ interface Props {
 }
 
 /** The block's full editor, opened on the side (desktop) / as a bottom sheet
- * (mobile) when its node is clicked on the flow canvas — this is where
+ * (mobile) when its node is clicked on the flow canvas, this is where
  * MediaEditor/PollEditor/ButtonsEditor now live, having moved out of the old
  * inline chat-bubble editor they were built for. */
 export function BlockEditPanel({
@@ -95,7 +95,7 @@ export function BlockEditPanel({
       <div className={`edit-panel${closing ? " edit-panel--closing" : ""}`} ref={panelRef}>
         <div
           className="edit-panel__header"
-          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          title="Потяни, чтобы переместить окно (двойной щелчок, вернуть на место)"
           {...dragProps}
         >
           <span className={`edit-panel__icon block-card__icon--${def.accent}`} aria-hidden="true">
@@ -132,7 +132,7 @@ export function BlockEditPanel({
           ) : isMediaBlock ? (
             <MediaEditor kind={block.block_type as "image" | "video"} botId={botId} content={block.content} onChange={onChange} />
           ) : isDeliveryBlock ? (
-            /* Выдача — это и есть товар: методичка, архив, запись. Текст плюс
+            /* Выдача: это и есть товар: методичка, архив, запись. Текст плюс
                файл, а не текст вместо файла. */
             <>
               <p className="edit-panel__section-label">Сообщение покупателю</p>
@@ -195,7 +195,7 @@ export function BlockEditPanel({
               <p className="app-hint">
                 {block.content.group_chat_id ? (
                   <>
-                    Бот выдаст каждому покупателю <b>свою одноразовую ссылку</b> — переслать её другу не выйдет.
+                    Бот выдаст каждому покупателю <b>свою одноразовую ссылку</b>: переслать её другу не выйдет.
                     Когда подписка закончится, бот уберёт человека из группы. Для этого добавь бота в группу
                     администратором с правами «Приглашать пользователей» и «Блокировать пользователей».
                   </>

@@ -190,7 +190,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
   const [widgetFailed, setWidgetFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   // Липкая кнопка внизу экрана на телефоне: появляется, когда форма входа из
-  // героя уже уехала вверх, — чтобы на длинной странице путь к входу всегда
+  // героя уже уехала вверх,, чтобы на длинной странице путь к входу всегда
   // был под большим пальцем.
   const [stickyCta, setStickyCta] = useState(false);
 
@@ -204,7 +204,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
   }, []);
 
   useEffect(() => {
-    // После ошибки входа контейнер виджета создаётся заново — нужно собрать его снова.
+    // После ошибки входа контейнер виджета создаётся заново, нужно собрать его снова.
     if (loading || !botUsername || !widgetRef.current) return;
 
     window.onTelegramAuth = async (user) => {
@@ -308,11 +308,11 @@ export function LoginScreen({ onLoggedIn }: Props) {
 
   // Subscriptions are built but switched off, so the landing must not sell
   // one: a template promised here and missing in the picker is the worst
-  // kind of broken promise — the one made before the person signs up.
+  // kind of broken promise, the one made before the person signs up.
   const templates = BOT_TEMPLATES.filter((t) => t.id !== "blank" && !t.needsSubscriptions);
 
   // Counted from the list that is actually rendered, falling back on the
-  // server's own total — a headline that says "17 касс" above a list of
+  // server's own total: a headline that says "17 касс" above a list of
   // twelve is worse than no number.
   const pricing = config?.pricing ?? [];
 

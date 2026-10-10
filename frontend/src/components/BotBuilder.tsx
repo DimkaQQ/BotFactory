@@ -67,17 +67,17 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
 
   // The fixed footer's height decides how much room the canvas gets and how
   // much the page must reserve below it. Guessing it with a constant was
-  // wrong every time it changed shape — a publish button, a paywall with one
-  // method, a paywall with three — so it is measured instead.
+  // wrong every time it changed shape, a publish button, a paywall with one
+  // method, a paywall with three, so it is measured instead.
   const footerRef = useRef<HTMLDivElement | null>(null);
   const screenRef = useRef<HTMLDivElement | null>(null);
 
-  // Measured, never guessed — and re-measured on *every* render, because the
+  // Measured, never guessed: and re-measured on *every* render, because the
   // things being measured change without resizing anything: the footer swaps
   // between a publish button, an expanded token form and a paywall. Two
   // different `.app-footer` elements share this ref, so a ResizeObserver
   // attached once at mount ended up watching a detached node and `--footer-h`
-  // sat at a stale 110px while the real footer was 52px — which is how the
+  // sat at a stale 110px while the real footer was 52px, which is how the
   // publish confirm button ended up below the fold on every laptop.
   const measure = useCallback(() => {
     const footer = footerRef.current;
@@ -93,7 +93,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
 
   useLayoutEffect(measure);
 
-  // And once more for the changes React never hears about — a web font
+  // And once more for the changes React never hears about, a web font
   // landing, the browser chrome collapsing on scroll.
   useEffect(() => {
     const footer = footerRef.current;
@@ -110,7 +110,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Правка, набранная в последние полсекунды, жила только в таймере
-  // автосохранения — закрыл вкладку и потерял. Окно узкое, но индикатор в
+  // автосохранения: закрыл вкладку и потерял. Окно узкое, но индикатор в
   // этот момент показывает «Сохраняем…», то есть человек уверен в обратном.
   useEffect(() => {
     const warnIfUnsaved = (event: BeforeUnloadEvent) => {
@@ -159,7 +159,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     try {
       // Re-send the whole bot as it stands locally: what failed is whatever
       // the server has not got, and the client's copy is the truth here.
-      // Positions and the start block are included — leaving them out meant
+      // Positions and the start block are included, leaving them out meant
       // the indicator said "Сохранено" for changes still only in the browser.
       await Promise.all(
         bot.blocks.map((block) =>
@@ -193,7 +193,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       }
     })();
 
-    // Payment setup and the publication paywall are secondary — a failure
+    // Payment setup and the publication paywall are secondary, a failure
     // here leaves the constructor perfectly usable, so it never touches
     // loadState.
     (async () => {
@@ -212,7 +212,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         builderApi
           .listOrders(botId)
           .then(setSales)
-          // Не показать выручку — не повод ломать конструктор.
+          // Не показать выручку: не повод ломать конструктор.
           .catch(() => undefined);
       } catch {
         // leaves payments unconfigured in the UI; nothing else breaks
@@ -223,26 +223,26 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
 
   // Что человек узнавал только после того, как заплатил 99 $: касса без
   // ключей, кнопка в никуда, цена не указана. Считается прямо здесь, потому
-  // что все три факта уже загружены — отдельный запрос не нужен.
+  // что все три факта уже загружены, отдельный запрос не нужен.
   const publishProblems = (() => {
     if (!bot) return [];
     const found: string[] = [];
     const payBlocks = bot.blocks.filter((b) => b.block_type === "payment");
 
     if (payBlocks.length > 0 && !paymentSettings?.provider) {
-      found.push("Касса не подключена — бот не сможет принять оплату.");
+      found.push("Касса не подключена: бот не сможет принять оплату.");
     } else if (payBlocks.length > 0 && paymentSettings && !paymentSettings.ready) {
-      found.push(`В кассе не заполнено: ${paymentSettings.missing_fields.join(", ")} — оплата не откроется.`);
+      found.push(`В кассе не заполнено: ${paymentSettings.missing_fields.join(", ")}: оплата не откроется.`);
     } else if (payBlocks.length > 0 && paymentSettings && !paymentSettings.live) {
-      // Галочка «тестовый режим» стоит по умолчанию — то есть по умолчанию
+      // Галочка «тестовый режим» стоит по умолчанию, то есть по умолчанию
       // бот выходит в эфир, не принимая настоящих денег.
-      found.push("Касса в тестовом режиме — платежи будут ненастоящими. Выключи его в настройках кассы.");
+      found.push("Касса в тестовом режиме: платежи будут ненастоящими. Выключи его в настройках кассы.");
     }
 
     // Поля, которые заполняются в самом блоке, а не в кассе: ссылка на
     // оплату у «Оплаты по ссылке», номер оферты у LavaTop. У этих
     // провайдеров ключей в кассе нет вовсе, поэтому она объявлялась готовой
-    // всегда — зелёное «Касса подключена» в шапке, пустой чек-лист, и
+    // всегда: зелёное «Касса подключена» в шапке, пустой чек-лист, и
     // «не получилось открыть оплату» у первого же покупателя.
     const blockFields = paymentProviders.find((p) => p.slug === paymentSettings?.provider)?.block_fields ?? [];
     const unfilled = new Set<string>();
@@ -253,7 +253,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       }
     }
     if (unfilled.size > 0) {
-      found.push(`В блоке оплаты не заполнено: ${[...unfilled].join(", ")} — оплата не откроется.`);
+      found.push(`В блоке оплаты не заполнено: ${[...unfilled].join(", ")}: оплата не откроется.`);
     }
 
     // Заглушки шаблонов вроде «[цена]» и «[название продукта]»: покупатель
@@ -264,7 +264,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     );
     if (withPlaceholder.length > 0) {
       found.push(
-        'В текстах остались заглушки в квадратных скобках, например «[цена]» — замени их своими словами, иначе покупатель увидит скобки.',
+        'В текстах остались заглушки в квадратных скобках, например «[цена]», замени их своими словами, иначе покупатель увидит скобки.',
       );
     }
 
@@ -273,7 +273,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       (b) => (b.block_type === "image" || b.block_type === "video") && !String(b.content.media_file_id ?? "").trim(),
     );
     if (emptyMedia.length > 0) {
-      found.push("Есть блок «Изображение» или «Видео» без файла — загрузи файл или вставь ссылку, иначе уйдёт только подпись.");
+      found.push("Есть блок «Изображение» или «Видео» без файла, загрузи файл или вставь ссылку, иначе уйдёт только подпись.");
     }
 
     // Валюта блока, которую касса не принимает: покупатель получит ошибку.
@@ -290,10 +290,10 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       .filter((b) => b.block_type === "buttons" && b.content.keyboard === "reply")
       .flatMap((b) => (b.content.buttons ?? []).map((btn) => (btn.label || "").trim()).filter(Boolean));
     if (new Set(replyLabels).size !== replyLabels.length) {
-      found.push("У быстрых кнопок есть одинаковые подписи — бот не поймёт, какую нажали. Сделай их разными.");
+      found.push("У быстрых кнопок есть одинаковые подписи, бот не поймёт, какую нажали. Сделай их разными.");
     }
     if (replyLabels.some((l) => l.length > 64)) {
-      found.push("Подпись быстрой кнопки длиннее 64 символов — Telegram её обрежет.");
+      found.push("Подпись быстрой кнопки длиннее 64 символов, Telegram её обрежет.");
     }
 
     const priceless = payBlocks.filter((b) => {
@@ -303,15 +303,15 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     if (priceless.length > 0) {
       found.push(
         priceless.length === 1
-          ? "В блоке оплаты не указана цена — покупатель получит ошибку."
-          : `Блоков оплаты без цены: ${priceless.length} — покупатели получат ошибку.`,
+          ? "В блоке оплаты не указана цена, покупатель получит ошибку."
+          : `Блоков оплаты без цены: ${priceless.length}: покупатели получат ошибку.`,
       );
     }
 
     // Блок «Выдача», которому нечего выдать. Шаблон «Платная подписка»
     // приходит с пустым полем чата и текстом «вот твоя персональная ссылка
-    // на вход» — покупатель платил и получал обещание ссылки без ссылки.
-    // Ссылка, вписанная прямо в текст, — тоже выдача, поэтому проверяется
+    // на вход»: покупатель платил и получал обещание ссылки без ссылки.
+    // Ссылка, вписанная прямо в текст,, тоже выдача, поэтому проверяется
     // и она.
     const emptyDelivery = bot.blocks.filter((b) => {
       if (b.block_type !== "delivery") return false;
@@ -324,17 +324,17 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     });
     if (emptyDelivery.length > 0) {
       found.push(
-        "Блок «Выдача» ничего не выдаёт: ни файла, ни ссылки, ни доступа в чат — покупатель получит только текст.",
+        "Блок «Выдача» ничего не выдаёт: ни файла, ни ссылки, ни доступа в чат, покупатель получит только текст.",
       );
     }
 
     const looped = loopedBlocks(bot.blocks, bot.start_block_id);
     if (looped.length > 0) {
       found.push(
-        // Раньше здесь было «дойдёт и остановится молча» — и это описывало
+        // Раньше здесь было «дойдёт и остановится молча», и это описывало
         // не то, что происходит. Блоки кольца бот успевает отправить по
         // разу, замолкает он уже после них, на втором заходе.
-        `Стрелки «дальше» замкнуты в кольцо (${looped.length} бл.) — эти сообщения придут по одному разу, ` +
+        `Стрелки «дальше» замкнуты в кольцо (${looped.length} бл.): эти сообщения придут по одному разу, ` +
           `и дальше сценарий остановится.`,
       );
     }
@@ -343,8 +343,8 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     if (orphans.length > 0) {
       found.push(
         orphans.length === 1
-          ? "Один блок ни с чем не соединён — бот его не покажет."
-          : `Блоков ни с чем не соединено: ${orphans.length} — бот их не покажет.`,
+          ? "Один блок ни с чем не соединён, бот его не покажет."
+          : `Блоков ни с чем не соединено: ${orphans.length}: бот их не покажет.`,
       );
     }
 
@@ -359,12 +359,12 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         `Кнопка без продолжения: ${deadButtons
           .map((b) => `«${b.label || "без названия"}»`)
           .slice(0, 3)
-          .join(", ")} — нажатие ничего не сделает.`,
+          .join(", ")}: нажатие ничего не сделает.`,
       );
     }
 
     // Кнопка-ссылка на адрес без домена. Telegram отвергает такую кнопку, и
-    // вместе с ней не уходит всё сообщение целиком — то есть пропадает не
+    // вместе с ней не уходит всё сообщение целиком, то есть пропадает не
     // кнопка, а весь блок.
     const brokenLinks = bot.blocks
       .filter((b) => b.block_type === "buttons")
@@ -377,12 +377,12 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         `У кнопки ${brokenLinks
           .map((b) => `«${b.label || "без названия"}»`)
           .slice(0, 3)
-          .join(", ")} не указан адрес — Telegram не покажет всё сообщение целиком.`,
+          .join(", ")} не указан адрес: Telegram не покажет всё сообщение целиком.`,
       );
     }
 
     // Блок кнопок без текста. Telegram не отправляет кнопки без сообщения,
-    // поэтому бот подставляет «…» — покупатель получает пустой пузырь.
+    // поэтому бот подставляет «…», покупатель получает пустой пузырь.
     const speechless = bot.blocks.filter(
       (b) =>
         b.block_type === "buttons" &&
@@ -390,14 +390,14 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         (b.content.buttons ?? []).length > 0,
     );
     if (speechless.length > 0) {
-      found.push("В блоке кнопок нет сообщения — покупатель увидит пузырь с «…» над кнопками.");
+      found.push("В блоке кнопок нет сообщения, покупатель увидит пузырь с «…» над кнопками.");
     }
 
     return found;
   })();
 
   // A renewal can put a stopped bot back on the air, so this re-reads the
-  // bot itself and not just the clock — the status drives the whole header.
+  // bot itself and not just the clock, the status drives the whole header.
   const handleRenewed = useCallback(async () => {
     try {
       const [full, state] = await Promise.all([builderApi.getBot(botId), builderApi.getBilling(botId)]);
@@ -437,7 +437,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       // Removing a node can orphan two kinds of arrow pointing *at* it: the
       // backend already nulls next_block_id/start_block_id on delete (real
       // FKs, ON DELETE SET NULL) but a button's target_block_id lives inside
-      // JSONB content, so it's on us to clear it here — otherwise the arrow
+      // JSONB content, so it's on us to clear it here, otherwise the arrow
       // just silently stops resolving to anything on the canvas.
       const affected = bot.blocks.filter(
         (b) => b.block_type === "buttons" && (b.content.buttons ?? []).some((btn) => btn.target_block_id === blockId),
@@ -503,7 +503,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       const defaultContent = BLOCK_TYPE_BY_ID[blockType].defaultContent();
       if (blockType === "payment") {
         // The shop's own currency, not a constant. Falls back to RUB only
-        // when no cash desk is connected yet — and the block picks the real
+        // when no cash desk is connected yet, and the block picks the real
         // one up as soon as one is, because PaymentEditor writes back
         // whatever the provider actually supports.
         const connected = paymentProviders.find((p) => p.slug === paymentSettings?.provider);
@@ -524,7 +524,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     [bot, paymentProviders, paymentSettings],
   );
 
-  // Graph edges — a plain arrow (next_block_id), a per-button branch (lives
+  // Graph edges: a plain arrow (next_block_id), a per-button branch (lives
   // in content, so it rides the same debounced content autosave), and the
   // "▶ Старт" pseudo-edge (bot.start_block_id). All three are optimistic:
   // the canvas already shows the new arrow before the PATCH lands.
@@ -647,13 +647,13 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
 
   return (
     // The paywall card is roughly twice the height of the publish button, and
-    // the footer is fixed — so the space reserved for it at the bottom of the
+    // the footer is fixed, so the space reserved for it at the bottom of the
     // screen has to know which one is showing, or the card lands on top of the
     // "+ Добавить блок" bar and no block can be added on a phone.
     <div ref={screenRef} className="screen screen--builder">
       <header className="app-header">
         {/* One bar for "out of here" and the tools. On a phone these used to
-            be two stacked 44px rows above the title — 56px of the canvas
+            be two stacked 44px rows above the title, 56px of the canvas
             spent on a layout accident. */}
         <div className="app-header__bar">
           <button type="button" className="back-link" onClick={onBack}>
@@ -676,7 +676,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                   paymentSettings?.live
                     ? "Платёжная система, через которую бот принимает деньги"
                     : paymentSettings?.ready
-                      ? "Касса в тестовом режиме — платежи ненастоящие"
+                      ? "Касса в тестовом режиме: платежи ненастоящие"
                       : paymentSettings?.provider
                         ? `Касса выбрана, но не заполнено: ${paymentSettings.missing_fields.join(", ")}`
                         : "Платёжная система, через которую бот принимает деньги"
@@ -717,7 +717,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 type="button"
                 className="bot-payments-button"
                 onClick={() => setSiteOpen(true)}
-                title="Страница с ценами и документами — для банка (Казахстан)"
+                title="Страница с ценами и документами, для банка (Казахстан)"
               >
                 <Globe size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Страница</span>
                 <span className="bot-payments-button__short">Сайт</span>
@@ -773,9 +773,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             )}
             <p className="app-header__greeting">
               {bot.status === "active"
-                ? "Опубликован — изменения применяются сразу"
+                ? "Опубликован: изменения применяются сразу"
                 : bot.status === "disabled"
-                  ? "Остановлен — правки сохраняются как обычно"
+                  ? "Остановлен: правки сохраняются как обычно"
                   : "Черновик"}
               {bot.name && bot.telegram_bot_username ? ` · @${bot.telegram_bot_username}` : ""}
               {!isMiniApp && saveStatus !== "idle" && (
@@ -783,7 +783,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                   {saveStatus === "saving" ? " · Сохраняем…" : saveStatus === "failed" ? "" : " · Сохранено"}
                   {saveStatus === "failed" && (
                     <button type="button" className="save-status__retry" onClick={retryFailedSaves}>
-                      · Не сохранено — повторить
+                      · Не сохранено: повторить
                     </button>
                   )}
                 </span>
@@ -795,7 +795,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
 
       {isMiniApp && (
         <div className="miniapp-banner">
-          <p><DeviceMobile size={16} aria-hidden="true" /> Здесь виден сценарий и кнопка публикации. Редактировать — в браузере, с телефона тоже удобно.</p>
+          <p><DeviceMobile size={16} aria-hidden="true" /> Здесь виден сценарий и кнопка публикации. Редактировать: в браузере, с телефона тоже удобно.</p>
           <button type="button" onClick={() => openExternal(`${window.location.origin}/`)}>
             Открыть в браузере →
           </button>
@@ -814,7 +814,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             </p>
             {bot.paused && (
               <p className="published-banner__hint">
-                Новых диалогов нет, оплаты и выдача купленного продолжают работать. Включить обратно — в меню
+                Новых диалогов нет, оплаты и выдача купленного продолжают работать. Включить обратно: в меню
                 Telegram-бота Bot Factory или в списке ботов.
               </p>
             )}
@@ -843,11 +843,11 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         !isMiniApp && (
           <>
             {/* Two versions on purpose. On a phone the long one ran to four
-                lines — 80px of the 844 the canvas is fighting for — and half
+                lines: 80px of the 844 the canvas is fighting for, and half
                 of it described a block library that only exists on a big
                 screen. */}
             <p className="app-hint app-hint--narrow">
-              Нажми на блок, чтобы изменить. Потяни от кружка на блоке — что дальше.
+              Нажми на блок, чтобы изменить. Потяни от кружка на блоке, что дальше.
             </p>
           </>
         )
@@ -870,7 +870,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           <summary className="live-problems__title">
             <Warning size={15} aria-hidden="true" /> {publishProblems.length}{" "}
             {bot.status === "active"
-              ? `${plural(publishProblems.length, ["замечание", "замечания", "замечаний"])} у бота в эфире — покупатели уже это видят`
+              ? `${plural(publishProblems.length, ["замечание", "замечания", "замечаний"])} у бота в эфире: покупатели уже это видят`
               : `${plural(publishProblems.length, ["замечание", "замечания", "замечаний"])} до следующего запуска`}
           </summary>
           <ul>
@@ -914,7 +914,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
               disabled={bot.blocks.length === 0}
               orphanCount={orphanBlocks(bot.blocks, bot.start_block_id).length}
               // Тот же чек-лист, что и до оплаты. Раньше он исчезал вместе с
-              // пейволлом — то есть ровно перед последним кликом, после
+              // пейволлом: то есть ровно перед последним кликом, после
               // которого бота видят живые покупатели, проверка пропадала.
               problems={publishProblems}
             />

@@ -23,7 +23,7 @@ const POLL_MS = 3000;
 /** Symbols where they read better than the code, plain code otherwise. */
 const SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", RUB: "₽", KZT: "₸", XTR: "⭐" };
 
-/** Which method is yours — the same guidance the settings panel gives. */
+/** Which method is yours, the same guidance the settings panel gives. */
 const METHOD_NOTE: Record<string, string> = {
   stripe: "карта (кроме РФ и Беларуси)",
   cryptobot: "USDT или TON из Telegram",
@@ -42,7 +42,7 @@ function recommendedProvider(providers: string[]): string | null {
   try {
     zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
   } catch {
-    /* окружение без Intl — просто не угадываем */
+    /* окружение без Intl: просто не угадываем */
   }
   const lang = (typeof navigator !== "undefined" ? navigator.language : "").toLowerCase();
   const centralAsia = /^(Asia\/(Almaty|Aqtau|Aqtobe|Atyrau|Oral|Qostanay|Qyzylorda|Tashkent|Samarkand|Bishkek))$/.test(zone) ||
@@ -58,7 +58,7 @@ function money(currency: string): string {
   return SYMBOLS[currency] ?? currency;
 }
 
-/** «$19», «€9» — знак впереди и без пробела; «990 ₽», «5 ⭐» — после. */
+/** «$19», «€9»: знак впереди и без пробела; «990 ₽», «5 ⭐»: после. */
 function price(minor: number, currency: string): string {
   const amount = formatAmount(minor);
   return currency === "USD" || currency === "EUR" ? `${money(currency)}${amount}` : `${amount}\u00a0${money(currency)}`;
@@ -66,7 +66,7 @@ function price(minor: number, currency: string): string {
 
 /** Building is free; putting the bot on the air is what's paid for. Opens
  * the provider's page in a new tab and polls the payment until the callback
- * settles it — the redirect back is never what we trust. */
+ * settles it: the redirect back is never what we trust. */
 export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
   // На телефоне панель занимала три четверти экрана и закрывала холст, поэтому
   // она свёрнута в одну строку и раскрывается по нажатию.
@@ -77,7 +77,7 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
   const paymentId = useRef<string | null>(null);
   // Kept so the link can be offered in the waiting state: the page is opened
   // after an await, which is outside the user gesture, and Safari and Firefox
-  // block that — leaving the old UI insisting a tab was open when none was.
+  // block that: leaving the old UI insisting a tab was open when none was.
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -94,7 +94,7 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
           setError("Платёж не прошёл. Попробуй ещё раз.");
         }
       } catch {
-        // transient — the next tick tries again
+        // transient: the next tick tries again
       }
     }, POLL_MS);
     return () => clearInterval(timer);
@@ -120,8 +120,8 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
     }
   }
 
-  // Several methods can be offered at once — cards abroad, a local
-  // acquirer, crypto — and they are priced in different currencies, so each
+  // Several methods can be offered at once, cards abroad, a local
+  // acquirer, crypto: and they are priced in different currencies, so each
   // shows its own amount rather than one converted number.
   const methods = info.methods?.length
     ? info.methods
@@ -171,7 +171,7 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
         <div>
           <p className="paywall__title">Публикация бота</p>
           <p className="paywall__hint">
-            Собирать и править сценарий можно бесплатно и сколько угодно. Оплата — за запуск этого бота в
+            Собирать и править сценарий можно бесплатно и сколько угодно. Оплата: за запуск этого бота в
             Telegram.
           </p>
           {/* Said here, before the money is taken, and not in a message a
@@ -179,7 +179,7 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
               conversation as a refund request. */}
           {info.renewal_price_minor > 0 && (
             <p className="paywall__terms">
-              Подписка — {price(info.renewal_price_minor, info.currency)} за каждые {info.renewal_period_days}{" "}
+              Подписка: {price(info.renewal_price_minor, info.currency)} за каждые {info.renewal_period_days}{" "}
               {plural(info.renewal_period_days, ["день", "дня", "дней"])}, и она одна на все ваши боты, сколько бы их ни
               было. Если подписки ещё нет, первый период входит в эту оплату; каждый следующий бот оплачивается только
               за запуск. Напомним заранее, до конца периода.
@@ -197,13 +197,13 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
             ))}
           </ul>
           <p className="paywall__problems-hint">
-            Оплатить можно и так — деньги за запуск не сгорят. Но бот выйдет в Telegram с этими проблемами.
+            Оплатить можно и так: деньги за запуск не сгорят. Но бот выйдет в Telegram с этими проблемами.
           </p>
         </div>
       )}
 
       <p className="paywall__next">
-        Что дальше: после оплаты бот попросит токен. Получить его — минута, если делать по шагам.
+        Что дальше: после оплаты бот попросит токен. Получить его: минута, если делать по шагам.
       </p>
       <BotFatherSteps />
 
@@ -213,14 +213,14 @@ export function PublishPaywall({ botId, problems, info, onPaid }: Props) {
         <div className="paywall__waiting">
           <span className="btn-spinner" aria-hidden="true" />
           <span>
-            Ждём подтверждение — обычно несколько секунд, страница обновится сама. Если прошло больше минуты,{" "}
+            Ждём подтверждение: обычно несколько секунд, страница обновится сама. Если прошло больше минуты,{" "}
             <a href="https://t.me/DragDropBot" target="_blank" rel="noreferrer">
               напиши в поддержку
             </a>
             .{" "}
             {checkoutUrl && (
               <a href={checkoutUrl} target="_blank" rel="noreferrer">
-                Если страница не открылась — открой её здесь
+                Если страница не открылась: открой её здесь
               </a>
             )}
           </span>

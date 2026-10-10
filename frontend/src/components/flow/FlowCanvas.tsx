@@ -34,7 +34,7 @@ const NODE_HEIGHT = 110;
 
 // `maxZoom: 1` keeps a two-block bot from being blown up to fill the canvas.
 //
-// `minZoom` used to be 0.7 here, for a good reason — a six-block graph
+// `minZoom` used to be 0.7 here, for a good reason, a six-block graph
 // squeezed into a phone canvas hit ~50% zoom and the node text went to 6px.
 // But it was also the floor React Flow clamps *fitView* to, so on a real
 // seventeen-node template the fit was already at 0.7 and "Вписать в экран"
@@ -43,12 +43,12 @@ const NODE_HEIGHT = 110;
 // is what the button is for; reading the text is what zooming in is for.
 // `minZoom: 0.2` позволял «вписать в экран» ужать граф до нечитаемого: на
 // двенадцати блоках выходили прямоугольники 23×11 px с пятипиксельным
-// текстом. Вписывать целиком любой ценой — неправильная цель: лучше показать
+// текстом. Вписывать целиком любой ценой: неправильная цель: лучше показать
 // часть графа так, чтобы её было видно, и дать прокрутить, чем показать всё
-// и ничего не разобрать. 0.45 — примерно та граница, за которой подпись
+// и ничего не разобрать. 0.45: примерно та граница, за которой подпись
 // блока перестаёт читаться.
 const READABLE_MIN_ZOOM = 0.45;
-// На телефоне вписывать всю схему нельзя — она ужимается до нечитаемых 0.45.
+// На телефоне вписывать всю схему нельзя, она ужимается до нечитаемых 0.45.
 // Лучше открыть её крупно сверху (Старт и первые блоки) и дать прокрутить.
 const fitViewOptions = () => ({
   padding: 0.15,
@@ -56,7 +56,7 @@ const fitViewOptions = () => ({
   minZoom: typeof window !== "undefined" && window.innerWidth < 960 ? 0.8 : READABLE_MIN_ZOOM,
 });
 
-/** Which model field a dropped/deleted arrow maps back to — carried on the
+/** Which model field a dropped/deleted arrow maps back to, carried on the
  * edge itself so onConnect/onEdgesDelete don't need to re-derive it from
  * ids and handle-name string parsing in two places. */
 type EdgeKind = { kind: "start" } | { kind: "default"; blockId: string } | { kind: "button"; blockId: string; index: number };
@@ -77,7 +77,7 @@ interface Props {
   /** Opens the "как в реальности" chat preview. Rendered inside the canvas
    * tool strip rather than as its own full-width row above it: two stacked
    * 44px bars cost 56px of canvas on every screen, and both are canvas
-   * controls anyway. Absent while the bot has no blocks — there is nothing
+   * controls anyway. Absent while the bot has no blocks, there is nothing
    * to preview yet. */
   onPreview?: () => void;
   /** Whether the payment block offers subscriptions right now. */
@@ -85,7 +85,7 @@ interface Props {
   disabled?: boolean;
 }
 
-// Node data is heterogeneous (the start node carries none) — kept loose
+// Node data is heterogeneous (the start node carries none), kept loose
 // (`Node<any>` rather than a strict union) so BlockNode/StartNode each own
 // their own data shape instead of the canvas fighting React Flow's generics
 // to describe both at once.
@@ -104,7 +104,7 @@ function blockNode(block: BotBlock, isStart: boolean, orphan: boolean): FlowNode
 
 export function FlowCanvas(props: Props) {
   // React Flow's own state (drag position, viewport) needs to live above
-  // remounts, hence the provider wrapper — everything else is in Inner.
+  // remounts, hence the provider wrapper, everything else is in Inner.
   return (
     <ReactFlowProvider>
       <Inner {...props} />
@@ -131,7 +131,7 @@ function Inner({
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   // Shown when an action that already changed the canvas failed on the
-  // server — otherwise the canvas quietly disagrees with the database.
+  // server: otherwise the canvas quietly disagrees with the database.
   const [notice, setNotice] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   useEscape(() => setSheetOpen(false), sheetOpen);
@@ -151,7 +151,7 @@ function Inner({
   const blocksById = useMemo(() => new Map(bot.blocks.map((b) => [b.id, b])), [bot.blocks]);
 
   // useNodesState takes a value, not an initialiser, so this runs on every
-  // render — cheap (one traversal of a graph a person drew by hand) and only
+  // render: cheap (one traversal of a graph a person drew by hand) and only
   // the first result is ever used.
   const initialReachable = reachableBlockIds(bot.blocks, bot.start_block_id);
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([
@@ -160,7 +160,7 @@ function Inner({
   ]);
 
   // Reconcile nodes with the current block list on every bot change, without
-  // ever touching an existing node's `position` — that's the live/dragged
+  // ever touching an existing node's `position`: that's the live/dragged
   // value, seeded from block.position_x/y only at creation time. Overwriting
   // it on every keystroke-triggered re-render would fight drags and the
   // async round trip after a drop.
@@ -168,7 +168,7 @@ function Inner({
   // Untouched blocks keep their exact node object. BotBuilder replaces only
   // the block being edited (the rest keep reference identity), so typing in
   // one block leaves every other node byte-identical and React Flow skips
-  // re-rendering it — the difference between a canvas that keeps up with
+  // re-rendering it: the difference between a canvas that keeps up with
   // typing and one that redraws itself on every keystroke.
   useEffect(() => {
     setNodes((current) => {
@@ -179,7 +179,7 @@ function Inner({
 
       // Which blocks the dialogue can actually reach. A block dragged in from
       // the library starts unconnected, which is fine while you wire it up
-      // and disastrous if you publish without noticing — so the node says so.
+      // and disastrous if you publish without noticing, so the node says so.
       const reachable = reachableBlockIds(bot.blocks, bot.start_block_id);
 
       for (const block of bot.blocks) {
@@ -206,13 +206,13 @@ function Inner({
     });
   }, [bot.blocks, bot.start_block_id, setNodes]);
 
-  // `fitView` as a prop runs once, on mount — which is before the blocks
+  // `fitView` as a prop runs once, on mount, which is before the blocks
   // have been fetched. On a phone that left the viewport fitted to an empty
   // canvas and the nodes half off-screen, showing slivers of white cards
   // with no text. Fit again the first time there is something to fit to.
   const { fitView, setCenter, getZoom, zoomIn, zoomOut } = useReactFlow();
   // На телефоне открываем схему с «▶ Старт» и первыми блоками цепочки, а не
-  // с её середины: вписать всё целиком — значит ужать текст до нечитаемого.
+  // с её середины: вписать всё целиком: значит ужать текст до нечитаемого.
   const fitOpts = useCallback(() => {
     const base = fitViewOptions();
     if (typeof window === "undefined" || window.innerWidth >= 960) return base;
@@ -239,7 +239,7 @@ function Inner({
   // Холст менял размер уже после того, как в него вписались: над ним
   // появляются баннер оплаченного периода и чек-лист проблем, и каждый
   // из них приезжает своим запросом. Сцена оставалась вписанной в прежнюю
-  // высоту — блоки уходили за левый край, и первое, что человек делал на
+  // высоту: блоки уходили за левый край, и первое, что человек делал на
   // своём боте, это искал кнопку «вписать в экран». Пока он сам не двигал
   // холст, вписываемся заново.
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -337,7 +337,7 @@ function Inner({
       const confirmed = await confirmDialog(
         `Удалить блок «${name}»? Связи с другими блоками тоже пропадут.` +
           (afterPayment
-            ? "\n\nЭтот блок покупатели получают после оплаты — следующий, кто заплатит, его уже не получит."
+            ? "\n\nЭтот блок покупатели получают после оплаты, следующий, кто заплатит, его уже не получит."
             : ""),
       );
       if (!confirmed) return;
@@ -348,7 +348,7 @@ function Inner({
   );
 
   // The node callbacks reach BlockNode through context, not through node
-  // data, and this object never changes identity — the latest handlers are
+  // data, and this object never changes identity, the latest handlers are
   // read off a ref at call time. That keeps `data` stable across renders
   // (see the reconcile effect) instead of invalidating every node whenever
   // a handler was recreated.
@@ -401,9 +401,9 @@ function Inner({
 
   async function handleAdd(type: BlockType) {
     setSheetOpen(false);
-    // Cascade new nodes so they don't all land in the same spot — a rough
+    // Cascade new nodes so they don't all land in the same spot, a rough
     // grid, not a real layout algorithm; the user drags from there.
-    // Новый блок — под самым нижним, а не поверх существующих.
+    // Новый блок: под самым нижним, а не поверх существующих.
     const lowest = bot.blocks.reduce((max, b) => Math.max(max, b.position_y ?? 0), 0);
     const position = bot.blocks.length === 0 ? { x: 80, y: 170 } : { x: 80, y: lowest + 200 };
     let newId: string;
@@ -417,7 +417,7 @@ function Inner({
     }
     setEditingId(newId);
     // Bring it into view: the cascade puts new nodes to the right of the
-    // graph, which on a phone (and on a panned canvas) is off-screen — so
+    // graph, which on a phone (and on a panned canvas) is off-screen, so
     // clicking a block type read as "nothing happened".
     requestAnimationFrame(() => {
       setCenter(position.x + NODE_WIDTH / 2, position.y + NODE_HEIGHT / 2, { zoom: 1, duration: 300 });
@@ -453,7 +453,7 @@ function Inner({
 
       {/* Outside the canvas on purpose. React Flow's own <Controls> float over
           the graph, so whichever corner they are parked in, the node that
-          happens to be there ends up underneath them — measured at 36x108 in
+          happens to be there ends up underneath them, measured at 36x108 in
           the bottom-left, then 38x27 after moving to the bottom-right. A strip
           above the canvas cannot overlap anything by construction. */}
       <div className="flow-canvas__tools">
@@ -486,7 +486,7 @@ function Inner({
             className="flow-canvas__tool flow-canvas__tool--preview"
             onClick={onPreview}
           >
-            {/* Two labels, one shown at a time by CSS — the long form pushed
+            {/* Two labels, one shown at a time by CSS, the long form pushed
                 this strip onto a second row on a 390px phone, costing more
                 canvas than folding it in here had just saved. */}
             <Play size={14} weight="fill" aria-hidden="true" /> <span className="flow-canvas__tool-long">Смотреть, как в реальности</span>
@@ -525,11 +525,11 @@ function Inner({
         {!disabled && bot.blocks.length === 0 && (
           <div className="flow-canvas__empty">
             <p className="flow-canvas__empty-wide">
-              Пока пусто. Добавь первый блок — кнопкой «+ Добавить блок» под холстом или из списка слева — и
+              Пока пусто. Добавь первый блок: кнопкой «+ Добавить блок» под холстом или из списка слева, и
               от него потянется стрелка «Старт».
             </p>
             <p className="flow-canvas__empty-narrow">
-              Пока пусто. Нажми «+ Добавить блок» под холстом — и от него потянется стрелка «Старт».
+              Пока пусто. Нажми «+ Добавить блок» под холстом, и от него потянется стрелка «Старт».
             </p>
           </div>
         )}

@@ -34,7 +34,7 @@ async function toSquareJpeg(file: File): Promise<File> {
   return new File([blob], "avatar.jpg", { type: "image/jpeg" });
 }
 
-/** Имя, описание и фото бота в Telegram — без похода в @BotFather. */
+/** Имя, описание и фото бота в Telegram, без похода в @BotFather. */
 export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
   useEscape(onClose);
   const { panelRef, handleProps: dragProps } = useDraggablePanel();
@@ -100,7 +100,7 @@ export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
       <div className="edit-panel" ref={panelRef}>
         <div
           className="edit-panel__header"
-          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          title="Потяни, чтобы переместить окно (двойной щелчок, вернуть на место)"
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--welcome" aria-hidden="true">
@@ -116,7 +116,7 @@ export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
           {loaded && (
             <>
               <p className="payment-settings__lead">
-                Так бот выглядит в Telegram. Менять можно здесь — в @BotFather ходить не нужно.
+                Так бот выглядит в Telegram. Менять можно здесь: в @BotFather ходить не нужно.
               </p>
 
               <p className="edit-panel__section-label">Фото бота</p>
@@ -154,7 +154,7 @@ export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
 
               <label className="buttons-editor__field">
                 <span className="buttons-editor__field-label">
-                  «Что умеет этот бот» — видят до нажатия /start ({description.length}/512)
+                  «Что умеет этот бот»: видят до нажатия /start ({description.length}/512)
                 </span>
                 <textarea
                   className="chat-bubble__textarea edit-panel__textarea"
@@ -167,7 +167,7 @@ export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
 
               <label className="buttons-editor__field">
                 <span className="buttons-editor__field-label">
-                  Коротко о боте — в профиле и при пересылке ({short.length}/120)
+                  Коротко о боте: в профиле и при пересылке ({short.length}/120)
                 </span>
                 <textarea
                   className="chat-bubble__textarea edit-panel__textarea"

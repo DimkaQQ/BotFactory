@@ -33,7 +33,7 @@ export function useTelegramWebApp() {
   return { webApp, ready, initData, user };
 }
 
-/** Open a URL in the system browser — used to hand the user off from the
+/** Open a URL in the system browser, used to hand the user off from the
  * Mini App "dashboard" to the full web constructor. `Telegram.WebApp.openLink`
  * leaves the Mini App (unlike a plain <a>, which Telegram would open in its
  * own in-app browser); falls back to window.open outside Telegram. */
@@ -57,7 +57,7 @@ declare global {
         ready: () => void;
         expand: () => void;
         close: () => void;
-        /** "light" | "dark" — Telegram's own resolved theme, used by src/theme.ts. */
+        /** "light" | "dark": Telegram's own resolved theme, used by src/theme.ts. */
         colorScheme?: "light" | "dark";
         onEvent?: (event: string, cb: () => void) => void;
         offEvent?: (event: string, cb: () => void) => void;

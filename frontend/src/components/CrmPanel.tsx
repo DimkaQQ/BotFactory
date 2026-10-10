@@ -65,7 +65,7 @@ export function CrmPanel({ bots, onClose }: Props) {
       <div className="edit-panel overview-panel crm-panel" ref={panelRef}>
         <div
           className="edit-panel__header"
-          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          title="Потяни, чтобы переместить окно (двойной щелчок, вернуть на место)"
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--poll" aria-hidden="true">
@@ -419,7 +419,7 @@ function CalendarTab({ bots }: { bots: Bot[] }) {
       )}
       {!hasBlock && (
         <p className="app-hint">
-          В сценарии этого бота нет блока «Запись». Добавьте его — и здесь появится расписание, которое вы настроите сами.
+          В сценарии этого бота нет блока «Запись». Добавьте его: и здесь появится расписание, которое вы настроите сами.
         </p>
       )}
       {!view && !error && <p className="app-hint">Загружаем…</p>}

@@ -17,7 +17,7 @@ interface Props {
   onClose: () => void;
   onSaved: (settings: PaymentSettings) => void;
   /** Открыть экран продаж. Заказы жили здесь же, под семнадцатью плитками
-   * платёжных систем, — теперь у них свой экран, а отсюда ведёт ссылка. */
+   * платёжных систем,: теперь у них свой экран, а отсюда ведёт ссылка. */
   onOpenSales?: () => void;
 }
 
@@ -82,7 +82,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
 
   const active = providers?.find((p) => p.slug === slug) ?? null;
 
-  // Кассы одним списком: «Оплата по ссылке» и «Демо» — не кассы, они вынесены
+  // Кассы одним списком: «Оплата по ссылке» и «Демо», не кассы, они вынесены
   // отдельно, чтобы не путать выбор.
   const realProviders = (providers ?? []).filter((p) => p.slug !== "test" && p.slug !== "link");
   const linkProvider = (providers ?? []).find((p) => p.slug === "link") ?? null;
@@ -116,7 +116,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
       <div className="edit-panel" ref={panelRef}>
         <div
           className="edit-panel__header"
-          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          title="Потяни, чтобы переместить окно (двойной щелчок, вернуть на место)"
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--delivery" aria-hidden="true">
@@ -134,7 +134,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
           ) : (
             <>
               <p className="payment-settings__lead">
-                Деньги идут напрямую тебе на счёт в платёжной системе — мы только формируем ссылку на оплату и
+                Деньги идут напрямую тебе на счёт в платёжной системе, мы только формируем ссылку на оплату и
                 ждём подтверждение.
               </p>
 
@@ -144,7 +144,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                     <strong>Сейчас: {connected.title}</strong>
                     <span>
                       {connected.slug === "test"
-                        ? "демо — деньги не принимаются"
+                        ? "демо: деньги не принимаются"
                         : connected.has_test_mode
                           ? settings?.is_test
                             ? "тестовый режим: деньги не списываются"
@@ -200,7 +200,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                     <strong><LinkSimple size={15} className="inline-icon" aria-hidden="true" /> Своя ссылка на оплату</strong>
                     <span>
                       Нет подключённой кассы? Бот пришлёт покупателю твою ссылку (например, на перевод по номеру
-                      карты), а ты сам подтвердишь оплату — деньги он получит только после этого.
+                      карты), а ты сам подтвердишь оплату, деньги он получит только после этого.
                     </span>
                   </button>
                 )}
@@ -224,7 +224,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                       <strong><Flask size={15} className="inline-icon" aria-hidden="true" /> Демо-оплата</strong>
                       <span>
                         Это не касса: покупатель нажимает «оплатить» и сразу получает товар, деньги никуда не идут.
-                        Включай только чтобы проверить сценарий — перед запуском выбери настоящую кассу.
+                        Включай только чтобы проверить сценарий, перед запуском выбери настоящую кассу.
                       </span>
                     </button>
                   </details>
@@ -261,7 +261,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                           className="payment-editor__input"
                           type={field.secret ? "password" : "text"}
                           autoComplete="off"
-                          placeholder={filled ? "•••••••• (не менять — пусто)" : field.hint}
+                          placeholder={filled ? "•••••••• (не менять: пусто)" : field.hint}
                           value={values[field.key] ?? ""}
                           onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
                         />
@@ -315,7 +315,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
               </button>
 
               {/* Сами продажи живут на своём экране: настройки кассы
-                  трогают один раз, а заказы смотрят каждый день — и
+                  трогают один раз, а заказы смотрят каждый день, и
                   проскроллить ради них семнадцать плиток было незачем. */}
               {onOpenSales && (
                 <button type="button" className="payment-settings__sales-link" onClick={onOpenSales}>

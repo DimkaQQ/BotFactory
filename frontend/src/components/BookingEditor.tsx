@@ -59,7 +59,7 @@ function IntervalList({
 }
 
 /** Расписание записи: часы по каждому дню недели (можно с перерывом), особые даты,
- * длина записи, часовой пояс. Всё задаёт владелец — ничего не привязано к городу. */
+ * длина записи, часовой пояс. Всё задаёт владелец: ничего не привязано к городу. */
 export function ScheduleFields({ content, onChange }: Props) {
   const weekly = readWeekly(content);
   const exceptions = (content.exceptions ?? {}) as Record<string, Interval[]>;
@@ -105,7 +105,7 @@ export function ScheduleFields({ content, onChange }: Props) {
                     set({ weekly: all, days: undefined, start: undefined, end: undefined });
                   }}
                 >
-                  Те же часы — на все рабочие дни
+                  Те же часы: на все рабочие дни
                 </button>
               </>
             )}
@@ -220,7 +220,7 @@ export function ScheduleFields({ content, onChange }: Props) {
           </select>
         </label>
       </div>
-      <p className="app-hint">Время в расписании — по выбранному часовому поясу. Клиенту показываются те же часы.</p>
+      <p className="app-hint">Время в расписании: по выбранному часовому поясу. Клиенту показываются те же часы.</p>
       <label className="payment-settings__test">
         <input
           type="checkbox"
@@ -239,7 +239,7 @@ export function BookingEditor({ content, onChange }: Props) {
     <div className="booking-editor" onClick={(e) => e.stopPropagation()}>
       <p className="payment-settings__hint">
         Клиент выбирает свободный день и время. Занятое время бот не показывает. Если после этого блока идёт оплата,
-        время придерживается на час и подтверждается после оплаты; если оплаты нет — запись подтверждается сразу.
+        время придерживается на час и подтверждается после оплаты; если оплаты нет: запись подтверждается сразу.
       </p>
       <p className="edit-panel__section-label">Что написать клиенту</p>
       <textarea

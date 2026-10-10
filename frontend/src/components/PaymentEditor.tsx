@@ -8,7 +8,7 @@ interface Props {
   /** Only used to keep this block's radio group to itself. */
   blockId?: string;
   content: BlockContent;
-  /** Which provider the bot is set up with — a payment block with none is
+  /** Which provider the bot is set up with, a payment block with none is
    * inert, and saying so here beats letting a customer hit a dead button. */
   provider: string | null;
   currencies: string[];
@@ -36,30 +36,30 @@ function blockFieldValue(content: BlockContent, key: string): string {
 /** Оставить из набранного число, которое означает ровно то, что человек имел
  * в виду.
  *
- * Прежний фильтр пропускал любые точки и запятые, и «1.500» — привычная
- * запись полутора тысяч — молча становилась счётом на 1.50 ₽. Владелец видел
+ * Прежний фильтр пропускал любые точки и запятые, и «1.500»: привычная
+ * запись полутора тысяч: молча становилась счётом на 1.50 ₽. Владелец видел
  * свою цифру в поле и узнавал правду от покупателя.
  *
- * Правило простое: копейки — это одна или две цифры. Разделитель, за которым
+ * Правило простое: копейки: это одна или две цифры. Разделитель, за которым
  * идут ровно три цифры, разделяет тысячи и выбрасывается; несколько
- * разделителей — тем более. Всё остальное остаётся как набрано, иначе
+ * разделителей: тем более. Всё остальное остаётся как набрано, иначе
  * фильтр воевал бы с человеком, который посреди набора «1500.5» успел
  * поставить точку. */
 function cleanPrice(raw: string, isStars: boolean): string {
-  // Звёзды бывают только целыми — дробная часть всё равно не дойдёт до кассы.
+  // Звёзды бывают только целыми, дробная часть всё равно не дойдёт до кассы.
   if (isStars) return raw.replace(/[\s ]/g, "").match(/^\d*/)?.[0] ?? "";
 
-  // Пробелы — это разделители тысяч («1 500»), их выбрасываем. А вот
+  // Пробелы: это разделители тысяч («1 500»), их выбрасываем. А вот
   // выбрасывать буквы посреди числа опасно: «1e5», вставленное из таблицы,
-  // превращалось в цену 15 — и бот продавал за пятнадцать рублей то, что
+  // превращалось в цену 15, и бот продавал за пятнадцать рублей то, что
   // стоит сто тысяч. Поэтому на первом же негодном символе строка
   // обрывается: видно сразу, что ввод не принят.
   const text = raw.replace(/[\s ]/g, "").match(/^[\d.,]*/)?.[0] ?? "";
   const parts = text.split(/[.,]/);
   if (parts.length === 1) return text;
-  // «1.000.000» — разделители тысяч, все до одного.
+  // «1.000.000»: разделители тысяч, все до одного.
   if (parts.length > 2) return parts.join("");
-  // «1.500» — тоже тысячи: копеек из трёх цифр не бывает.
+  // «1.500»: тоже тысячи: копеек из трёх цифр не бывает.
   if (parts[1].length === 3) return parts.join("");
   return text;
 }
@@ -87,7 +87,7 @@ function PeriodField({
 
 /** Editor for a payment block: what's being sold, for how much, and what
  * the button says. What happens *after* the money lands is the block's
- * plain arrow on the canvas — usually a delivery block. */
+ * plain arrow on the canvas, usually a delivery block. */
 export function PaymentEditor({
   blockId,
   content,
@@ -108,7 +108,7 @@ export function PaymentEditor({
 
   // A block created before a provider was chosen keeps whatever currency it
   // defaulted to, and a `<select>` whose value is not in its options renders
-  // the first one instead — so the owner read "RUB" while the block still
+  // the first one instead, so the owner read "RUB" while the block still
   // said "KZT". Write the displayed value back so the two agree.
   useEffect(() => {
     if (content.currency !== currency) {
@@ -117,16 +117,16 @@ export function PaymentEditor({
   }, [content, currency, onChange]);
   const isStars = currency === "XTR";
   // Надпись считается устаревшей, только если в ней есть какое-то число и
-  // это не число из поля цены: «Купить курс» без суммы — нормальная подпись,
+  // это не число из поля цены: «Купить курс» без суммы: нормальная подпись,
   // которая ничего не обещает.
   const price = String(content.price ?? "").replace(",", ".").trim();
   // Та же арифметика, что на сервере (payment_service.price_to_minor):
-  // копейки — две цифры, больше двух разделителей не бывает.
+  // копейки: две цифры, больше двух разделителей не бывает.
   const chargeable = (() => {
     if (price === "") return null;
     const amount = Number(price);
     if (!Number.isFinite(amount) || amount <= 0) return null;
-    if (amount > 10_000_000) return "слишком много — проверь цену";
+    if (amount > 10_000_000) return "слишком много: проверь цену";
     const shown = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
     return isStars ? `${shown} ⭐` : `${shown} ${currencyUnit(currency)}`;
   })();
@@ -144,12 +144,12 @@ export function PaymentEditor({
   return (
     <div className="payment-editor">
       {/* Предупреждение снимается только когда касса РЕАЛЬНО готова. Раньше
-          оно гасло от одного выбора провайдера — то есть ровно там, где
+          оно гасло от одного выбора провайдера, то есть ровно там, где
           владелец переставал видеть проблему, она и начиналась. */}
       {!provider ? (
         <button type="button" className="payment-editor__warning" onClick={onOpenSettings}>
           <span>
-            <Warning size={15} className="inline-icon" aria-hidden="true" /> Платёжная система не подключена — бот не сможет принять деньги, и этот блок остановит сценарий.
+            <Warning size={15} className="inline-icon" aria-hidden="true" /> Платёжная система не подключена: бот не сможет принять деньги, и этот блок остановит сценарий.
           </span>
           <span className="payment-editor__warning-cta">Подключить кассу →</span>
         </button>
@@ -165,7 +165,7 @@ export function PaymentEditor({
         // Поля, которые заполняются здесь, а не в кассе: ссылка на оплату у
         // «Оплаты по ссылке», номер оферты у LavaTop. У таких провайдеров
         // ключей в кассе нет вовсе, поэтому она считалась готовой всегда:
-        // в шапке горело зелёное «Касса подключена», чек-лист молчал — а
+        // в шапке горело зелёное «Касса подключена», чек-лист молчал, а
         // первый покупатель получал «не получилось открыть оплату».
         <p className="payment-editor__warning payment-editor__warning--static">
           <Warning size={15} className="inline-icon" aria-hidden="true" /> Не заполнено:{" "}
@@ -173,7 +173,7 @@ export function PaymentEditor({
             .filter((f) => !blockFieldValue(content, f.key))
             .map((f) => f.label.toLowerCase())
             .join(", ")}{" "}
-          — ниже в этом блоке. Без этого оплата не откроется.
+         : ниже в этом блоке. Без этого оплата не откроется.
         </p>
       ) : null}
 
@@ -182,7 +182,7 @@ export function PaymentEditor({
         <textarea
           className="chat-bubble__textarea edit-panel__textarea"
           rows={3}
-          placeholder="Гайд «Как открыть кофейню» — 40 страниц опыта"
+          placeholder="Гайд «Как открыть кофейню»: 40 страниц опыта"
           value={content.text ?? ""}
           onChange={(e) => onChange({ ...content, text: e.target.value })}
         />
@@ -209,7 +209,7 @@ export function PaymentEditor({
             onChange={(e) =>
               onChange({
                 ...content,
-                // Stars come only in whole units — letting a "990.50" be
+                // Stars come only in whole units, letting a "990.50" be
                 // typed here would just fail later, at the checkout.
                 price: cleanPrice(e.target.value, isStars),
               })
@@ -245,8 +245,8 @@ export function PaymentEditor({
         </label>
       ))}
 
-      {/* Сколько на самом деле спишется. Поле прощает опечатки — режет
-          буквы, выбрасывает разделители тысяч, — и каждое такое прощение
+      {/* Сколько на самом деле спишется. Поле прощает опечатки: режет
+          буквы, выбрасывает разделители тысяч,: и каждое такое прощение
           меняет сумму молча: «1e5» превращалось в 15, «2500.505» в два с
           половиной миллиона. Показанная цифра ловит весь этот класс разом,
           потому что её видно сразу. */}
@@ -258,15 +258,15 @@ export function PaymentEditor({
 
       {/* Цена «0» проходила все проверки редактора и рисовалась на холсте
           как «— 0 RUB»; узнавал об этом только покупатель, получив общую
-          ошибку. Продавец — никогда. */}
+          ошибку. Продавец: никогда. */}
       {content.price !== undefined && !(Number(String(content.price).replace(",", ".")) > 0) && (
         <p className="payment-editor__note payment-editor__note--manual">
-          <Warning size={15} className="inline-icon" aria-hidden="true" /> Без цены бот не сможет выставить счёт — покупатель увидит ошибку вместо оплаты.
+          <Warning size={15} className="inline-icon" aria-hidden="true" /> Без цены бот не сможет выставить счёт, покупатель увидит ошибку вместо оплаты.
         </p>
       )}
 
       {/* Своя надпись живёт отдельно от цены, и это ловушка: написал
-          «Оплатить 990 ₽», поднял цену — кнопка осталась прежней, а счёт
+          «Оплатить 990 ₽», поднял цену, кнопка осталась прежней, а счёт
           уходит на новую сумму. Ни редактор, ни предпросмотр об этом не
           говорили, и первым замечал покупатель. */}
       {staleLabel && (
@@ -279,7 +279,7 @@ export function PaymentEditor({
           >
             Убрать свою надпись
           </button>{" "}
-          — тогда она будет подставляться сама.
+         : тогда она будет подставляться сама.
         </p>
       )}
 
@@ -295,7 +295,7 @@ export function PaymentEditor({
 
       {/* Покупают один раз или каждый раз заново. Выбор обязателен именно
           здесь: по умолчанию бот считает товар разовым и вернувшемуся
-          покупателю говорит «уже оплачено» — для гайда это правильно, а для
+          покупателю говорит «уже оплачено»: для гайда это правильно, а для
           консультации значит, что продавец работает бесплатно. */}
       <div className="payment-editor__repeat">
         <span className="buttons-editor__field-label">Как часто это покупают</span>
@@ -306,7 +306,7 @@ export function PaymentEditor({
             checked={!content.repeatable}
             onChange={() => onChange({ ...content, repeatable: false })}
           />
-          <span>Покупают один раз — потом бот просто выдаёт купленное</span>
+          <span>Покупают один раз: потом бот просто выдаёт купленное</span>
         </label>
         <label className="payment-editor__toggle">
           <input
@@ -315,7 +315,7 @@ export function PaymentEditor({
             checked={Boolean(content.repeatable)}
             onChange={() => onChange({ ...content, repeatable: true })}
           />
-          <span>Покупают снова и снова — каждый раз новый счёт</span>
+          <span>Покупают снова и снова: каждый раз новый счёт</span>
         </label>
         <p className="payment-editor__field-hint">
           {content.repeatable
@@ -324,7 +324,7 @@ export function PaymentEditor({
         </p>
       </div>
 
-      {/* Subscription — the one place in the product where the difference
+      {/* Subscription: the one place in the product where the difference
           between the providers actually changes what the owner is selling,
           so it is stated in full rather than hidden behind a checkbox.
 
@@ -341,7 +341,7 @@ export function PaymentEditor({
             checked={Boolean(content.subscription)}
             onChange={(e) => onChange({ ...content, subscription: e.target.checked })}
           />
-          <span>Это подписка — платят регулярно</span>
+          <span>Это подписка: платят регулярно</span>
         </label>
 
         {content.subscription && (
@@ -354,15 +354,15 @@ export function PaymentEditor({
                 {!isStars && <PeriodField content={content} onChange={onChange} />}
                 <p className="payment-editor__note payment-editor__note--good">
                   {isStars
-                    ? "Telegram сам спишет звёзды раз в 30 дней, пока подписчик не отменит — отменяет он тоже внутри Telegram. Период фиксированный: 30 дней, другого Telegram не поддерживает."
+                    ? "Telegram сам спишет звёзды раз в 30 дней, пока подписчик не отменит, отменяет он тоже внутри Telegram. Период фиксированный: 30 дней, другого Telegram не поддерживает."
                     : `${providerInfo?.title ?? "Касса"} сама ведёт подписку: спишет следующий период без участия покупателя, сама повторит попытку при отказе карты и даст ему страницу, где отписаться.`}
                 </p>
                 {providerInfo?.slug === "prodamus" && (
                   <p className="payment-editor__note payment-editor__note--manual">
-                    <Warning size={15} className="inline-icon" aria-hidden="true" /> Цену и периодичность задаёт карточка подписки в кабинете Prodamus — поле «Цена» выше на
+                    <Warning size={15} className="inline-icon" aria-hidden="true" /> Цену и периодичность задаёт карточка подписки в кабинете Prodamus, поле «Цена» выше на
                     подписку не влияет, и первый платёж может отличаться от регулярного. «Период доступа» здесь
                     отвечает только за то, до какого числа бот держит доступ открытым, поэтому поставь тот же
-                    интервал, что в карточке. И учти: первый платёж Prodamus не считает автосписанием —
+                    интервал, что в карточке. И учти: первый платёж Prodamus не считает автосписанием:
                     интервал 30 дней и 5 автосписаний это 6 месяцев доступа, а не 5.
                   </p>
                 )}
@@ -372,13 +372,13 @@ export function PaymentEditor({
                 <PeriodField content={content} onChange={onChange} />
                 <p className="payment-editor__note payment-editor__note--good">
                   Первая оплата сохранит карту, дальше бот сам списывает в конце каждого периода. Если карта
-                  откажет — подписчику придёт сообщение, а доступ закроется в конце оплаченного срока.
+                  откажет: подписчику придёт сообщение, а доступ закроется в конце оплаченного срока.
                   {providerInfo?.slug === "yookassa" &&
-                    " В ЮKassa автоплатежи включает менеджер — если их нет, бот перейдёт на счета."}
+                    " В ЮKassa автоплатежи включает менеджер, если их нет, бот перейдёт на счета."}
                   {providerInfo?.slug === "ioka" &&
-                    " В ioka карта сохраняется, только если покупатель отметит это на странице оплаты — кто не отметил, тому бот пришлёт счёт."}
+                    " В ioka карта сохраняется, только если покупатель отметит это на странице оплаты, кто не отметил, тому бот пришлёт счёт."}
                   {providerInfo?.slug === "freedompay" &&
-                    " Во Freedom Pay рекуррент включает менеджер — если его нет, бот перейдёт на счета."}
+                    " Во Freedom Pay рекуррент включает менеджер, если его нет, бот перейдёт на счета."}
                 </p>
               </>
             ) : (
@@ -390,15 +390,15 @@ export function PaymentEditor({
                       и врать про чужой продукт незачем. */}
                   <Warning size={15} className="inline-icon" aria-hidden="true" /> Автосписание через {providerInfo?.title ?? "эту кассу"} бот пока не умеет. Он пришлёт новый
                   счёт за 2 дня до конца периода и напомнит; доступ продлится, если счёт оплатят. Списывают
-                  сами двенадцать касс — они помечены значком повтора в списке.
+                  сами двенадцать касс: они помечены значком повтора в списке.
                 </p>
               </>
             )}
             {/* Про это владельца не предупреждали нигде, а спрашивают его
-                об этом первым: «а как мне отписаться?» — и ответа у него не
+                об этом первым: «а как мне отписаться?»: и ответа у него не
                 было, хотя команда в боте есть с самого начала. */}
             <p className="payment-editor__note">
-              Подписчик отменяет сам — командой <code>/cancel</code> в боте. Доступ у него останется до конца
+              Подписчик отменяет сам: командой <code>/cancel</code> в боте. Доступ у него останется до конца
               оплаченного периода, а тебе придёт уведомление.
             </p>
           </>
@@ -407,14 +407,14 @@ export function PaymentEditor({
       )}
 
       <p className="payment-editor__note">
-        После оплаты бот сам продолжит сценарий по стрелке «дальше» — поставь туда блок «Выдача» с файлом или
+        После оплаты бот сам продолжит сценарий по стрелке «дальше», поставь туда блок «Выдача» с файлом или
         ссылкой.
       </p>
 
       {providerInfo && !providerInfo.supports_status_check && providerInfo.slug !== "stars" && (
         <p className="payment-editor__note payment-editor__note--manual">
           {providerInfo.slug === "link"
-            ? "Такую оплату бот проверить не может: покупатель нажмёт «Я оплатил», а ты подтвердишь заказ — придёт сообщение в бот и появится в списке заказов. После подтверждения бот сразу выдаёт товар."
+            ? "Такую оплату бот проверить не может: покупатель нажмёт «Я оплатил», а ты подтвердишь заказ, придёт сообщение в бот и появится в списке заказов. После подтверждения бот сразу выдаёт товар."
             : "Оплата подтвердится сама, когда провайдер пришлёт уведомление."}
         </p>
       )}

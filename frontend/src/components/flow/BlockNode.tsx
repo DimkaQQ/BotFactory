@@ -43,17 +43,17 @@ function preview(block: BotBlock): string {
         ? `${c.title?.trim() || "Оплата"}: ${c.price} ${c.currency ?? ""}`.trim()
         : "Цена не указана";
     default:
-      return c.text?.trim() || "Пусто — нажми, чтобы написать";
+      return c.text?.trim() || "Пусто: нажми, чтобы написать";
   }
 }
 
-/** One block's card on the flow canvas — a compact summary, not the full
+/** One block's card on the flow canvas, a compact summary, not the full
  * editor (that's BlockEditPanel, opened on click).
  *
  * A buttons block gets one arrow socket per button, because an arrow from
  * *that specific button* is what "tapping it goes here" means. Every block
  * also has the plain bottom socket, which is what happens when nothing more
- * specific applies — for a buttons block with branches that's never, so the
+ * specific applies: for a buttons block with branches that's never, so the
  * card says so instead of leaving a dead handle looking clickable (the rule
  * itself lives in bot_dispatcher.py's chain-walk). */
 function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNodeData; selected?: boolean }) {
@@ -94,7 +94,7 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
         {orphan && !isStart && (
           <span
             className="flow-node__orphan-badge"
-            title="Сюда не ведёт ни одна стрелка — этот блок никто не увидит. Протяни стрелку от предыдущего блока."
+            title="Сюда не ведёт ни одна стрелка, этот блок никто не увидит. Протяни стрелку от предыдущего блока."
           >
             НЕ ПОДКЛЮЧЁН
           </span>
@@ -128,7 +128,7 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
                 className={`flow-node__button-row ${wired ? "flow-node__button-row--wired" : ""}`}
                 title={
                   isUrl
-                    ? `«${button.label || "…"}» — кнопка-ссылка: откроет сайт, ветка ей не нужна`
+                    ? `«${button.label || "…"}»: кнопка-ссылка: откроет сайт, ветка ей не нужна`
                     : wired
                       ? `«${button.label || "…"}» ведёт к другому блоку. Стрелку можно перетянуть или удалить.`
                       : `Потяни от кружка справа к блоку, который должен открыться после нажатия «${button.label || "…"}»`
@@ -144,7 +144,7 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
                 )}
                 {/* A URL button can't branch (Telegram just opens the link), so
                     it only keeps a socket if an arrow was already drawn from
-                    it — otherwise the edge would have nowhere to attach and
+                    it: otherwise the edge would have nowhere to attach and
                     would silently disappear from the canvas. */}
                 {(!isUrl || wired) && (
                   <Handle
@@ -165,9 +165,9 @@ function BlockNodeComponent({ id, data, selected }: { id: string; data: BlockNod
         <span
           title={
             isButtons && hasBranch
-              ? "У кнопок есть ветки — бот остановится и будет ждать нажатия. Эта стрелка сработает, только если убрать все ветки."
+              ? "У кнопок есть ветки: бот остановится и будет ждать нажатия. Эта стрелка сработает, только если убрать все ветки."
               : isPayment
-                ? "Сюда — то, что клиент получит после оплаты (обычно блок «Выдача»)"
+                ? "Сюда: то, что клиент получит после оплаты (обычно блок «Выдача»)"
                 : "Потяни отсюда к блоку, который придёт следующим"
           }
         >

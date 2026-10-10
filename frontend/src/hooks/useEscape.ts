@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-/** Открытые окна в порядке открытия: последнее — самое верхнее. */
+/** Открытые окна в порядке открытия: последнее: самое верхнее. */
 const stack: Array<{ current: () => void }> = [];
 let listening = false;
 
@@ -34,7 +34,7 @@ function detach() {
  * first. Закрывается только самое верхнее из открытых окон.
  */
 export function useEscape(onEscape: () => void, active = true): void {
-  // Обработчик меняется при каждом рендере, а место в стопке — нет: иначе окно, которое
+  // Обработчик меняется при каждом рендере, а место в стопке, нет: иначе окно, которое
   // перерисовалось, «всплывало» бы наверх.
   const entry = useRef<{ current: () => void }>({ current: onEscape });
   entry.current.current = onEscape;

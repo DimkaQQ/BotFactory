@@ -2,14 +2,14 @@
  * Light/dark theme for the standalone web constructor.
  *
  * The palette itself lives in index.css under `:root[data-theme="dark"]`,
- * a single block — not a `prefers-color-scheme` media query. That is
+ * a single block: not a `prefers-color-scheme` media query. That is
  * deliberate: the *resolved* theme is always written onto the root element
  * (by the inline script in index.html, before first paint, and by this
  * module afterwards), so the CSS never has to express the same palette
  * twice. There is no no-JS story to protect: the whole app is a React
  * bundle, so if scripts do not run there is nothing to paint anyway.
  *
- * Inside the Telegram Mini App this barely matters — Telegram injects its
+ * Inside the Telegram Mini App this barely matters, Telegram injects its
  * own `--tg-theme-*` values, which win over every fallback in the palette.
  * What the resolved theme still buys us there is `color-scheme`, i.e.
  * scrollbars and form controls drawn to match, so we take Telegram's
@@ -22,7 +22,7 @@ export type Theme = "light" | "dark";
 const STORAGE_KEY = "bf_theme";
 
 /**
- * Тема по умолчанию — тёмная (режима «как в системе» больше нет: он
+ * Тема по умолчанию: тёмная (режима «как в системе» больше нет: он
  * срабатывал нестабильно). Внутри Telegram берём его схему, если человек
  * ничего не выбирал. Держать в согласии со скриптом в index.html.
  */
@@ -36,7 +36,7 @@ export function readPref(): ThemePref {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark") return stored;
   } catch {
-    /* Safari in private mode throws on localStorage — fall through to default. */
+    /* Safari in private mode throws on localStorage, fall through to default. */
   }
   return defaultTheme();
 }

@@ -17,7 +17,7 @@ import { useTelegramWebApp } from "./hooks/useTelegramWebApp";
 import { WarningCircle, Wrench } from "@phosphor-icons/react";
 
 
-/** The builder drags in React Flow — by far the heaviest dependency here,
+/** The builder drags in React Flow, by far the heaviest dependency here,
  * and one nobody needs until they actually open a bot. Split out, so the
  * landing and the bot list load without it. */
 const BotBuilder = lazy(() => import("./components/BotBuilder").then((m) => ({ default: m.BotBuilder })));
@@ -27,7 +27,7 @@ type Screen = { name: "list" } | { name: "builder"; botId: string };
 
 export default function App() {
   const { ready, initData } = useTelegramWebApp();
-  // Real Telegram initData only ever exists inside the Mini App — that's
+  // Real Telegram initData only ever exists inside the Mini App, that's
   // the one reliable signal to tell "opened from the bot" apart from "opened
   // as a regular website" (including a plain browser tab with a restored
   // web session, which has no initData either).
@@ -96,13 +96,13 @@ export default function App() {
         setBootState("ready");
       } catch (err) {
         // Только отказ в доступе означает «сессия протухла». Раньше сюда
-        // попадала ЛЮБАЯ ошибка, включая обрыв связи, — и человека
+        // попадала ЛЮБАЯ ошибка, включая обрыв связи,, и человека
         // выбрасывало на лендинг посреди правки, со стёртым токеном и
         // единственным путём назад через виджет Telegram. В метро с
         // телефона это происходило бы постоянно.
         const expired = err instanceof ApiError && (err.status === 401 || err.status === 403);
         if (!initData && expired) {
-          // Stored web session is stale/expired — send back to login rather
+          // Stored web session is stale/expired, send back to login rather
           // than a dead-end error screen.
           clearSessionAuth();
           setBootState("need-login");
@@ -194,7 +194,7 @@ export default function App() {
                 ? undefined
                 : async () => {
                     // Сначала на сервере, потом в браузере: если запрос не
-                    // прошёл, локально всё равно выходим — но доступ на
+                    // прошёл, локально всё равно выходим, но доступ на
                     // сервере в этом случае не закрыт, и молчать об этом
                     // нельзя.
                     let revoked = true;
@@ -210,7 +210,7 @@ export default function App() {
                     setBootState("need-login");
                     if (!revoked) {
                       // Не alert: он блокирует, а человек уже на лендинге.
-                      console.warn("Выход выполнен только в этом браузере — сервер недоступен");
+                      console.warn("Выход выполнен только в этом браузере, сервер недоступен");
                     }
                   }
             }

@@ -36,24 +36,24 @@ function hasBranches(block: BotBlock): boolean {
 }
 
 /** Блоки, на которых настоящий бот останавливается и ждёт покупателя: оплата (цепочка идёт дальше
- * только после подтверждения денег) и запись (дальше — после выбора дня и времени). Предпросмотр
+ * только после подтверждения денег) и запись (дальше, после выбора дня и времени). Предпросмотр
  * обязан остановиться там же, иначе «выдача» покажется до оплаты. */
 function waitsForBuyer(block: BotBlock): string | null {
   if (block.block_type === "payment") return "Здесь бот ждёт оплату. Выдача придёт только после неё.";
-  if (block.block_type === "booking") return "Здесь клиент выбирает день и время. Дальше — после его выбора.";
+  if (block.block_type === "booking") return "Здесь клиент выбирает день и время. Дальше: после его выбора.";
   return null;
 }
 
 /** Walks the same graph the real bot walks (start_block_id → next_block_id,
  * pausing at any buttons block with a configured branch) instead of just
- * replaying the flat block list — tapping a button here actually picks the
+ * replaying the flat block list, tapping a button here actually picks the
  * path, exactly like a real Telegram chat with this bot would. */
 export function LivePreview({ bot, botName, onClose }: Props) {
   useEscape(onClose);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   useDialogA11y(dialogRef, ".live-preview__title");
 
-  // Заготовки «[цена]» и «[название продукта]» бот подставляет сам — предпросмотр тоже.
+  // Заготовки «[цена]» и «[название продукта]» бот подставляет сам, предпросмотр тоже.
   const fill = useMemo(() => {
     const { price, title } = placeholderValues(bot.blocks);
     return (text: string) => fillPlaceholders(text, price, title).trim();
@@ -66,14 +66,14 @@ export function LivePreview({ bot, botName, onClose }: Props) {
   const [showTyping, setShowTyping] = useState(false);
   const [waitingForTap, setWaitingForTap] = useState(false);
   const [done, setDone] = useState(!bot.start_block_id);
-  // Блок оплаты/записи: бот ждёт покупателя; `next` — куда пойдёт сценарий после этого.
+  // Блок оплаты/записи: бот ждёт покупателя; `next`: куда пойдёт сценарий после этого.
   const [gate, setGate] = useState<{ hint: string; next: string | null } | null>(null);
   // Номер шага: переход на тот же блок (кнопка «повторить», «Смотреть заново» со стартового) тоже
   // должен запустить показ заново, а `currentId` в таком случае не меняется.
   const [step, setStep] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const skipRef = useRef(false);
-  // Same cycle guard as the backend (_walk_chain's `visited` set) — a demo
+  // Same cycle guard as the backend (_walk_chain's `visited` set): a demo
   // shouldn't be able to spin forever on a loop with no branch point either.
   const visitedRef = useRef<Set<string>>(new Set());
 
@@ -149,7 +149,7 @@ export function LivePreview({ bot, botName, onClose }: Props) {
 
   function handlePick(block: BotBlock, index: number) {
     const target = (block.content.buttons?.[index]?.target_block_id || "").trim();
-    if (!target) return; // this button isn't wired to anything — real bot just re-answers the tap and stays put
+    if (!target) return; // this button isn't wired to anything, real bot just re-answers the tap and stays put
     // Каждое нажатие в настоящем боте начинает новый обход: меню, куда ведёт «Назад», должно
     // показываться снова, а не считаться петлёй.
     visitedRef.current = new Set();
@@ -171,7 +171,7 @@ export function LivePreview({ bot, botName, onClose }: Props) {
   }
 
   // Быстрые кнопки живут внизу экрана, а не в сообщении, и остаются, пока их
-  // не заменит другая клавиатура — как в Telegram.
+  // не заменит другая клавиатура, как в Telegram.
   const lastKeyboardBlock =
     [...revealed]
       .reverse()
@@ -220,7 +220,7 @@ export function LivePreview({ bot, botName, onClose }: Props) {
             />
           ))}
 
-          {countdown !== null && <div className="block-preview__caption live-preview__pause">⏱ Пауза — ещё {countdown} сек…</div>}
+          {countdown !== null && <div className="block-preview__caption live-preview__pause">⏱ Пауза: ещё {countdown} сек…</div>}
 
           {showTyping && (
             <div className="chat-row">
@@ -241,7 +241,7 @@ export function LivePreview({ bot, botName, onClose }: Props) {
 
           {revealed.length === 0 && !showTyping && countdown === null && (
             <p className="app-hint">
-              {bot.start_block_id ? "Тут пока пусто…" : "У бота ещё нет стартового блока — потяни стрелку от «▶ Старт» к первому сообщению."}
+              {bot.start_block_id ? "Тут пока пусто…" : "У бота ещё нет стартового блока, потяни стрелку от «▶ Старт» к первому сообщению."}
             </p>
           )}
         </div>
@@ -334,9 +334,9 @@ function PreviewBlock({
     );
   }
 
-  // No message of its own — mirrors how it renders in the editor canvas.
+  // No message of its own, mirrors how it renders in the editor canvas.
   if (block.block_type === "delay") {
-    return <p className="live-preview__pause-marker">⏱ пауза {content.seconds ?? 2} сек — бот немного помолчал</p>;
+    return <p className="live-preview__pause-marker">⏱ пауза {content.seconds ?? 2} сек: бот немного помолчал</p>;
   }
 
   return (

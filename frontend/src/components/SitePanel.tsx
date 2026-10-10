@@ -15,10 +15,10 @@ const TEXT_FIELDS: { key: keyof Draft; label: string; hint?: string; long?: bool
   { key: "seller_address", label: "Адрес (необязательно)" },
   { key: "email", label: "Почта для связи" },
   { key: "phone", label: "Телефон (необязательно)" },
-  { key: "refund_text", label: "Условия возврата (необязательно)", hint: "Если пусто — подставится типовой текст", long: true },
+  { key: "refund_text", label: "Условия возврата (необязательно)", hint: "Если пусто: подставится типовой текст", long: true },
 ];
 
-/** Страница-витрина бота на нашем домене: нужна банкам Казахстана — с неё ссылка в бота. */
+/** Страница-витрина бота на нашем домене: нужна банкам Казахстана: с неё ссылка в бота. */
 export function SitePanel({ botId, onClose }: { botId: string; onClose: () => void }) {
   useEscape(onClose);
   const { panelRef, handleProps: dragProps } = useDraggablePanel();
@@ -70,8 +70,8 @@ export function SitePanel({ botId, onClose }: { botId: string; onClose: () => vo
         <div className="edit-panel__body">
           <p className="feedback-panel__hint">
             В Казахстане банки не принимают оплату «внутри Telegram»: нужна страница с описанием, ценами, реквизитами и
-            документами, а с неё — кнопка в бота. Заполните данные — страница откроется по ссылке ниже. Цены берутся из
-            блоков оплаты. Документы — типовой шаблон, покажите его юристу.
+            документами, а с неё: кнопка в бота. Заполните данные: страница откроется по ссылке ниже. Цены берутся из
+            блоков оплаты. Документы: типовой шаблон, покажите его юристу.
           </p>
           {!draft && !error && <p className="feedback-panel__hint">Загрузка…</p>}
           {draft && site && (

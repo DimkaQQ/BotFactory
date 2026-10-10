@@ -4,8 +4,8 @@ import type { BotBlock } from "./api/builderApi";
 const PLACEHOLDER = /\[\s*(цена|стоимость|сумма|название продукта|название|продукт)\s*\]/gi;
 
 /** То же, что `fill_placeholders` в app/services/bot_dispatcher.py: заготовки шаблонов
- * («Стоимость — [цена]») бот заменяет ценой и названием из первого блока оплаты, а если брать
- * нечего — убирает вместе с лишним пробелом. Предпросмотр обязан показывать то же самое. */
+ * («Стоимость: [цена]») бот заменяет ценой и названием из первого блока оплаты, а если брать
+ * нечего: убирает вместе с лишним пробелом. Предпросмотр обязан показывать то же самое. */
 export function fillPlaceholders(text: string, price: string, title: string): string {
   if (!text.includes("[")) return text;
   const out = text.replace(PLACEHOLDER, (_all, key: string) =>

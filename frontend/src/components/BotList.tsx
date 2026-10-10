@@ -25,7 +25,7 @@ interface Props {
   greetingName?: string;
   isMiniApp?: boolean;
   onOpen: (botId: string) => void;
-  /** Выйти из аккаунта на этом устройстве. Не задан в Mini App — там
+  /** Выйти из аккаунта на этом устройстве. Не задан в Mini App, там
    * сессия телеграмовская, выходить некуда. */
   onLogout?: () => void;
 }
@@ -70,7 +70,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
   // Subscriptions ship switched off while the one-off sale is being shaken
   // out, and the «Платная подписка» template is a promise of monthly
-  // charging from its first word — so it is not offered until the feature
+  // charging from its first word, so it is not offered until the feature
   // is back. Asked for only when the picker opens: the list screen has no
   // business fetching the payment catalogue.
   const [templates, setTemplates] = useState(() => BOT_TEMPLATES.filter((x) => !x.needsSubscriptions));
@@ -86,8 +86,8 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       setBots(list);
       setError(null);
     } catch (err) {
-      // The raw server `detail` is written for a log, not for a person — it
-      // has said things like "boom" — so only the shape of the failure is
+      // The raw server `detail` is written for a log, not for a person, it
+      // has said things like "boom": so only the shape of the failure is
       // shown, and the detail goes to the console for whoever is debugging.
       if (err instanceof ApiError) console.error("listBots failed:", err.message);
       setError("Не удалось загрузить ботов. Проверь соединение и попробуй ещё раз.");
@@ -116,7 +116,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       if (template.suggestedName) {
         await builderApi.renameBot(bot.id, template.suggestedName);
       }
-      // Sequential on purpose — order_index falls back to "append", so
+      // Sequential on purpose: order_index falls back to "append", so
       // blocks must land in template order, not race each other.
       //
       // Laid out along whichever axis the canvas has room in, because the
@@ -125,8 +125,8 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
       // seven-block template measured 540x1211 as a column: 0.39 zoom on a
       // laptop, where block titles are a blur. The same chain as a row is
       // about 1760x420, which frames at 0.61 there and 0.79 on a 1920
-      // screen. Below 960px the trade flips — that canvas is taller than it
-      // is wide, and a row would open at 0.20 — so narrow screens keep the
+      // screen. Below 960px the trade flips, that canvas is taller than it
+      // is wide, and a row would open at 0.20: so narrow screens keep the
       // column. 960px is the same breakpoint the desktop shell uses.
       // Either way the step perpendicular to the flow after a buttons block
       // makes its branch read as a branch instead of a loop back.
@@ -175,7 +175,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
           await builderApi.updateBlock(bot.id, source.id, { content: { ...source.content, buttons } });
         }
       } else {
-        // Простая цепочка. Блок кнопок ждёт нажатия, поэтому его «дальше» — это
+        // Простая цепочка. Блок кнопок ждёт нажатия, поэтому его «дальше», это
         // ветка первой кнопки (см. bot_dispatcher.py).
         for (let i = 0; i < created.length - 1; i++) {
           const current = created[i];
@@ -201,7 +201,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
         try {
           await builderApi.deleteBot(createdBotId);
         } catch {
-          // Не вышло убрать — бот останется в списке, и его можно удалить вручную.
+          // Не вышло убрать: бот останется в списке, и его можно удалить вручную.
         }
         void refresh();
       }
@@ -213,7 +213,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
 
   function handleCreateClick() {
     if (isMiniApp) {
-      // Building/editing a bot is a full drag-and-drop canvas — awkward
+      // Building/editing a bot is a full drag-and-drop canvas, awkward
       // inside Telegram's WebView. Send the user to the real browser
       // instead of opening the in-app template picker.
       openExternal(`${window.location.origin}/`);
@@ -304,14 +304,14 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 className="bot-payments-button"
                 onClick={() => setIdeaOpen(true)}
                 aria-label="Предложить идею"
-                title="Есть идея или нашли ошибку? Напишите — я читаю всё"
+                title="Есть идея или нашли ошибку? Напишите: я читаю всё"
               >
                 <Lightbulb size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Идея</span>
               </button>
             )}
             {!isMiniApp && <ThemeToggle />}
             {/* Выхода не было нигде. На общем компьютере токен живёт 30
-                дней, а за ним — касса, список покупателей и кнопка снятия
+                дней, а за ним: касса, список покупателей и кнопка снятия
                 бота с эфира. */}
             {onLogout && (
               <button
@@ -321,7 +321,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 onClick={() => {
                   void confirmDialog(
                     "Выйти из аккаунта на всех устройствах?\n\nБоты, заказы и настройки " +
-                      "останутся на месте — войти снова можно через Telegram.",
+                      "останутся на месте: войти снова можно через Telegram.",
                     "Выйти",
                   ).then((ok) => {
                     if (ok) onLogout();
@@ -340,7 +340,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
         </div>
         {isMiniApp && (
           <p className="app-hint" style={{ marginTop: "var(--sp-3)" }}>
-            <DeviceMobile size={16} aria-hidden="true" /> Здесь виден статус и кнопка публикации. Собирать бота — в браузере: открой {window.location.host},
+            <DeviceMobile size={16} aria-hidden="true" /> Здесь виден статус и кнопка публикации. Собирать бота: в браузере: открой {window.location.host},
             с телефона это тоже работает.
           </p>
         )}
@@ -390,7 +390,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3, ease: EASE_OUT }}
               >
-                {/* Points at the header's "+ Новый бот" — the one control on
+                {/* Points at the header's "+ Новый бот": the one control on
                     an otherwise empty screen, and the one thing a first-time
                     visitor has to find. Desktop only: below 960px that button
                     is hidden and the footer button takes over. */}
@@ -417,8 +417,8 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                   <p className="empty-state__title">Здесь появятся твои боты</p>
                   <p className="empty-state__hint">
                     {isMiniApp
-                      ? "Собери первого в браузере — там визуальный холст с блоками и стрелками"
-                      : "Возьми готовый сценарий: блоки уже расставлены и связаны — останется вписать свой текст"}
+                      ? "Собери первого в браузере: там визуальный холст с блоками и стрелками"
+                      : "Возьми готовый сценарий: блоки уже расставлены и связаны, останется вписать свой текст"}
                   </p>
 
                   {!isMiniApp && (
@@ -434,7 +434,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                           <span>2</span> Правь блоки на холсте
                         </li>
                         <li>
-                          <span>3</span> Вставь токен — готово
+                          <span>3</span> Вставь токен: готово
                         </li>
                       </ol>
                     </>
@@ -517,7 +517,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
               <div className="sheet__head-text">
                 <p className="sheet__title">С чего начнём?</p>
                 <p className="sheet__subtitle">
-                  Шаблон — это готовый сценарий: блоки уже расставлены и связаны стрелками. Любой можно
+                  Шаблон: это готовый сценарий: блоки уже расставлены и связаны стрелками. Любой можно
                   переписать под себя.
                 </p>
               </div>

@@ -27,7 +27,7 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     label: "Текст",
     icon: "📝",
     accent: "description",
-    hint: "Любое сообщение — расскажи о продукте",
+    hint: "Любое сообщение: расскажи о продукте",
     defaultContent: () => ({ text: "" }),
   },
   {
@@ -61,7 +61,7 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     accent: "poll",
     hint: "Вопрос с вариантами ответа",
     // Не анонимный по умолчанию. У анонимного опроса Telegram не присылает
-    // ответы вовсе — в них нет пользователя, — то есть блок, который
+    // ответы вовсе: в них нет пользователя,, то есть блок, который
     // продаётся как способ «узнать, чего хотят подписчики», не собирал бы
     // ничего. Анонимность остаётся выбором, но выбором осознанным.
     defaultContent: () => ({ question: "", options: ["", ""], anonymous: false }),
@@ -79,14 +79,14 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     label: "Оплата",
     icon: "💳",
     accent: "success",
-    hint: "Кнопка оплаты — выдача после платежа",
+    hint: "Кнопка оплаты: выдача после платежа",
     // No currency here on purpose: a new payment block takes the one the
     // connected cash desk actually charges in (see BotBuilder.handleAdd).
     // A hardcoded "KZT" meant a shop on ЮKassa typed 990, got a block
-    // priced in tenge, and either hit a refusal at checkout or — on a
-    // provider that takes both — charged 990 ₸ ≈ 170 ₽ for a 990 ₽ guide.
+    // priced in tenge, and either hit a refusal at checkout or, on a
+    // provider that takes both, charged 990 ₸ ≈ 170 ₽ for a 990 ₽ guide.
     // RUB, not KZT: this product is Russian-language and CIS-first, and
-    // it is the same value PaymentEditor falls back to — so the canvas
+    // it is the same value PaymentEditor falls back to, so the canvas
     // and the editor agree from the first render. Once a cash desk is
     // connected, BotBuilder.handleAdd uses *its* currency instead.
     defaultContent: () => ({ text: "", title: "", price: "", currency: "RUB", button_label: "" }),
@@ -96,7 +96,7 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     label: "Контакты",
     icon: "📇",
     accent: "welcome",
-    hint: "Спросить имя и телефон — Telegram приходит сам",
+    hint: "Спросить имя и телефон: Telegram приходит сам",
     defaultContent: () => ({ text: "", ask_name: false, ask_phone: true }),
   },
   {

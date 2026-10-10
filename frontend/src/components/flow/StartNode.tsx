@@ -3,7 +3,7 @@ import { Handle, Position } from "@xyflow/react";
 import { useWideScreen } from "../../hooks/useWideScreen";
 import { Play } from "@phosphor-icons/react";
 
-/** The synthetic entry-point node — not a real block, just an arrow source
+/** The synthetic entry-point node, not a real block, just an arrow source
  * pointing at whichever block is `bot.start_block_id`. Its own position on
  * the canvas is local-only (FlowCanvas seeds it once and never persists it —
  * there's no backend field for "where does the ▶ Старт pseudo-node sit"). */

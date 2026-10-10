@@ -1,5 +1,5 @@
 /**
- * "Точно удалить?" — the app's own dialog, not the browser's.
+ * "Точно удалить?": the app's own dialog, not the browser's.
  *
  * Inside Telegram this defers to `showConfirm`, which draws the platform's
  * native sheet. Outside it, the fallback used to be `window.confirm`: a grey
@@ -16,16 +16,16 @@
  */
 
 const CANCEL = "Отмена";
-//: Подпись по умолчанию — «Удалить», потому что почти всё здесь удаление.
+//: Подпись по умолчанию: «Удалить», потому что почти всё здесь удаление.
 //: Но она была захардкожена на ВСЕ подтверждения, и рассылка спрашивала
 //: «Отправить это сообщение всем? Отменить будет нельзя» с красной кнопкой
 //: «Удалить» под вопросом. Человек, который не пишет код, на такую кнопку
-//: не нажмёт никогда — и рассылка, одна из причин купить продукт, была
+//: не нажмёт никогда: и рассылка, одна из причин купить продукт, была
 //: заблокирована одним словом.
 const CONFIRM = "Удалить";
 
 function webConfirm(message: string, confirmLabel: string, danger: boolean): Promise<boolean> {
-  // No document (SSR, a test runner without a DOM) — refuse rather than
+  // No document (SSR, a test runner without a DOM), refuse rather than
   // silently proceeding with something destructive.
   if (typeof document === "undefined" || typeof HTMLDialogElement === "undefined") {
     return Promise.resolve(false);
@@ -63,7 +63,7 @@ function webConfirm(message: string, confirmLabel: string, danger: boolean): Pro
     };
     cancel.addEventListener("click", () => close(false));
     confirm.addEventListener("click", () => close(true));
-    // Esc and a click on the backdrop both mean "no" — the safe answer is
+    // Esc and a click on the backdrop both mean "no": the safe answer is
     // always the one that changes nothing.
     dialog.addEventListener("cancel", (e) => {
       e.preventDefault();
@@ -84,10 +84,10 @@ function webConfirm(message: string, confirmLabel: string, danger: boolean): Pro
   });
 }
 
-/** Native-feeling confirmation — Telegram's own popup inside the Mini App,
+/** Native-feeling confirmation: Telegram's own popup inside the Mini App,
  * the app's dialog everywhere else. */
 /**
- * `confirmLabel` — что написано на кнопке согласия. По умолчанию «Удалить»,
+ * `confirmLabel`: что написано на кнопке согласия. По умолчанию «Удалить»,
  * потому что большая часть подтверждений здесь про удаление; всё остальное
  * обязано называть своё действие своим именем.
  */
@@ -105,7 +105,7 @@ export function confirmDialog(message: string, confirmLabel: string = CONFIRM): 
     (typeof webApp.isVersionAtLeast !== "function" || webApp.isVersionAtLeast("6.2"));
   if (native) {
     // Нативный лист Telegram рисует свои «ОК/Отмена» и подписи не принимает,
-    // поэтому глагол уходит в сам вопрос — иначе внутри Telegram кнопка
+    // поэтому глагол уходит в сам вопрос, иначе внутри Telegram кнопка
     // осталась бы безымянной.
     const text = confirmLabel === CONFIRM ? message : `${message}\n\n${confirmLabel}?`;
     return new Promise((resolve) => {

@@ -1,10 +1,10 @@
 import { useRef } from "react";
 
-/** Drag the sheet's handle down to dismiss it — the gesture people expect
+/** Drag the sheet's handle down to dismiss it, the gesture people expect
  * from a native bottom sheet. Wired to .sheet__handle only, which is
  * display:none on the desktop centered-modal layout, so this is
  * automatically mobile-only with no risk of fighting that layout's own
- * CSS transform for centering. Pointer events (not framer-motion) — the
+ * CSS transform for centering. Pointer events (not framer-motion): the
  * sheet is plain CSS-animated, and mixing a second transform-driving
  * library in on top would be the same class of bug ChatBubble/dnd-kit
  * has already been bitten by once. */

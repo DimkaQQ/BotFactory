@@ -15,7 +15,7 @@ export interface ButtonAction {
   label: string;
   action_type: "text" | "url";
   action_value: string;
-  /** The block this button's arrow points to on the flow canvas — null/unset
+  /** The block this button's arrow points to on the flow canvas, null/unset
    * means the button is just shown, tap does nothing (Phase-1-style). */
   target_block_id?: string | null;
 }
@@ -33,9 +33,9 @@ export interface BlockContent {
   days?: number[];
   start?: string;
   end?: string;
-  /** Часы по дням недели («0» — понедельник): список промежутков [с, до]. Пустой — выходной. */
+  /** Часы по дням недели («0», понедельник): список промежутков [с, до]. Пустой: выходной. */
   weekly?: Record<string, [string, string][]>;
-  /** Особые даты (YYYY-MM-DD): пустой список — закрыто, иначе свои часы. */
+  /** Особые даты (YYYY-MM-DD): пустой список: закрыто, иначе свои часы. */
   exceptions?: Record<string, [string, string][]>;
   slot_minutes?: number;
   horizon_days?: number;
@@ -53,7 +53,7 @@ export interface BlockContent {
   anonymous?: boolean;
   seconds?: number;
   /** Payment block: what is being sold, for how much, and what the pay
-   * button says. `price` is kept as typed ("990", "990.50") — the backend
+   * button says. `price` is kept as typed ("990", "990.50"): the backend
    * parses it into minor units. */
   title?: string;
   price?: string;
@@ -61,15 +61,15 @@ export interface BlockContent {
   button_label?: string;
   /** Payment block: the same person may buy this again. Off by default, so
    * a guide or a course is sold once and a returning buyer just gets it
-   * back; on for anything genuinely repeatable — a consultation, a
-   * donation, a re-order — where "уже оплачено" would mean the seller works
+   * back; on for anything genuinely repeatable, a consultation, a
+   * donation, a re-order: where "уже оплачено" would mean the seller works
    * for free. */
   repeatable?: boolean;
   /** Payment block: charge for a period at a time rather than once.
    * Telegram Stars then bills every 30 days on its own; every other
    * provider re-invoices, which the editor says out loud. */
   subscription?: boolean;
-  /** How long one paid period lasts. Ignored for Stars — Telegram supports
+  /** How long one paid period lasts. Ignored for Stars: Telegram supports
    * 30 days and nothing else. */
   period_days?: string | number;
   /** Delivery block: the private group or channel a buyer is let into. A
@@ -87,7 +87,7 @@ export interface BotBlock {
   block_type: BlockType;
   order_index: number;
   content: BlockContent;
-  /** Default "what happens after this" edge — the plain arrow out of a node. */
+  /** Default "what happens after this" edge: the plain arrow out of a node. */
   next_block_id: string | null;
   position_x: number;
   position_y: number;
@@ -104,7 +104,7 @@ export interface Bot {
   created_at: string;
   published_at: string | null;
   block_count: number;
-  /** Entry point of the dialogue graph — where the "▶ Старт" node points. */
+  /** Entry point of the dialogue graph, where the "▶ Старт" node points. */
   start_block_id: string | null;
   /** Владелец поставил бота на паузу (кнопка в мета-боте). */
   paused?: boolean;
@@ -163,12 +163,12 @@ type AuthMode = { kind: "telegram-webapp"; getInitData: () => string } | { kind:
 
 let auth: AuthMode = { kind: "telegram-webapp", getInitData: () => "" };
 
-/** Mini App path — called once from App.tsx after window.Telegram.WebApp is ready. */
+/** Mini App path: called once from App.tsx after window.Telegram.WebApp is ready. */
 export function configureBuilderApi(getInitData: () => string) {
   auth = { kind: "telegram-webapp", getInitData };
 }
 
-/** Web login path — called after a successful Telegram Login Widget round trip, or on
+/** Web login path: called after a successful Telegram Login Widget round trip, or on
  * startup to restore a token already saved in localStorage. */
 export function configureSessionAuth(token: string) {
   auth = { kind: "session-token", token };
@@ -200,7 +200,7 @@ async function errorDetail(response: Response): Promise<string> {
       if (first) return `Проверь введённые данные: ${first.msg}`;
     }
   } catch {
-    // response wasn't JSON — keep statusText
+    // response wasn't JSON: keep statusText
   }
   return fallback;
 }
@@ -223,7 +223,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** Multipart upload — kept separate from request() because it must NOT
+/** Multipart upload: kept separate from request() because it must NOT
  * send a Content-Type header itself (the browser sets one with the right
  * multipart boundary from the FormData body; overriding it breaks parsing
  * on the server side). */
@@ -422,7 +422,7 @@ export const builderApi = {
     }),
   confirmOrder: (botId: string, paymentId: string) =>
     request<{ status: string; delivered: boolean }>(`/bots/${botId}/orders/${paymentId}/confirm`, { method: "POST" }),
-  /** Деньги двигает владелец в кабинете своей кассы — через нас они не
+  /** Деньги двигает владелец в кабинете своей кассы, через нас они не
    * проходили. Здесь закрывается то, чего руками не сделать: доступ в
    * закрытый чат и статус заказа. */
   refundOrder: (botId: string, paymentId: string) =>
@@ -431,7 +431,7 @@ export const builderApi = {
     ),
   rejectOrder: (botId: string, paymentId: string) =>
     request<{ status: string }>(`/bots/${botId}/orders/${paymentId}/reject`, { method: "POST" }),
-  /** Провести выдачу заново — после того, как продавец поправил то, из-за
+  /** Провести выдачу заново: после того, как продавец поправил то, из-за
    * чего она не прошла. Отправка идёт фоном, ответ приходит сразу. */
   redeliverOrder: (botId: string, paymentId: string) =>
     request<{ status: string; queued: boolean }>(
@@ -447,7 +447,7 @@ export interface PaymentRegion {
 export interface PaymentProviderCatalogue {
   providers: PaymentProviderInfo[];
   /** Whether the constructor offers subscriptions at all. Off while the
-   * one-off sale is being shaken out — the engine keeps the feature, the
+   * one-off sale is being shaken out, the engine keeps the feature, the
    * editor just does not show it. */
   subscriptions_enabled?: boolean;
   /** Section headings for the provider grid, in display order. Comes from
@@ -463,22 +463,22 @@ export interface PaymentProviderInfo {
   /** Which `PaymentRegion` this gateway is filed under. */
   region: string;
   /** Whether this gateway can take money a second time, and who initiates it.
-   * "gateway" — it runs the subscription itself (Telegram Stars, Stripe);
-   * "token" — the first payment saves a card and the bot charges it each
-   * period (ЮKassa, CloudPayments); "none" — a fresh invoice every time. */
+   * "gateway": it runs the subscription itself (Telegram Stars, Stripe);
+   * "token": the first payment saves a card and the bot charges it each
+   * period (ЮKassa, CloudPayments); "none": a fresh invoice every time. */
   recurring: "none" | "gateway" | "token";
   /** Asked once per shop, in the settings panel. */
   fields: PaymentField[];
-  /** Asked per product, on the payment block itself — Lava's offerId, the
+  /** Asked per product, on the payment block itself, Lava's offerId, the
    * link a "pay by link" block points at. */
   block_fields: PaymentField[];
   /** False when the bot can't ask the provider whether a payment went
    * through, so «Я оплатил» goes to the owner to confirm instead. */
   supports_status_check: boolean;
-  /** Whether this provider posts to our callback URL at all — Stars and
+  /** Whether this provider posts to our callback URL at all, Stars and
    * pay-by-link don't, so there is no address to paste anywhere. */
   uses_callback: boolean;
-  /** Отправляем ли адрес уведомления сами — тогда владельцу вписывать
+  /** Отправляем ли адрес уведомления сами, тогда владельцу вписывать
    * ничего не нужно, и просить его об этом нельзя. */
   sends_own_callback_url: boolean;
   has_test_mode: boolean;
@@ -495,15 +495,15 @@ export interface PaymentField {
 export interface PaymentSettings {
   provider: string | null;
   is_test: boolean;
-  /** Which credential fields already have a stored value — the values
+  /** Which credential fields already have a stored value, the values
    * themselves never leave the server. */
   filled_fields: string[];
   callback_url: string | null;
-  /** Корень адресов уведомлений — чтобы показать адрес для кассы, которую
+  /** Корень адресов уведомлений: чтобы показать адрес для кассы, которую
    * настраивают прямо сейчас, а не только для уже сохранённой. */
   callback_base: string;
   /** Может ли касса на самом деле принять деньги: провайдер выбран **и** все
-   * его ключи заполнены. Выбранный без ключей провайдер — это не
+   * его ключи заполнены. Выбранный без ключей провайдер: это не
    * подключённая касса, а интерфейс показывал зелёное «Касса подключена»
    * ровно по факту выбора. */
   ready: boolean;
@@ -530,18 +530,18 @@ export interface PublicConfig {
   meta_bot_username: string;
   payment_regions: { slug: string; title: string; gateways: string[] }[];
   gateway_count: number;
-  /** Что стоит запуск. Пусто — запуск бесплатный (платёжных способов у
+  /** Что стоит запуск. Пусто: запуск бесплатный (платёжных способов у
    * платформы нет). Цифры приходят с сервера, чтобы лендинг не обещал не то,
    * что спишется на кнопке публикации. */
   launch_usd?: number | null;
   renewal_usd?: number | null;
-  /** Акция первых клиентов: момент окончания (ISO, UTC) и цена «потом». Пусто — акции нет. */
+  /** Акция первых клиентов: момент окончания (ISO, UTC) и цена «потом». Пусто: акции нет. */
   launch_offer_ends_at?: string;
   launch_offer_regular_price?: string;
   pricing?: { method: string; launch: string; renewal: string; who?: string }[];
   renewal_period_days?: number;
   renewal_grace_days?: number;
-  /** Куда писать живому человеку — без @. Пусто не бывает. */
+  /** Куда писать живому человеку, без @. Пусто не бывает. */
   support_telegram: string;
   support_email: string;
   /** Кто получает деньги. Пусто, пока реквизиты не заполнены. */
@@ -549,7 +549,7 @@ export interface PublicConfig {
   /** Есть ли что открыть по ссылкам «Оферта» и «Политика». */
   legal_documents: boolean;
   /** Документы для подвала: путь и название. Пусто, пока реквизиты не
-   * заполнены. Отсутствует у старого сервера — тогда ссылок просто нет. */
+   * заполнены. Отсутствует у старого сервера: тогда ссылок просто нет. */
   legal_docs?: { path: string; title: string }[];
   /** Платёжный агент, принимающий оплату от имени владельца сервиса. */
   payment_agent?: string;
@@ -558,7 +558,7 @@ export interface PublicConfig {
 export interface PublicationInfo {
   required: boolean;
   paid: boolean;
-  /** The first method's price — what a single-method deployment shows. */
+  /** The first method's price, what a single-method deployment shows. */
   price_minor: number;
   currency: string;
   /** Every way to pay, each with its own price: the same publication costs
@@ -584,9 +584,9 @@ export interface PublicationMethod {
   how?: string;
 }
 
-/** Where a live bot stands with us. `state`: "off" — nothing is charged per
- * period; "active" — paid; "grace" — the period ended and the bot is still
- * running on borrowed time; "suspended" — off the air until it is renewed. */
+/** Where a live bot stands with us. `state`: "off": nothing is charged per
+ * period; "active": paid; "grace": the period ended and the bot is still
+ * running on borrowed time; "suspended": off the air until it is renewed. */
 export interface BillingState {
   state: "off" | "active" | "grace" | "suspended";
   paid_until: string | null;
@@ -652,7 +652,7 @@ export interface ButtonStats {
 
 export interface OrdersReport {
   orders: Order[];
-  /** One row per currency — a shop selling for 990 ₽ and 250 ⭐ has not
+  /** One row per currency, a shop selling for 990 ₽ and 250 ⭐ has not
    * earned "1240" of anything, so these are never added together. */
   totals: { currency: string; count: number; total_minor: number }[];
   paid_count: number;
@@ -660,7 +660,7 @@ export interface OrdersReport {
 }
 
 export interface Buyer {
-  /** "Дима (@dimkaqq)" — name and @username, however much of each is known. */
+  /** "Дима (@dimkaqq)": name and @username, however much of each is known. */
   title: string;
   username: string | null;
   telegram_user_id: number;
@@ -684,7 +684,7 @@ export interface Order {
   /** Дошёл ли товар до покупателя. Оплаченный, но не выданный заказ
    * выглядел в кабинете как успешный. */
   delivered: boolean;
-  /** Бот перестал пытаться выдать — дальше нужен человек. */
+  /** Бот перестал пытаться выдать, дальше нужен человек. */
   delivery_gave_up: boolean;
   /** When the buyer tapped «Я оплатил» on a provider we can't verify. */
   claimed_at: string | null;
@@ -692,7 +692,7 @@ export interface Order {
   needs_confirmation: boolean;
 }
 
-/** 99000 -> "990" / 99050 -> "990.50" — prices are shown the way they were
+/** 99000 -> "990" / 99050 -> "990.50": prices are shown the way they were
  * entered, without a trailing ".00" nobody typed. */
 export function formatAmount(amountMinor: number): string {
   const whole = Math.floor(amountMinor / 100);
@@ -702,7 +702,7 @@ export function formatAmount(amountMinor: number): string {
 
 /** Знак валюты там, где он привычнее кода. Тот же короткий список, что и на
  * сервере (`payments/base.py`): предпросмотр обещал «Оплатить 990 RUB», а
- * живой бот присылал «Оплатить 990 ₽» — проверка сценария показывала не ту
+ * живой бот присылал «Оплатить 990 ₽», проверка сценария показывала не ту
  * кнопку, которую увидит покупатель. */
 const CURRENCY_SYMBOL: Record<string, string> = {
   RUB: "₽",
@@ -718,7 +718,7 @@ export function currencyUnit(currency: string): string {
   return CURRENCY_SYMBOL[(currency || "").toUpperCase()] ?? (currency || "").toUpperCase();
 }
 
-/** «990 ₽» — сумма в минорных единицах так, как её читает человек. */
+/** «990 ₽»: сумма в минорных единицах так, как её читает человек. */
 export function money(amountMinor: number, currency: string): string {
   return `${formatAmount(amountMinor)} ${currencyUnit(currency)}`.trim();
 }
@@ -728,7 +728,7 @@ export { ApiError };
 
 export interface SubscribersReport {
   subscriptions: SubscriptionRow[];
-  /** Everyone who ever wrote to the bot, newest first — a subscriber list
+  /** Everyone who ever wrote to the bot, newest first, a subscriber list
    * exists at all only since the bot started recording its people. */
   people: PersonRow[];
   active_count: number;

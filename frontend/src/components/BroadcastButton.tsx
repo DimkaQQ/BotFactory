@@ -11,7 +11,7 @@ interface Props {
 }
 
 /**
- * "Отправить этот блок всем" — the thing «рассылка» has always meant.
+ * "Отправить этот блок всем": the thing «рассылка» has always meant.
  *
  * Lives on the block, not in a separate screen, because the block *is* the
  * message: whatever this node says on the canvas is exactly what lands in
@@ -30,7 +30,7 @@ export function BroadcastButton({ botId, blockId, published }: Props) {
       const { broadcasts } = await builderApi.listBroadcasts(botId);
       setReport(broadcasts.find((row) => row.block_id === blockId) ?? null);
     } catch {
-      // Отчёт — дополнение, а не условие работы кнопки.
+      // Отчёт: дополнение, а не условие работы кнопки.
     }
   }, [botId, blockId]);
 
@@ -49,19 +49,19 @@ export function BroadcastButton({ botId, blockId, published }: Props) {
   async function send(audience: "all" | "subscribers") {
     const who = audience === "all" ? "всем, кто писал боту" : "только активным подписчикам";
 
-    // Сколько именно человек — до того, как нажать. «Всем» без числа может
+    // Сколько именно человек: до того, как нажать. «Всем» без числа может
     // означать и троих, и три тысячи, а отменить отправку нельзя.
     let howMany = "";
     try {
       const report = await builderApi.listSubscribers(botId);
       // Считаем ровно так же, как отбирает сервер: он пропускает
       // заблокировавших бота и попросивших не писать. Раньше здесь была
-      // длина всего списка — диалог спрашивал «(5 чел.)», а уходило трём.
+      // длина всего списка: диалог спрашивал «(5 чел.)», а уходило трём.
       const reachable = report.people.filter((person) => !person.blocked && !person.unsubscribed);
       const count = audience === "all" ? reachable.length : report.active_count;
       howMany = ` (${count} чел.)`;
     } catch {
-      // Не смогли посчитать — спрашиваем без числа, но спрашиваем.
+      // Не смогли посчитать: спрашиваем без числа, но спрашиваем.
     }
 
     // Irreversible and outward-facing: once it is queued, those messages are
@@ -76,7 +76,7 @@ export function BroadcastButton({ botId, blockId, published }: Props) {
     setResult(null);
     try {
       const { queued } = await builderApi.broadcast(botId, blockId, audience);
-      setResult(queued === 0 ? "Пока некому — у бота ещё нет подписчиков." : `Отправляем ${queued} чел.`);
+      setResult(queued === 0 ? "Пока некому: у бота ещё нет подписчиков." : `Отправляем ${queued} чел.`);
       if (queued > 0) void refreshReport();
     } catch (err) {
       setResult(err instanceof ApiError ? err.message : "Не удалось отправить");
@@ -106,7 +106,7 @@ export function BroadcastButton({ botId, blockId, published }: Props) {
       </div>
       {result && <p className="app-hint broadcast__result">{result}</p>}
 
-      {/* Чем всё закончилось. «Отправляем 340 чел.» — это про очередь, а не
+      {/* Чем всё закончилось. «Отправляем 340 чел.»: это про очередь, а не
           про доставку: шаги могли упасть все до одного, и на трёхстах
           учениках этого не заметить никак. */}
       {report && (

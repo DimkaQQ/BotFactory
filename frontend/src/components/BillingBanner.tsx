@@ -7,7 +7,7 @@ import { plural } from "../plural";
 interface Props {
   botId: string;
   billing: BillingState;
-  /** The bot went back on the air — the page reloads it, because the status
+  /** The bot went back on the air, the page reloads it, because the status
    * it shows everywhere else has just changed too. */
   onRenewed: () => void;
 }
@@ -29,7 +29,7 @@ function day(iso: string | null): string {
 }
 
 /** "Оплачено до 18 октября" while there is nothing to do about it, and null
- * once there is — from then on the banner below says it, louder. */
+ * once there is: from then on the banner below says it, louder. */
 export function paidUntilLabel(billing: BillingState): string | null {
   if (billing.state !== "active" || (billing.days_left ?? 0) <= NAG_DAYS) return null;
   return `Оплачено до ${day(billing.paid_until)}`;
@@ -61,7 +61,7 @@ export function BillingBanner({ botId, billing, onRenewed }: Props) {
           setError("Платёж не прошёл. Попробуй ещё раз.");
         }
       } catch {
-        // transient — the next tick tries again
+        // transient: the next tick tries again
       }
     }, POLL_MS);
     return () => clearInterval(timer);
@@ -88,7 +88,7 @@ export function BillingBanner({ botId, billing, onRenewed }: Props) {
   }
 
   // Paid and nowhere near the end: no banner at all. The date is a few words
-  // in the "бот работает" line instead (see `paidUntilLabel`) — nobody needs
+  // in the "бот работает" line instead (see `paidUntilLabel`): nobody needs
   // a box telling them once a day that everything is fine.
   if (paidUntilLabel(billing) !== null || billing.state === "off") return null;
 
@@ -104,14 +104,14 @@ export function BillingBanner({ botId, billing, onRenewed }: Props) {
             <p className="billing__title">
               Оплаченный период заканчивается{billing.days_left === 0 ? " сегодня" : ` через ${billing.days_left} дн.`}
             </p>
-            <p className="billing__hint">Продли подписку сейчас — все боты продолжат работать без перерыва.</p>
+            <p className="billing__hint">Продли подписку сейчас: все боты продолжат работать без перерыва.</p>
           </>
         )}
         {billing.state === "grace" && (
           <>
             <p className="billing__title">Период закончился {day(billing.paid_until)}</p>
             <p className="billing__hint">
-              Боты пока работают — до {day(billing.grace_until)}, потом уйдут с эфира. Сценарии, настройки и
+              Боты пока работают: до {day(billing.grace_until)}, потом уйдут с эфира. Сценарии, настройки и
               заказы останутся на месте.
             </p>
           </>
@@ -123,7 +123,7 @@ export function BillingBanner({ botId, billing, onRenewed }: Props) {
           <>
             <p className="billing__title">Период не продлён с {day(billing.paid_until)}</p>
             <p className="billing__hint">
-              Оплати подписку — все боты вернутся в строй сразу же, с теми же сценариями и той же кассой.
+              Оплати подписку: все боты вернутся в строй сразу же, с теми же сценариями и той же кассой.
             </p>
           </>
         )}
@@ -138,7 +138,7 @@ export function BillingBanner({ botId, billing, onRenewed }: Props) {
             Ждём подтверждение оплаты.{" "}
             {checkoutUrl && (
               <a href={checkoutUrl} target="_blank" rel="noreferrer">
-                Если страница не открылась — открой её здесь
+                Если страница не открылась: открой её здесь
               </a>
             )}
           </span>

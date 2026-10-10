@@ -7,7 +7,7 @@ interface Props {
   content: BlockContent;
   onChange: (content: BlockContent) => void;
   /** Нужны, чтобы показать ответы. Без них опрос можно было задать и нельзя
-   * прочитать: ответы писались в таблицу, которую не читал никто — ни
+   * прочитать: ответы писались в таблицу, которую не читал никто, ни
    * эндпоинта на экране, ни экрана. */
   botId?: string;
   blockId?: string;
@@ -15,11 +15,11 @@ interface Props {
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 10;
-/** Лимиты Telegram: вопрос опроса — до 300 знаков, вариант — до 100. */
+/** Лимиты Telegram: вопрос опроса: до 300 знаков, вариант, до 100. */
 const MAX_QUESTION = 300;
 const MAX_OPTION = 100;
 
-/** Compact inline editor for a poll block — question + option list, lives inside a chat bubble. */
+/** Compact inline editor for a poll block, question + option list, lives inside a chat bubble. */
 export function PollEditor({ content, onChange, botId, blockId }: Props) {
   const options = content.options ?? ["", ""];
   const [answers, setAnswers] = useState<PollResult | null>(null);
@@ -81,7 +81,7 @@ export function PollEditor({ content, onChange, botId, blockId }: Props) {
       )}
 
       {/* Сама галочка. Её не было: текст ниже звал «снять галочку», а снимать
-          было нечего — и все опросы создавались анонимными, то есть ответы
+          было нечего: и все опросы создавались анонимными, то есть ответы
           не приходили никогда. Подсказка указывала на несуществующий
           переключатель, что хуже, чем отсутствие подсказки. */}
       <label className="payment-editor__toggle poll-editor__anonymous">
@@ -90,15 +90,15 @@ export function PollEditor({ content, onChange, botId, blockId }: Props) {
           checked={Boolean(content.anonymous)}
           onChange={(e) => onChange({ ...content, anonymous: e.target.checked })}
         />
-        <span>Анонимный опрос — не видно, кто как ответил</span>
+        <span>Анонимный опрос: не видно, кто как ответил</span>
       </label>
 
       {/* Ответы. Анонимный опрос Telegram присылает без пользователя, то
-          есть ответов не будет вовсе — это надо сказать, а не показывать
+          есть ответов не будет вовсе, это надо сказать, а не показывать
           вечный ноль. */}
       {content.anonymous ? (
         <p className="poll-editor__answers-note">
-          Пока опрос анонимный, Telegram не присылает ответы — посчитать их не получится. Сними галочку
+          Пока опрос анонимный, Telegram не присылает ответы, посчитать их не получится. Сними галочку
           выше, если хочешь видеть результаты.
         </p>
       ) : answers && answers.answered > 0 ? (
@@ -118,7 +118,7 @@ export function PollEditor({ content, onChange, botId, blockId }: Props) {
           })}
         </div>
       ) : (
-        <p className="poll-editor__answers-note">Ответов пока нет — они появятся здесь.</p>
+        <p className="poll-editor__answers-note">Ответов пока нет: они появятся здесь.</p>
       )}
     </div>
   );

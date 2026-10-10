@@ -13,7 +13,7 @@ interface DemoNode {
   choices?: DemoChoice[];
 }
 
-/** A tiny branching script — the same shape the real editor produces
+/** A tiny branching script, the same shape the real editor produces
  * (a chain of messages, a buttons block that forks, branches that end). */
 const SCRIPT: Record<string, DemoNode> = {
   start: { text: "Привет! Я бот кофейни «Сова» ☕", next: "ask" },
@@ -24,7 +24,7 @@ const SCRIPT: Record<string, DemoNode> = {
       { label: "Забронировать стол", to: "book" },
     ],
   },
-  menu: { text: "Латте — 890 ₸, раф — 1 200 ₸, десерты — от 1 500 ₸", next: "offer" },
+  menu: { text: "Латте: 890 ₸, раф, 1 200 ₸, десерты, от 1 500 ₸", next: "offer" },
   offer: {
     text: "Забронировать столик?",
     choices: [
@@ -47,11 +47,11 @@ interface DemoMessage {
 }
 
 /** The landing's "watch it play out" demo: the script above plays itself on
- * a loop, but every button is live — tap one and the demo follows *your*
+ * a loop, but every button is live, tap one and the demo follows *your*
  * branch instead of its own. Which is exactly the pitch of the section it
  * sits in, so it's a working demo rather than a screenshot of one.
  *
- * It only runs while scrolled into view (IntersectionObserver) — no point
+ * It only runs while scrolled into view (IntersectionObserver), no point
  * looping timers for a section nobody is looking at. */
 export function LandingDemo() {
   const [messages, setMessages] = useState<DemoMessage[]>([]);
@@ -106,7 +106,7 @@ export function LandingDemo() {
     setPending(choice.to);
   }, []);
 
-  // Nobody tapped — the demo picks for itself so the loop keeps moving.
+  // Nobody tapped: the demo picks for itself so the loop keeps moving.
   useEffect(() => {
     if (!visible || !awaiting) return;
     const choices = SCRIPT[awaiting].choices!;

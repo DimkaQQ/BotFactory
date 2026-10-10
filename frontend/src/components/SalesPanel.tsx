@@ -17,7 +17,7 @@ import { CurrencyCircleDollar, X } from "@phosphor-icons/react";
 interface Props {
   botId: string;
   onClose: () => void;
-  /** Выручка показана ещё и в шапке конструктора — после возврата или
+  /** Выручка показана ещё и в шапке конструктора, после возврата или
    * подтверждения она обязана измениться там тоже. */
   onOrdersChanged?: (report: OrdersReport) => void;
 }
@@ -31,7 +31,7 @@ const SUB_STATUS: Record<string, string> = {
 const STATUS_LABEL: Record<Order["status"], string> = {
   paid: "оплачен",
   // Неоплаченные важны не меньше оплаченных: «десять человек открыли счёт и
-  // никто не заплатил» — самое полезное, что продавец может тут узнать.
+  // никто не заплатил»: самое полезное, что продавец может тут узнать.
   pending: "не оплачен",
   failed: "не прошёл",
   refunded: "возврат",
@@ -76,7 +76,7 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
       try {
         const [sales, audience] = await Promise.all([
           builderApi.listOrders(botId),
-          // Бот без подписчиков — обычное дело в первый день, и это не
+          // Бот без подписчиков: обычное дело в первый день, и это не
           // повод не показать заказы.
           builderApi
             .listSubscribers(botId)
@@ -158,7 +158,7 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
       <div className="edit-panel" ref={panelRef}>
         <div
           className="edit-panel__header"
-          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          title="Потяни, чтобы переместить окно (двойной щелчок, вернуть на место)"
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--payment" aria-hidden="true">
@@ -181,7 +181,7 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
             <div className="orders">
               <span className="buttons-editor__field-label">Ждут подтверждения</span>
               <p className="orders__lead">
-                Покупатель нажал «Я оплатил». Проверь, пришли ли деньги — после подтверждения бот сразу
+                Покупатель нажал «Я оплатил». Проверь, пришли ли деньги: после подтверждения бот сразу
                 выдаст товар.
               </p>
               {awaiting.map((order) => (
@@ -259,7 +259,7 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
             <div className="orders orders--summary">
               <span className="buttons-editor__field-label">
                 Продажи
-                {/* Сверять три сотни строк глазами по панели — это тот
+                {/* Сверять три сотни строк глазами по панели, это тот
                     самый вечер в неделю, ради которого бота и покупают. */}
                 <button
                   type="button"
@@ -303,7 +303,7 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
                       <span className="orders__log-meta">
                         {STATUS_LABEL[order.status]} · {when(order.paid_at ?? order.created_at)}
                         {order.buyer && ` · ${order.buyer.title}`}
-                        {/* Оплачено — ещё не значит доставлено, и это
+                        {/* Оплачено: ещё не значит доставлено, и это
                             единственное место, где продавец может об
                             этом узнать сам. */}
                         {order.status === "paid" && !order.delivered && (
@@ -318,10 +318,10 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
                     <span className="orders__log-amount">
                       {formatAmount(order.amount_minor)} {unit(order.currency)}
                     </span>
-                    {/* Журнал честно писал «товар не выдан» — и на этом
+                    {/* Журнал честно писал «товар не выдан», и на этом
                         всё: отправить ещё раз было нельзя, оставался
                         только возврат. Почти всегда чинится за минуту:
-                        укоротить текст, заменить картинку — и провести
+                        укоротить текст, заменить картинку: и провести
                         выдачу заново. */}
                     {order.status === "paid" && !order.delivered && (
                       <button
@@ -343,7 +343,7 @@ export function SalesPanel({ botId, onClose, onOrdersChanged }: Props) {
                         onClick={() => {
                           void confirmDialog(
                             `Оформить возврат по заказу №${order.invoice_no}?\n\n` +
-                              `Деньги вернёшь сам в кабинете кассы — через нас они не проходили. ` +
+                              `Деньги вернёшь сам в кабинете кассы, через нас они не проходили. ` +
                               `Бот пометит заказ возвращённым, скажет покупателю и закроет доступ ` +
                               `в закрытый чат, если он выдавался.`,
                             "Оформить возврат",

@@ -39,7 +39,7 @@ function when(iso: string): string {
     : date.toLocaleString("ru", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-/** Продажи и нажатия по всем ботам сразу — с выбором одного бота. */
+/** Продажи и нажатия по всем ботам сразу, с выбором одного бота. */
 export function SalesOverviewPanel({ bots, onClose }: Props) {
   useEscape(onClose);
   const { panelRef, handleProps: dragProps } = useDraggablePanel();
@@ -106,7 +106,7 @@ export function SalesOverviewPanel({ bots, onClose }: Props) {
       <div className="edit-panel overview-panel" ref={panelRef}>
         <div
           className="edit-panel__header"
-          title="Потяни, чтобы переместить окно (двойной щелчок — вернуть на место)"
+          title="Потяни, чтобы переместить окно (двойной щелчок, вернуть на место)"
           {...dragProps}
         >
           <span className="edit-panel__icon block-card__icon--success" aria-hidden="true">
