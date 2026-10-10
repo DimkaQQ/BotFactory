@@ -6920,3 +6920,169 @@ details.live-problems > summary::-webkit-details-marker {
   .payment-settings__notify-url { flex-direction: column; }
   .payment-settings__notify-url button { justify-content: center; min-height: 40px; }
 }
+
+/* ======================================================================
+   Телефон: воздух, ровные отступы, окна без обрезки снизу (до 599px).
+   Идёт последним блоком, чтобы перекрывать ранние правила; десктоп не трогает.
+   ====================================================================== */
+@media (max-width: 599px) {
+  /* Поля экрана 20px вместо 16: контент не липнет к краям. */
+  .screen {
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: max(20px, env(safe-area-inset-top));
+  }
+
+  /* Шапка бота: первая строка "назад / тема / удалить", вторая строка кнопки-инструменты
+     поровну по ширине. Раньше всё стояло в одну строку и уезжало за край экрана. */
+  .app-header {
+    margin-bottom: 20px;
+  }
+  .app-header__bar {
+    flex-wrap: wrap;
+    row-gap: 12px;
+    column-gap: 8px;
+    margin-bottom: 20px;
+  }
+  .app-header__bar .back-link {
+    order: 1;
+    margin-right: auto;
+    min-height: 44px;
+  }
+  .app-header__bar .app-header__actions {
+    display: contents;
+  }
+  .app-header__bar .theme-toggle { order: 2; }
+  .app-header__bar .bot-delete-button { order: 3; }
+  .app-header__bar::after {
+    content: "";
+    order: 4;
+    flex: 0 0 100%;
+    height: 0;
+  }
+  .app-header__bar .bot-payments-button {
+    order: 5;
+    flex: 0 1 auto;
+    justify-content: center;
+    min-width: 0;
+    padding: 0 16px;
+    gap: 8px;
+  }
+  .app-header__top {
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .app-header__greeting {
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+
+  /* Плашки состояния (бот работает, замечания): больше воздуха внутри и между. */
+  .published-banner,
+  .live-problems,
+  .billing-banner {
+    margin-bottom: 16px;
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  /* Все нижние окна: на всю ширину, скругление только сверху, снизу отступ
+     под полоску жеста и панель Safari, ручка сверху. */
+  .edit-panel,
+  .sheet,
+  .paywall--open,
+  .publish-form--sheet {
+    left: 0;
+    right: 0;
+    width: 100%;
+    border-radius: 24px 24px 0 0;
+    border-bottom: 0;
+  }
+  .paywall--open,
+  .publish-form--sheet {
+    left: 0;
+    transform: none;
+    max-height: calc(100dvh - 56px);
+    padding: 28px 20px calc(28px + env(safe-area-inset-bottom));
+  }
+  .edit-panel {
+    max-height: calc(100dvh - 56px);
+    padding-bottom: 0;
+    border-width: 1px 0 0;
+  }
+  .sheet {
+    padding: 28px 20px calc(32px + env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 56px);
+  }
+  .edit-panel::before,
+  .sheet::before,
+  .paywall--open::before,
+  .publish-form--sheet::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    margin-left: -18px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--tg-text) 22%, transparent);
+    pointer-events: none;
+  }
+  .edit-panel__header {
+    padding: 24px 20px 14px;
+    gap: 12px;
+  }
+  .edit-panel__title {
+    font-size: 17px;
+  }
+  .edit-panel__body {
+    padding: 20px 20px calc(32px + env(safe-area-inset-bottom));
+  }
+  .edit-panel__body > * + * {
+    margin-top: 4px;
+  }
+
+  /* Кнопки внизу окон: на всю ширину, с воздухом между. */
+  .payment-settings__save,
+  .payment-settings__sales-link {
+    min-height: 52px;
+  }
+  .edit-panel__body .payment-settings__save {
+    margin-top: 28px;
+  }
+  .edit-panel__body .payment-settings__sales-link {
+    margin-top: 12px;
+  }
+
+  /* Список ботов: кнопки с подписями (одни иконки были непонятны) и своей строкой под заголовком. */
+  .screen--list .app-header__top {
+    flex-wrap: wrap;
+    row-gap: 16px;
+  }
+  .screen--list .app-header__titles {
+    flex: 1 1 0;
+  }
+  .screen--list .app-header__actions {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    margin-left: 0;
+    gap: 8px;
+  }
+  .screen--list .bot-payments-button__long {
+    display: inline;
+  }
+  .screen--list .bot-payments-button {
+    padding: 0 14px;
+    gap: 8px;
+  }
+  .screen--list .header-logout-button {
+    margin-left: auto;
+  }
+
+  /* Нижняя панель "Опубликовать": воздух и безопасная зона. */
+  .app-footer {
+    padding: 12px 20px calc(16px + env(safe-area-inset-bottom));
+  }
+}
