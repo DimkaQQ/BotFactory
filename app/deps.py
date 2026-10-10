@@ -11,22 +11,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.bot import Bot
 from app.models.client import Client
+from app.services.session_token import verify_session_token
 from app.services.telegram_validator import InvalidInitData, parse_init_data_user, validate_init_data
 
 
-async def get_current_client(
-    x_telegram_init_data: str = Header(..., alias="X-Telegram-Init-Data"),
-    db: AsyncSession = Depends(get_db),
-) -> Client:
-    """Validate Telegram Web App initData and resolve/create the Client it belongs to."""
+async def _client_from_init_data(init_data: str, db: AsyncSession) -> Client:
+    """Mini App path: validate Telegram Web App initData, upsert the Client it belongs to."""
 
     try:
-        parsed = validate_init_data(x_telegram_init_data)
+        parsed = validate_init_data(init_data)
         user = parse_init_data_user(parsed)
     except InvalidInitData as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
-    telegram_user_id = user["id"]
+    # Signed initData is proof of who Telegram says this is, not proof that
+    # the payload has the shape we expect — a missing id is a bad request to
+    # refuse, not a 500.
+    telegram_user_id = user.get("id") if isinstance(user, dict) else None
+    if telegram_user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="В данных Telegram нет идентификатора пользователя"
+        )
     full_name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")])) or None
 
     result = await db.execute(select(Client).where(Client.telegram_user_id == telegram_user_id))
@@ -41,6 +46,60 @@ async def get_current_client(
         client.full_name = full_name
         await db.commit()
 
+    return client
+
+
+async def _client_from_session_token(token: str, db: AsyncSession) -> Client:
+    """Web path: resolve the Client behind an already-issued session token
+    (see app/routers/auth.py — issued after a Telegram Login Widget login)."""
+
+    session = verify_session_token(token)
+    if session is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired, please log in again")
+
+    result = await db.execute(select(Client).where(Client.id == session.client_id))
+    client = result.scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session refers to a deleted account")
+
+    # Выход из аккаунта. Токен живёт тридцать дней, и «Выйти» стирало его
+    # только в браузере — на общем компьютере это не закрывало ничего, а за
+    # токеном касса, список покупателей и кнопка снятия бота с эфира.
+    cutoff = client.sessions_valid_from
+    if cutoff is not None and (session.issued_at is None or session.issued_at < cutoff):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired, please log in again"
+        )
+    return client
+
+
+async def get_current_client(
+    authorization: str | None = Header(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    db: AsyncSession = Depends(get_db),
+) -> Client:
+    """Resolve the current Client from either auth scheme in use:
+
+    - `Authorization: Bearer <token>` — the web login flow (see routers/auth.py)
+    - `X-Telegram-Init-Data: <...>` — the Telegram Mini App flow (unchanged)
+    """
+
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[len("bearer ") :].strip()
+        return _not_banned(await _client_from_session_token(token, db))
+
+    if x_telegram_init_data:
+        return _not_banned(await _client_from_init_data(x_telegram_init_data, db))
+
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authentication")
+
+
+def _not_banned(client: Client) -> Client:
+    if client.banned_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Аккаунт заблокирован за нарушение правил сервиса. Если это ошибка — напишите в поддержку.",
+        )
     return client
 
 

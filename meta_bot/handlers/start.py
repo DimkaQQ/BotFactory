@@ -1,31 +1,9 @@
-from aiogram import Router
-from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
+"""/start теперь открывает кабинет (meta_bot/handlers/menu.py).
 
-from app.config import get_settings
+Файл оставлен ради импортов и одного места, где описано, что нужно людям от
+первого экрана: кнопка конструктора, их боты и цифры, настройки, поддержка.
+"""
 
-router = Router(name="start")
+from meta_bot.handlers.menu import router
 
-
-@router.message(CommandStart())
-async def cmd_start(message: Message) -> None:
-    settings = get_settings()
-
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="🛠 Открыть конструктор",
-                    web_app=WebAppInfo(url=settings.webapp_url),
-                )
-            ]
-        ]
-    )
-
-    await message.answer(
-        "Привет! Я Bot Factory 🏭\n\n"
-        "Здесь ты можешь собрать своего Telegram-бота без единой строчки кода — "
-        "просто перетаскивай блоки в конструкторе.\n\n"
-        "Нажми кнопку ниже, чтобы начать 👇",
-        reply_markup=keyboard,
-    )
+__all__ = ["router"]

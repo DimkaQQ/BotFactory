@@ -1,24 +1,57 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
 from app.deps import get_owned_bot
-from app.models.bot import Bot, BotStatus
+from app.models.bot import Bot
 from app.models.bot_block import BotBlock
 from app.schemas.bot_block import BlockReorderRequest, BotBlockCreate, BotBlockOut, BotBlockUpdate
 
 router = APIRouter(prefix="/api/bots/{bot_id}/blocks", tags=["builder"])
 
 
-def _ensure_draft(bot: Bot) -> None:
-    if bot.status != BotStatus.draft:
+def _check_content_size(content: dict | None) -> None:
+    """Refuse a block nobody could have typed.
+
+    `content` is free-form JSONB with no shape and no bound, so a single
+    request could put megabytes into one row. The limit is far above any
+    real scenario; it exists so one account cannot fill the disk — which
+    takes Postgres down with it and pushes the backup past what Telegram
+    will carry.
+    """
+    if content is None:
+        return
+    import json
+
+    limit = get_settings().max_block_content_kb * 1024
+    size = len(json.dumps(content, ensure_ascii=False).encode())
+    if size > limit:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Опубликованного бота нельзя редактировать",
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=(
+                f"Содержимое блока слишком большое ({size // 1024} КБ, можно до "
+                f"{limit // 1024} КБ). Вынеси длинный текст в файл и дай на него ссылку."
+            ),
         )
+
+
+async def _check_block_count(db: AsyncSession, bot_id: uuid.UUID) -> None:
+    limit = get_settings().max_blocks_per_bot
+    total = await db.execute(select(func.count(BotBlock.id)).where(BotBlock.bot_id == bot_id))
+    if total.scalar_one() >= limit:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"В одном боте пока не больше {limit} блоков. Напиши нам, если упёрся — поднимем.",
+        )
+
+# Editing is allowed for both draft and already-published bots — the
+# dispatcher (app/services/bot_dispatcher.py) always reads blocks fresh
+# from the DB on every /start, so edits to a live bot take effect
+# immediately, no republish needed.
 
 
 async def _get_owned_block(bot_id: uuid.UUID, block_id: uuid.UUID, db: AsyncSession) -> BotBlock:
@@ -46,7 +79,8 @@ async def create_block(
     bot: Bot = Depends(get_owned_bot),
     db: AsyncSession = Depends(get_db),
 ) -> BotBlock:
-    _ensure_draft(bot)
+    await _check_block_count(db, bot_id)
+    _check_content_size(payload.content)
 
     if payload.order_index is None:
         result = await db.execute(select(BotBlock.order_index).where(BotBlock.bot_id == bot_id))
@@ -55,8 +89,25 @@ async def create_block(
     else:
         order_index = payload.order_index
 
-    block = BotBlock(bot_id=bot_id, block_type=payload.block_type, content=payload.content, order_index=order_index)
+    block = BotBlock(
+        bot_id=bot_id,
+        block_type=payload.block_type,
+        content=payload.content,
+        order_index=order_index,
+        position_x=payload.position_x if payload.position_x is not None else 80.0,
+        # 170 down, not 80: the canvas's "▶ Старт" pseudo-node sits at
+        # (40, 40), and a first block at y=80 lands under it.
+        position_y=payload.position_y if payload.position_y is not None else 170.0 + order_index * 170.0,
+    )
     db.add(block)
+
+    # The very first block a bot ever gets automatically becomes the entry
+    # point — otherwise a brand-new bot would have no start node at all
+    # until someone explicitly drags the "▶ Старт" arrow onto something.
+    if bot.start_block_id is None:
+        await db.flush()  # block.id needs to exist before we can point at it
+        bot.start_block_id = block.id
+
     await db.commit()
     await db.refresh(block)
     return block
@@ -69,8 +120,6 @@ async def reorder_blocks(
     bot: Bot = Depends(get_owned_bot),
     db: AsyncSession = Depends(get_db),
 ) -> list[BotBlock]:
-    _ensure_draft(bot)
-
     block_ids = [item.id for item in payload.items]
     result = await db.execute(select(BotBlock).where(BotBlock.bot_id == bot_id, BotBlock.id.in_(block_ids)))
     blocks_by_id = {block.id: block for block in result.scalars().all()}
@@ -95,13 +144,26 @@ async def update_block(
     bot: Bot = Depends(get_owned_bot),
     db: AsyncSession = Depends(get_db),
 ) -> BotBlock:
-    _ensure_draft(bot)
-
     block = await _get_owned_block(bot_id, block_id, db)
+    _check_content_size(payload.content)
+    fields = payload.model_fields_set
     if payload.content is not None:
         block.content = payload.content
     if payload.order_index is not None:
         block.order_index = payload.order_index
+    # These three use "was the field sent at all" rather than "is it not
+    # None" — dragging an arrow away or dropping a node back to (0, 0) are
+    # real edits that set the value to null/0, not omissions.
+    if "next_block_id" in fields:
+        if payload.next_block_id is not None:
+            target = await _get_owned_block(bot_id, payload.next_block_id, db)
+            if target.id == block.id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Блок не может вести сам в себя")
+        block.next_block_id = payload.next_block_id
+    if "position_x" in fields and payload.position_x is not None:
+        block.position_x = payload.position_x
+    if "position_y" in fields and payload.position_y is not None:
+        block.position_y = payload.position_y
 
     await db.commit()
     await db.refresh(block)
@@ -115,8 +177,6 @@ async def delete_block(
     bot: Bot = Depends(get_owned_bot),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    _ensure_draft(bot)
-
     block = await _get_owned_block(bot_id, block_id, db)
     await db.delete(block)
     await db.commit()

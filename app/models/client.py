@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,5 +17,31 @@ class Client(Base):
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    #: Выход из аккаунта. Токены, выпущенные раньше этого момента, больше не
+    #: принимаются: стереть токен в браузере — не то же самое, что закрыть
+    #: доступ, а за ним касса, покупатели и кнопка снятия бота с эфира.
+    #: Одна отметка на клиента, поэтому выход происходит сразу на всех
+    #: устройствах — для аккаунта с одним владельцем это то, чего от кнопки
+    #: и ждут.
+    sessions_valid_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    #: Какую редакцию оферты человек принял и когда. Принятием считается вход
+    #: через виджет Telegram при опубликованных документах: рядом с кнопкой
+    #: написано «Входя, вы принимаете оферту и политику». Запись нужна на случай
+    #: спора — «никто не соглашался» не должно быть правдой, которую нечем
+    #: опровергнуть. Пусто у тех, кто зарегистрировался до этого.
+    #: Присылать ли владельцу сообщение о каждой оплате. Включено по умолчанию:
+    #: это то, ради чего бот и ставят; выключают те, у кого заказов много.
+    notify_sales: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+
+    #: Аккаунт заблокирован за нарушение правил (см. deploy/runbook.md): вход в
+    #: конструктор закрыт, боты молчат, а снять паузу владелец сам не может.
+    banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    terms_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     bots: Mapped[list["Bot"]] = relationship(back_populates="client", cascade="all, delete-orphan")

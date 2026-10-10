@@ -1,9 +1,23 @@
-export type BlockType = "welcome" | "description" | "buttons" | "delivery";
+export type BlockType =
+  | "welcome"
+  | "description"
+  | "image"
+  | "video"
+  | "buttons"
+  | "poll"
+  | "delivery"
+  | "payment"
+  | "booking"
+  | "contact"
+  | "delay";
 
 export interface ButtonAction {
   label: string;
   action_type: "text" | "url";
   action_value: string;
+  /** The block this button's arrow points to on the flow canvas, null/unset
+   * means the button is just shown, tap does nothing (Phase-1-style). */
+  target_block_id?: string | null;
 }
 
 export interface BlockContent {
@@ -11,6 +25,60 @@ export interface BlockContent {
   media_file_id?: string | null;
   media_type?: string | null;
   buttons?: ButtonAction[];
+  /** Кнопки блока: под сообщением (по умолчанию) или быстрые внизу экрана. */
+  keyboard?: "inline" | "reply" | "remove";
+  /** Запоминать, что выбрал покупатель, и показывать это в заказе. */
+  collect_choice?: boolean;
+  /** Блок «Запись»: расписание. Дни недели 0 = понедельник. */
+  days?: number[];
+  start?: string;
+  end?: string;
+  /** Часы по дням недели («0», понедельник): список промежутков [с, до]. Пустой: выходной. */
+  weekly?: Record<string, [string, string][]>;
+  /** Особые даты (YYYY-MM-DD): пустой список: закрыто, иначе свои часы. */
+  exceptions?: Record<string, [string, string][]>;
+  slot_minutes?: number;
+  horizon_days?: number;
+  notice_hours?: number;
+  tz?: string;
+  /** Блок «Запись»: напоминать клиенту за сутки и за 2 часа (по умолчанию да). */
+  reminders?: boolean;
+  /** Блок «Контакты»: что спросить у человека (Telegram-данные приходят сами). */
+  ask_name?: boolean;
+  ask_phone?: boolean;
+  /** Блок раньше был с быстрыми кнопками: бот уберёт клавиатуру внизу у покупателя. */
+  clear_reply?: boolean;
+  question?: string;
+  options?: string[];
+  anonymous?: boolean;
+  seconds?: number;
+  /** Payment block: what is being sold, for how much, and what the pay
+   * button says. `price` is kept as typed ("990", "990.50"): the backend
+   * parses it into minor units. */
+  title?: string;
+  price?: string;
+  currency?: string;
+  button_label?: string;
+  /** Payment block: the same person may buy this again. Off by default, so
+   * a guide or a course is sold once and a returning buyer just gets it
+   * back; on for anything genuinely repeatable, a consultation, a
+   * donation, a re-order: where "уже оплачено" would mean the seller works
+   * for free. */
+  repeatable?: boolean;
+  /** Payment block: charge for a period at a time rather than once.
+   * Telegram Stars then bills every 30 days on its own; every other
+   * provider re-invoices, which the editor says out loud. */
+  subscription?: boolean;
+  /** How long one paid period lasts. Ignored for Stars: Telegram supports
+   * 30 days and nothing else. */
+  period_days?: string | number;
+  /** Delivery block: the private group or channel a buyer is let into. A
+   * numeric id (-100…) or an @username. Set means the block hands out a
+   * single-use invite instead of its text. */
+  group_chat_id?: string;
+  /** Written by the engine when a poll is sent, so an incoming answer can be
+   * matched back to this block. Not edited by hand. */
+  telegram_poll_id?: string;
 }
 
 export interface BotBlock {
@@ -19,6 +87,10 @@ export interface BotBlock {
   block_type: BlockType;
   order_index: number;
   content: BlockContent;
+  /** Default "what happens after this" edge: the plain arrow out of a node. */
+  next_block_id: string | null;
+  position_x: number;
+  position_y: number;
   created_at: string;
   updated_at: string;
 }
@@ -26,10 +98,18 @@ export interface BotBlock {
 export interface Bot {
   id: string;
   client_id: string;
+  name: string | null;
   telegram_bot_username: string | null;
   status: "draft" | "active" | "disabled";
   created_at: string;
   published_at: string | null;
+  block_count: number;
+  /** Entry point of the dialogue graph, where the "▶ Старт" node points. */
+  start_block_id: string | null;
+  /** Владелец поставил бота на паузу (кнопка в мета-боте). */
+  paused?: boolean;
+  /** End of the paid period, or null when the bot is not on a clock. */
+  paid_until: string | null;
 }
 
 export interface BotWithBlocks extends Bot {
@@ -43,6 +123,32 @@ export interface ClientInfo {
 }
 
 const API_BASE = "/api";
+const SESSION_STORAGE_KEY = "bf_session_token";
+
+export interface BotSiteSettings {
+  slug: string;
+  enabled: boolean;
+  saved: boolean;
+  url: string;
+  can_publish: boolean;
+  title: string;
+  about: string;
+  seller_name: string;
+  seller_id: string;
+  seller_address: string;
+  email: string;
+  phone: string;
+  refund_text: string;
+}
+
+export interface MySuggestion {
+  id: string;
+  category: string;
+  text: string;
+  status: string;
+  done: boolean;
+  created_at: string;
+}
 
 class ApiError extends Error {
   constructor(
@@ -53,11 +159,57 @@ class ApiError extends Error {
   }
 }
 
-let initDataProvider: () => string = () => "";
+type AuthMode = { kind: "telegram-webapp"; getInitData: () => string } | { kind: "session-token"; token: string };
 
-/** Called once from App.tsx after the Telegram WebApp becomes available. */
+let auth: AuthMode = { kind: "telegram-webapp", getInitData: () => "" };
+
+/** Mini App path: called once from App.tsx after window.Telegram.WebApp is ready. */
 export function configureBuilderApi(getInitData: () => string) {
-  initDataProvider = getInitData;
+  auth = { kind: "telegram-webapp", getInitData };
+}
+
+/** Web login path: called after a successful Telegram Login Widget round trip, or on
+ * startup to restore a token already saved in localStorage. */
+export function configureSessionAuth(token: string) {
+  auth = { kind: "session-token", token };
+  localStorage.setItem(SESSION_STORAGE_KEY, token);
+}
+
+export function getStoredSessionToken(): string | null {
+  return localStorage.getItem(SESSION_STORAGE_KEY);
+}
+
+export function clearSessionAuth() {
+  localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+function authHeaders(): Record<string, string> {
+  return auth.kind === "session-token" ? { Authorization: `Bearer ${auth.token}` } : { "X-Telegram-Init-Data": auth.getInitData() };
+}
+
+/** Короткие английские ответы сервера, которые видит человек, по-русски. */
+const RU_ERRORS: Record<string, string> = {
+  "Bot not found": "Бот не найден",
+  "Not found": "Не найдено",
+  "Block not found": "Блок не найден",
+};
+
+/** Текст ошибки из ответа сервера. FastAPI при неверных данных отдаёт `detail` списком объектов —
+ * в сообщении это превращалось в «[object Object]», поэтому берём человеческую строку. */
+async function errorDetail(response: Response): Promise<string> {
+  const fallback = response.statusText || `Ошибка ${response.status}`;
+  try {
+    const body = await response.json();
+    const detail = body?.detail;
+    if (typeof detail === "string" && detail.trim()) return RU_ERRORS[detail.trim()] ?? detail;
+    if (Array.isArray(detail)) {
+      const first = detail.find((item) => item && typeof item.msg === "string");
+      if (first) return `Проверь введённые данные: ${first.msg}`;
+    }
+  } catch {
+    // response wasn't JSON: keep statusText
+  }
+  return fallback;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -65,34 +217,83 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "X-Telegram-Init-Data": initDataProvider(),
+      ...authHeaders(),
       ...options.headers,
     },
   });
 
   if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const body = await response.json();
-      detail = body.detail ?? detail;
-    } catch {
-      // response wasn't JSON — keep statusText
-    }
-    throw new ApiError(detail, response.status);
+    throw new ApiError(await errorDetail(response), response.status);
   }
 
-  if (response.status === 204) {
-    return undefined as T;
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+/** Multipart upload: kept separate from request() because it must NOT
+ * send a Content-Type header itself (the browser sets one with the right
+ * multipart boundary from the FormData body; overriding it breaks parsing
+ * on the server side). */
+async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const body = new FormData();
+  body.append("file", file);
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body,
+  });
+
+  if (!response.ok) {
+    throw new ApiError(await errorDetail(response), response.status);
   }
   return (await response.json()) as T;
 }
 
+export interface BotProfile {
+  name: string;
+  short_description: string;
+  description: string;
+}
+
+export interface TelegramLoginPayload {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+}
+
 export const builderApi = {
   getMe: () => request<ClientInfo>("/me"),
+  getPublicConfig: () => request<PublicConfig>("/config"),
+  /** Закрыть доступ по всем выданным токенам этого аккаунта. Локальной
+   * очистки мало: токен живёт тридцать дней, и за ним касса, покупатели и
+   * кнопка снятия бота с эфира. */
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
+  loginWithTelegram: (payload: TelegramLoginPayload) =>
+    request<{ token: string }>("/auth/telegram-login", { method: "POST", body: JSON.stringify(payload) }),
+
+  getSite: (botId: string) => request<BotSiteSettings>(`/bots/${botId}/site`),
+  saveSite: (botId: string, patch: Partial<BotSiteSettings>) =>
+    request<BotSiteSettings>(`/bots/${botId}/site`, { method: "PUT", body: JSON.stringify(patch) }),
+  sendSuggestion: (text: string, category: string) =>
+    request<MySuggestion>("/suggestions", { method: "POST", body: JSON.stringify({ text, category }) }),
+  mySuggestions: () => request<{ suggestions: MySuggestion[] }>("/suggestions"),
 
   listBots: () => request<Bot[]>("/bots"),
   createBot: () => request<Bot>("/bots", { method: "POST" }),
   getBot: (botId: string) => request<BotWithBlocks>(`/bots/${botId}`),
+  deleteBot: (botId: string) => request<void>(`/bots/${botId}`, { method: "DELETE" }),
+  renameBot: (botId: string, name: string) =>
+    request<Bot>(`/bots/${botId}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  setStartBlock: (botId: string, startBlockId: string | null) =>
+    request<Bot>(`/bots/${botId}`, { method: "PATCH", body: JSON.stringify({ start_block_id: startBlockId }) }),
+
+  metaBotStatus: () =>
+    request<{ configured: boolean; reachable: boolean; username: string; url: string }>(`/meta-bot/status`),
 
   publishBot: (botId: string, token: string) =>
     request<{ status: string; telegram_bot_username: string }>(`/bots/${botId}/publish`, {
@@ -102,13 +303,32 @@ export const builderApi = {
 
   listBlocks: (botId: string) => request<BotBlock[]>(`/bots/${botId}/blocks`),
 
-  createBlock: (botId: string, blockType: BlockType, content: BlockContent = {}) =>
+  createBlock: (
+    botId: string,
+    blockType: BlockType,
+    content: BlockContent = {},
+    position?: { x: number; y: number },
+  ) =>
     request<BotBlock>(`/bots/${botId}/blocks`, {
       method: "POST",
-      body: JSON.stringify({ block_type: blockType, content }),
+      body: JSON.stringify({
+        block_type: blockType,
+        content,
+        ...(position ? { position_x: position.x, position_y: position.y } : {}),
+      }),
     }),
 
-  updateBlock: (botId: string, blockId: string, patch: { content?: BlockContent; order_index?: number }) =>
+  updateBlock: (
+    botId: string,
+    blockId: string,
+    patch: {
+      content?: BlockContent;
+      order_index?: number;
+      next_block_id?: string | null;
+      position_x?: number;
+      position_y?: number;
+    },
+  ) =>
     request<BotBlock>(`/bots/${botId}/blocks/${blockId}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -117,11 +337,457 @@ export const builderApi = {
   deleteBlock: (botId: string, blockId: string) =>
     request<void>(`/bots/${botId}/blocks/${blockId}`, { method: "DELETE" }),
 
+  uploadMedia: (botId: string, file: File) =>
+    uploadFile<{ url: string; media_type: "photo" | "video" }>(`/bots/${botId}/media/upload`, file),
+
   reorderBlocks: (botId: string, items: { id: string; order_index: number }[]) =>
     request<BotBlock[]>(`/bots/${botId}/blocks/reorder`, {
       method: "PATCH",
       body: JSON.stringify({ items }),
     }),
+
+  // ---- Оформление бота в Telegram ----
+  getBotProfile: (botId: string) => request<BotProfile>(`/bots/${botId}/profile`),
+  saveBotProfile: (botId: string, payload: Partial<BotProfile>) =>
+    request<BotProfile>(`/bots/${botId}/profile`, { method: "PUT", body: JSON.stringify(payload) }),
+  uploadBotPhoto: (botId: string, file: File) => uploadFile<void>(`/bots/${botId}/profile/photo`, file),
+  removeBotPhoto: (botId: string) => request<void>(`/bots/${botId}/profile/photo`, { method: "DELETE" }),
+
+  // ---- Payments ----
+  listPaymentProviders: () => request<PaymentProviderCatalogue>("/payments/providers"),
+  getPaymentSettings: (botId: string) => request<PaymentSettings>(`/bots/${botId}/payment-settings`),
+  savePaymentSettings: (botId: string, payload: { provider: string | null; is_test: boolean; credentials?: Record<string, string> }) =>
+    request<PaymentSettings>(`/bots/${botId}/payment-settings`, { method: "PUT", body: JSON.stringify(payload) }),
+
+  getPublicationInfo: (botId: string) => request<PublicationInfo>(`/bots/${botId}/publication`),
+  startPublicationCheckout: (botId: string, provider?: string) =>
+    request<PaymentInfo>(`/bots/${botId}/publication-checkout`, {
+      method: "POST",
+      body: JSON.stringify({ provider: provider ?? null }),
+    }),
+  listBroadcasts: (botId: string) =>
+    request<{ broadcasts: BroadcastRow[] }>(`/bots/${botId}/broadcasts`),
+  getPollResults: (botId: string) =>
+    request<{ polls: PollResult[] }>(`/bots/${botId}/polls`),
+  /** Скачать заказы таблицей.
+   *
+   * Не ссылкой: API ждёт заголовок с токеном, которого у обычного `<a href>`
+   * нет, и такая ссылка просто отдала бы 401. Поэтому запрос с авторизацией,
+   * а файл отдаётся из памяти. */
+  downloadOrdersCsv: async (botId: string, filename: string) => {
+    const response = await fetch(`${API_BASE}/bots/${botId}/orders.csv`, { headers: authHeaders() });
+    if (!response.ok) throw new ApiError("Не удалось выгрузить заказы", response.status);
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
+  getBilling: (botId: string) => request<BillingState>(`/bots/${botId}/billing`),
+  startRenewalCheckout: (botId: string, provider?: string) =>
+    request<PaymentInfo>(`/bots/${botId}/renewal-checkout`, {
+      method: "POST",
+      body: JSON.stringify({ provider: provider ?? null }),
+    }),
+  getPayment: (paymentId: string) => request<PaymentInfo>(`/payments/${paymentId}`),
+  listOrders: (botId: string) => request<OrdersReport>(`/bots/${botId}/orders`),
+  crmCustomers: (params: { botId?: string; q?: string }) =>
+    request<{ customers: CrmCustomer[] }>(
+      `/crm/customers?${new URLSearchParams({ ...(params.botId ? { bot_id: params.botId } : {}), q: params.q ?? "" })}`,
+    ),
+  crmCustomer: (botId: string, userId: number) => request<CrmCard>(`/crm/customers/${botId}/${userId}`),
+  crmUpdateCustomer: (botId: string, userId: number, patch: { contact_name?: string; phone?: string; note?: string }) =>
+    request<CrmCustomer>(`/crm/customers/${botId}/${userId}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  calendar: (botId: string, start: string, days = 7) =>
+    request<CalendarView>(`/bots/${botId}/calendar?start=${start}&days=${days}`),
+  blockSlot: (botId: string, startsAt: string) =>
+    request<{ id: string }>(`/bots/${botId}/calendar/block`, { method: "POST", body: JSON.stringify({ starts_at: startsAt }) }),
+  cancelBooking: (botId: string, bookingId: string) =>
+    request<{ cancelled: boolean; informed: boolean }>(`/bots/${botId}/bookings/${bookingId}/cancel`, { method: "POST" }),
+  getBookingSchedule: (botId: string) => request<BookingSchedule>(`/bots/${botId}/booking-schedule`),
+  saveBookingSchedule: (botId: string, content: BlockContent) =>
+    request<BookingSchedule>(`/bots/${botId}/booking-schedule`, {
+      method: "PUT",
+      body: JSON.stringify({
+        weekly: content.weekly,
+        exceptions: content.exceptions ?? {},
+        slot_minutes: content.slot_minutes,
+        horizon_days: content.horizon_days,
+        notice_hours: content.notice_hours,
+        tz: content.tz,
+        reminders: content.reminders,
+      }),
+    }),
+  buttonStats: (botId: string, days = 30) =>
+    request<ButtonStats>(`/bots/${botId}/button-stats?days=${days}`),
+  listSubscribers: (botId: string) => request<SubscribersReport>(`/bots/${botId}/subscribers`),
+  broadcast: (botId: string, blockId: string, audience: "all" | "subscribers") =>
+    request<{ queued: number }>(`/bots/${botId}/broadcast`, {
+      method: "POST",
+      body: JSON.stringify({ block_id: blockId, audience }),
+    }),
+  confirmOrder: (botId: string, paymentId: string) =>
+    request<{ status: string; delivered: boolean }>(`/bots/${botId}/orders/${paymentId}/confirm`, { method: "POST" }),
+  /** Деньги двигает владелец в кабинете своей кассы, через нас они не
+   * проходили. Здесь закрывается то, чего руками не сделать: доступ в
+   * закрытый чат и статус заказа. */
+  refundOrder: (botId: string, paymentId: string) =>
+    request<{ status: string; access_revoked: boolean }>(
+      `/bots/${botId}/orders/${paymentId}/refund`, { method: "POST" },
+    ),
+  rejectOrder: (botId: string, paymentId: string) =>
+    request<{ status: string }>(`/bots/${botId}/orders/${paymentId}/reject`, { method: "POST" }),
+  /** Провести выдачу заново: после того, как продавец поправил то, из-за
+   * чего она не прошла. Отправка идёт фоном, ответ приходит сразу. */
+  redeliverOrder: (botId: string, paymentId: string) =>
+    request<{ status: string; queued: boolean }>(
+      `/bots/${botId}/orders/${paymentId}/redeliver`, { method: "POST" },
+    ),
 };
 
+export interface PaymentRegion {
+  slug: string;
+  title: string;
+}
+
+export interface PaymentProviderCatalogue {
+  providers: PaymentProviderInfo[];
+  /** Whether the constructor offers subscriptions at all. Off while the
+   * one-off sale is being shaken out, the engine keeps the feature, the
+   * editor just does not show it. */
+  subscriptions_enabled?: boolean;
+  /** Section headings for the provider grid, in display order. Comes from
+   * the server so a new gateway needs no frontend change. */
+  regions: PaymentRegion[];
+}
+
+export interface PaymentProviderInfo {
+  slug: string;
+  title: string;
+  hint: string;
+  currencies: string[];
+  /** Which `PaymentRegion` this gateway is filed under. */
+  region: string;
+  /** Whether this gateway can take money a second time, and who initiates it.
+   * "gateway": it runs the subscription itself (Telegram Stars, Stripe);
+   * "token": the first payment saves a card and the bot charges it each
+   * period (ЮKassa, CloudPayments); "none": a fresh invoice every time. */
+  recurring: "none" | "gateway" | "token";
+  /** Asked once per shop, in the settings panel. */
+  fields: PaymentField[];
+  /** Asked per product, on the payment block itself, Lava's offerId, the
+   * link a "pay by link" block points at. */
+  block_fields: PaymentField[];
+  /** False when the bot can't ask the provider whether a payment went
+   * through, so «Я оплатил» goes to the owner to confirm instead. */
+  supports_status_check: boolean;
+  /** Whether this provider posts to our callback URL at all, Stars and
+   * pay-by-link don't, so there is no address to paste anywhere. */
+  uses_callback: boolean;
+  /** Отправляем ли адрес уведомления сами, тогда владельцу вписывать
+   * ничего не нужно, и просить его об этом нельзя. */
+  sends_own_callback_url: boolean;
+  has_test_mode: boolean;
+}
+
+export interface PaymentField {
+  key: string;
+  label: string;
+  hint: string;
+  secret: boolean;
+  required?: boolean;
+}
+
+export interface PaymentSettings {
+  provider: string | null;
+  is_test: boolean;
+  /** Which credential fields already have a stored value, the values
+   * themselves never leave the server. */
+  filled_fields: string[];
+  callback_url: string | null;
+  /** Корень адресов уведомлений: чтобы показать адрес для кассы, которую
+   * настраивают прямо сейчас, а не только для уже сохранённой. */
+  callback_base: string;
+  /** Может ли касса на самом деле принять деньги: провайдер выбран **и** все
+   * его ключи заполнены. Выбранный без ключей провайдер: это не
+   * подключённая касса, а интерфейс показывал зелёное «Касса подключена»
+   * ровно по факту выбора. */
+  ready: boolean;
+  /** Готова **и** берёт настоящие деньги: тестовый режим стоит по умолчанию,
+   * и касса с заполненными ключами выглядит подключённой, пока платежи
+   * ненастоящие. */
+  live: boolean;
+  /** Каких полей не хватает, человеческими названиями. */
+  missing_fields: string[];
+}
+
+export interface PaymentInfo {
+  id: string;
+  status: "pending" | "paid" | "failed" | "refunded";
+  amount_minor: number;
+  currency: string;
+  checkout_url: string | null;
+}
+
+/** What a browser may know before anyone has logged in. The acquirer list
+ * comes from the server rather than the page so the landing's claim about
+ * "17 касс" cannot drift away from the adapters that actually exist. */
+export interface PublicConfig {
+  meta_bot_username: string;
+  payment_regions: { slug: string; title: string; gateways: string[] }[];
+  gateway_count: number;
+  /** Что стоит запуск. Пусто: запуск бесплатный (платёжных способов у
+   * платформы нет). Цифры приходят с сервера, чтобы лендинг не обещал не то,
+   * что спишется на кнопке публикации. */
+  launch_usd?: number | null;
+  renewal_usd?: number | null;
+  /** Акция первых клиентов: момент окончания (ISO, UTC) и цена «потом». Пусто: акции нет. */
+  launch_offer_ends_at?: string;
+  launch_offer_regular_price?: string;
+  pricing?: { method: string; launch: string; renewal: string; who?: string }[];
+  renewal_period_days?: number;
+  renewal_grace_days?: number;
+  /** Куда писать живому человеку, без @. Пусто не бывает. */
+  support_telegram: string;
+  support_email: string;
+  /** Кто получает деньги. Пусто, пока реквизиты не заполнены. */
+  legal_name: string;
+  /** Есть ли что открыть по ссылкам «Оферта» и «Политика». */
+  legal_documents: boolean;
+  /** Документы для подвала: путь и название. Пусто, пока реквизиты не
+   * заполнены. Отсутствует у старого сервера: тогда ссылок просто нет. */
+  legal_docs?: { path: string; title: string }[];
+  /** Платёжный агент, принимающий оплату от имени владельца сервиса. */
+  payment_agent?: string;
+}
+
+export interface PublicationInfo {
+  required: boolean;
+  paid: boolean;
+  /** The first method's price, what a single-method deployment shows. */
+  price_minor: number;
+  currency: string;
+  /** Every way to pay, each with its own price: the same publication costs
+   * $9, ₸4500 and 9 USDT, which one number cannot express. */
+  methods: PublicationMethod[];
+  /** What keeping the bot on the air costs per period afterwards, 0 if the
+   * launch is all there is. Shown *before* the launch is paid for: finding
+   * out about a monthly a month later is how a refund request starts. */
+  renewal_price_minor: number;
+  renewal_period_days: number;
+  renewal_grace_days: number;
+}
+
+export interface PublicationMethod {
+  provider: string;
+  title: string;
+  price_minor: number;
+  currency: string;
+  renewal_price_minor: number;
+  /** Кому подходит способ: страны и чем платить. */
+  who?: string;
+  /** Что произойдёт после нажатия. */
+  how?: string;
+}
+
+/** Where a live bot stands with us. `state`: "off": nothing is charged per
+ * period; "active": paid; "grace": the period ended and the bot is still
+ * running on borrowed time; "suspended": off the air until it is renewed. */
+export interface BillingState {
+  state: "off" | "active" | "grace" | "suspended";
+  paid_until: string | null;
+  grace_until: string | null;
+  days_left: number | null;
+  price_minor: number;
+  currency: string;
+  period_days: number;
+}
+
+export interface CrmCustomer {
+  bot_id: string;
+  bot_name: string;
+  telegram_user_id: number;
+  name: string;
+  username: string;
+  phone: string;
+  note: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  orders?: { currency: string; count: number; total_minor: number }[];
+  bookings?: number;
+  last_booking_at?: string | null;
+}
+
+export interface CrmCard extends Omit<CrmCustomer, "orders" | "bookings"> {
+  bookings: { id: string; status: string; starts_at: string; label: string }[];
+  orders: {
+    id: string;
+    invoice_no: number;
+    status: string;
+    description: string;
+    amount_minor: number;
+    currency: string;
+    created_at: string;
+    choices: string[];
+  }[];
+}
+
+export type BookingSchedule = { configured: false } | ({ configured: true; block_id: string } & BlockContent);
+
+export interface CalendarSlot {
+  starts_at: string;
+  time: string;
+  state: "free" | "past" | "held" | "confirmed" | "blocked" | "cancelled";
+  booking_id: string | null;
+  client: string | null;
+  phone: string | null;
+  telegram_user_id: number | null;
+}
+
+export interface CalendarView {
+  tz: string;
+  configured: boolean;
+  slot_minutes: number;
+  days: { date: string; label: string; slots: CalendarSlot[] }[];
+}
+
+export interface ButtonStats {
+  days: number;
+  buttons: { block_id: string | null; block: string; label: string; clicks: number; people: number; last_at: string }[];
+}
+
+export interface OrdersReport {
+  orders: Order[];
+  /** One row per currency, a shop selling for 990 ₽ and 250 ⭐ has not
+   * earned "1240" of anything, so these are never added together. */
+  totals: { currency: string; count: number; total_minor: number }[];
+  paid_count: number;
+  paid_total_minor: number;
+}
+
+export interface Buyer {
+  /** "Дима (@dimkaqq)": name and @username, however much of each is known. */
+  title: string;
+  username: string | null;
+  telegram_user_id: number;
+}
+
+export interface Order {
+  id: string;
+  invoice_no: number;
+  status: "pending" | "paid" | "failed" | "refunded";
+  amount_minor: number;
+  currency: string;
+  description: string;
+  /** Что покупатель выбрал на кнопках с пометкой «запомнить выбор» (день, время…). */
+  choices?: string[];
+  telegram_user_id: number | null;
+  /** Who bought. Null for orders placed before the bot started recording
+   * its people. */
+  buyer: Buyer | null;
+  created_at: string;
+  paid_at: string | null;
+  /** Дошёл ли товар до покупателя. Оплаченный, но не выданный заказ
+   * выглядел в кабинете как успешный. */
+  delivered: boolean;
+  /** Бот перестал пытаться выдать, дальше нужен человек. */
+  delivery_gave_up: boolean;
+  /** When the buyer tapped «Я оплатил» on a provider we can't verify. */
+  claimed_at: string | null;
+  /** Waiting on the owner to say whether the money arrived. */
+  needs_confirmation: boolean;
+}
+
+/** 99000 -> "990" / 99050 -> "990.50": prices are shown the way they were
+ * entered, without a trailing ".00" nobody typed. */
+export function formatAmount(amountMinor: number): string {
+  const whole = Math.floor(amountMinor / 100);
+  const frac = amountMinor % 100;
+  return frac === 0 ? String(whole) : `${whole}.${String(frac).padStart(2, "0")}`;
+}
+
+/** Знак валюты там, где он привычнее кода. Тот же короткий список, что и на
+ * сервере (`payments/base.py`): предпросмотр обещал «Оплатить 990 RUB», а
+ * живой бот присылал «Оплатить 990 ₽», проверка сценария показывала не ту
+ * кнопку, которую увидит покупатель. */
+const CURRENCY_SYMBOL: Record<string, string> = {
+  RUB: "₽",
+  USD: "$",
+  EUR: "€",
+  KZT: "₸",
+  UZS: "сум",
+  UAH: "₴",
+  XTR: "⭐",
+};
+
+export function currencyUnit(currency: string): string {
+  return CURRENCY_SYMBOL[(currency || "").toUpperCase()] ?? (currency || "").toUpperCase();
+}
+
+/** «990 ₽»: сумма в минорных единицах так, как её читает человек. */
+export function money(amountMinor: number, currency: string): string {
+  return `${formatAmount(amountMinor)} ${currencyUnit(currency)}`.trim();
+}
+
 export { ApiError };
+
+
+export interface SubscribersReport {
+  subscriptions: SubscriptionRow[];
+  /** Everyone who ever wrote to the bot, newest first, a subscriber list
+   * exists at all only since the bot started recording its people. */
+  people: PersonRow[];
+  active_count: number;
+}
+
+export interface SubscriptionRow {
+  id: string;
+  title: string;
+  status: "active" | "expired" | "cancelled";
+  /** "auto" = Telegram Stars charges by itself; "renewal" = the bot
+   * re-invoices and access continues only if that invoice is paid. */
+  billing_mode: "auto" | "renewal";
+  provider: string;
+  period_days: number;
+  periods_paid: number;
+  amount_minor: number;
+  currency: string;
+  current_period_end: string;
+  created_at: string;
+  buyer: Buyer | null;
+  telegram_user_id: number;
+}
+
+/** Итоги одного опроса: вопрос, сколько ответили и как распределились. */
+export interface PollResult {
+  block_id: string;
+  question: string;
+  answered: number;
+  anonymous: boolean;
+  options: { label: string; votes: number }[];
+}
+
+export interface PersonRow {
+  telegram_user_id: number;
+  title: string;
+  username: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  blocked: boolean;
+  /** Попросил не присылать рассылку (/stop). Рассылку не получит, но
+   * покупателем быть не перестал. */
+  unsubscribed: boolean;
+}
+
+/** Чем закончилась рассылка: поставлено в очередь, ушло, ждёт, упало. */
+export interface BroadcastRow {
+  block_id: string;
+  title: string;
+  started_at: string;
+  total: number;
+  sent: number;
+  waiting: number;
+  failed: number;
+  cancelled: number;
+}

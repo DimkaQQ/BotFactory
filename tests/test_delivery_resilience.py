@@ -1,0 +1,318 @@
+"""What happens to the goods when something goes wrong around delivery.
+
+Delivery moved off the request into a background task, which fixed the
+webhook timing out — and quietly created a new way to lose a sale: the
+provider has already been told "received", so if the process dies in between,
+nothing anywhere retries. These pin the recovery.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select
+
+from app.models.bot_block import BlockType
+from app.models.payment import Payment, PaymentStatus
+from app.services import background, bot_dispatcher, payment_service
+
+CHAT_ID = 6161
+
+
+async def sold_bot(make_bot, owner):
+    return await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд", "title": "Гайд", "price": "990", "currency": "RUB"}),
+            (BlockType.delivery, {"text": "ВОТ ТОВАР"}),
+        ],
+        provider="test",
+    )
+
+
+async def order(db, bot, telegram):
+    await bot_dispatcher.process_update(
+        telegram, {"message": {"chat": {"id": CHAT_ID}, "text": "/start"}}, bot.id, db
+    )
+    return (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalar_one()
+
+
+async def test_delivery_is_recorded_so_it_is_not_repeated(db, owner, make_bot, as_bot):
+    bot, _ = await sold_bot(make_bot, owner)
+    payment = await order(db, bot, as_bot)
+
+    await payment_service.mark_paid(db, payment, "x")
+    await payment_service.resume_after_payment(db, payment)
+
+    assert "ВОТ ТОВАР" in as_bot.sent()
+    assert (payment.meta or {}).get("delivered_at"), "выдача должна отмечаться, иначе её повторят"
+
+
+async def test_a_paid_order_never_handed_over_is_delivered_on_the_next_start(db, owner, make_bot, as_bot):
+    """The exact shape of a restart mid-delivery: paid, but no delivery mark."""
+    bot, _ = await sold_bot(make_bot, owner)
+    payment = await order(db, bot, as_bot)
+    await payment_service.mark_paid(db, payment, "x")
+    # Backdate it past the "might still be in flight right now" window.
+    await db.execute(
+        Payment.__table__.update()
+        .where(Payment.id == payment.id)
+        .values(paid_at=payment.paid_at.replace(year=payment.paid_at.year - 1))
+    )
+    await db.commit()
+    as_bot.reset_mock()
+
+    await payment_service.redeliver_undelivered()
+
+    assert "ВОТ ТОВАР" in as_bot.sent(), "оплаченный, но не выданный заказ должен доехать"
+
+
+async def test_a_delivered_order_is_not_delivered_again_on_restart(db, owner, make_bot, as_bot):
+    bot, _ = await sold_bot(make_bot, owner)
+    payment = await order(db, bot, as_bot)
+    await payment_service.mark_paid(db, payment, "x")
+    await payment_service.resume_after_payment(db, payment)
+    as_bot.reset_mock()
+
+    await payment_service.redeliver_undelivered()
+
+    assert as_bot.sent() == []
+
+
+async def test_deleting_the_block_after_an_order_does_not_swallow_the_goods(db, owner, make_bot, as_bot):
+    """Editing the canvas is a normal thing to do while an order is open, and
+    the landing page promises edits apply immediately. Losing the delivery
+    target must not mean the buyer pays and hears nothing."""
+    bot, blocks = await sold_bot(make_bot, owner)
+    payment = await order(db, bot, as_bot)
+
+    # The shop deletes the delivery block; the payment block's next_block_id
+    # becomes NULL through ON DELETE SET NULL.
+    await db.delete(blocks[1])
+    await db.commit()
+    as_bot.reset_mock()
+
+    await payment_service.mark_paid(db, payment, "x")
+    await payment_service.resume_after_payment(db, payment)
+
+    said = " ".join(as_bot.sent())
+    assert "Оплата получена" in said
+    # The buyer is told a person is coming, rather than being left with a
+    # receipt and silence.
+    assert "продавец" in said.lower()
+
+
+async def test_one_chat_is_processed_in_order(db, owner, make_bot, as_bot):
+    """Answering the webhook immediately gave up the ordering Telegram used
+    to provide by waiting for each update in turn."""
+    order_seen: list[int] = []
+
+    async def slow(index: int) -> None:
+        await asyncio.sleep(0.03 if index == 0 else 0)
+        order_seen.append(index)
+
+    for index in range(5):
+        background.spawn(slow(index), name=f"t{index}", key="chat-1")
+    await background.wait_for_all()
+
+    assert order_seen == [0, 1, 2, 3, 4]
+
+
+async def test_redelivery_finds_an_old_order_behind_newer_delivered_ones(db, owner, make_bot, as_bot):
+    """The undelivered one is not necessarily recent.
+
+    Filtering `delivered_at` in Python *after* LIMIT meant a single stranded
+    order sitting behind a page of delivered ones was never found at all.
+    """
+    bot, _ = await sold_bot(make_bot, owner)
+    stranded = await order(db, bot, as_bot)
+    await payment_service.mark_paid(db, stranded, "x")
+    await db.execute(
+        Payment.__table__.update()
+        .where(Payment.id == stranded.id)
+        .values(paid_at=stranded.paid_at.replace(year=stranded.paid_at.year - 1))
+    )
+    await db.commit()
+
+    # The decoys this test needs, built here rather than borrowed from
+    # whatever the database happens to hold: three *newer, delivered* orders
+    # that a "LIMIT then filter in Python" query would fill its page with,
+    # leaving the stranded one unseen. Without them the test passed either
+    # way and proved nothing.
+    for index in range(3):
+        decoy = Payment(
+            kind=stranded.kind,
+            status=PaymentStatus.paid,
+            provider="test",
+            amount_minor=stranded.amount_minor,
+            currency=stranded.currency,
+            description=f"уже выдан {index}",
+            bot_id=bot.id,
+            block_id=stranded.block_id,
+            chat_id=CHAT_ID + 100 + index,
+            # Older than the one-minute "might still be in flight" cutoff,
+            # so they really are candidates, but far newer than the
+            # stranded order — which is the whole point.
+            paid_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+            meta={"delivered_at": datetime.now(timezone.utc).isoformat()},
+        )
+        db.add(decoy)
+    await db.commit()
+    as_bot.reset_mock()
+
+    # A limit of one, with three newer *delivered* orders ahead of it — only
+    # the SQL-side filter can see past them.
+    await payment_service.redeliver_undelivered(limit=1)
+
+    assert "ВОТ ТОВАР" in as_bot.sent()
+
+
+async def test_queued_work_cancelled_before_it_runs_is_closed_cleanly(db):
+    """Cancelling a task still waiting for its predecessor used to leave the
+    coroutine un-awaited — a bare warning, and the update simply gone."""
+    import warnings
+
+    ran: list[int] = []
+
+    async def slow() -> None:
+        await asyncio.sleep(5)
+        ran.append(0)
+
+    async def queued() -> None:
+        ran.append(1)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        background.spawn(slow(), name="head", key="chat-x")
+        background.spawn(queued(), name="tail", key="chat-x")
+        await asyncio.sleep(0.05)
+        await background.cancel_all()
+
+    assert ran == []
+
+
+async def test_a_long_invoice_does_not_hand_the_goods_over_free(db, owner, make_bot, as_bot):
+    """Продающий текст на 5600 символов — и товар уходил бесплатно.
+
+    Счёт отправлялся одним куском, Telegram отвергал всё, что длиннее 4096,
+    исключение ловил общий `except` в `walk_chain` — и цепочка шла дальше по
+    стрелке, то есть в блок «Выдача».
+    """
+    bot, _ = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд «Как открыть кофейню». " * 200, "title": "Гайд", "price": "990"}),
+            (BlockType.delivery, {"text": "ВОТ ТОВАР"}),
+        ],
+        provider="test",
+    )
+
+    async def refuse_long(chat_id, text, **kwargs):
+        if len(text) > 4096:
+            raise RuntimeError("Telegram: message is too long")
+
+    as_bot.send_message.side_effect = refuse_long
+
+    await bot_dispatcher.process_update(
+        as_bot, {"message": {"chat": {"id": CHAT_ID}, "from": {"id": 900_061_610}, "text": "/start"}}, bot.id, db
+    )
+
+    assert "ВОТ ТОВАР" not in as_bot.sent(), "товар ушёл, а счёт — нет"
+    payment = (await db.execute(select(Payment).where(Payment.bot_id == bot.id))).scalar_one()
+    assert payment.status == PaymentStatus.pending
+    # Длинный текст не потерян — он просто приходит несколькими сообщениями.
+    assert any("кофейню" in m for m in as_bot.sent())
+
+
+async def test_telegram_refusing_the_invoice_stops_the_chain(db, owner, make_bot, as_bot, monkeypatch):
+    """«429 Too Many Requests» на счёте — самый частый случай того же самого."""
+    bot, _ = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд", "title": "Гайд", "price": "990"}),
+            (BlockType.delivery, {"text": "ВОТ ТОВАР"}),
+        ],
+        provider="test",
+    )
+
+    sent: list[str] = []
+    told: list[str] = []
+
+    async def refuse(chat_id, text, **kwargs):
+        # Отказывает только сам счёт: извинение покупателю должно уйти.
+        if text == "Гайд":
+            raise RuntimeError("Telegram: Too Many Requests: retry after 12")
+        sent.append(text)
+
+    async def remember(db_, bot_id_, message):
+        told.append(message)
+
+    as_bot.send_message.side_effect = refuse
+    monkeypatch.setattr(bot_dispatcher, "_tell_owner", remember)
+
+    await bot_dispatcher.process_update(
+        as_bot, {"message": {"chat": {"id": CHAT_ID}, "from": {"id": 900_061_611}, "text": "/start"}}, bot.id, db
+    )
+
+    assert "ВОТ ТОВАР" not in sent, "товар ушёл, хотя счёт не дошёл"
+    # И покупатель, и владелец узнают — молча терять продажу нельзя.
+    assert any("Не получилось показать оплату" in m for m in sent)
+    assert told and "счёт не дошёл" in told[0], f"владельцу не сказали: {told}"
+
+
+async def test_a_chain_that_hands_over_nothing_tells_the_owner(db, owner, make_bot, as_bot, monkeypatch):
+    """Блок «Выдача» удалили после продажи — и заказ считался успешным.
+
+    Цепочка отрабатывала без единой ошибки: покупатель получал «Спасибо за
+    покупку!», заказ помечался доставленным, автодозвон его не трогал, и не
+    узнавал никто.
+    """
+    bot, blocks = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд", "title": "Гайд", "price": "990"}),
+            (BlockType.description, {"text": "Спасибо за покупку!"}),
+        ],
+        provider="test",
+    )
+    payment = await order(db, bot, as_bot)
+    await payment_service.mark_paid(db, payment, "x")
+
+    told: list[str] = []
+
+    async def remember(db_, payment_, *, reason="missing"):
+        told.append(reason)
+
+    monkeypatch.setattr(payment_service, "_notify_owner_of_stuck_delivery", remember)
+
+    await payment_service.resume_after_payment(db, payment)
+
+    assert "Спасибо за покупку!" in as_bot.sent()
+    assert told == ["nothing"], f"продавцу не сказали, что выдавать было нечего: {told}"
+
+
+async def test_a_link_in_the_text_counts_as_delivery(db, owner, make_bot, as_bot, monkeypatch):
+    """Половина продавцов выдаёт ссылкой в обычном тексте — предупреждение с
+    каждой такой продажи было бы хуже, чем его отсутствие."""
+    bot, _ = await make_bot(
+        owner,
+        [
+            (BlockType.payment, {"text": "Гайд", "title": "Гайд", "price": "990"}),
+            (BlockType.description, {"text": "Спасибо! Вот гайд: https://files.example.com/guide.pdf"}),
+        ],
+        provider="test",
+    )
+    payment = await order(db, bot, as_bot)
+    await payment_service.mark_paid(db, payment, "x")
+
+    told: list[str] = []
+
+    async def remember(db_, payment_, *, reason="missing"):
+        told.append(reason)
+
+    monkeypatch.setattr(payment_service, "_notify_owner_of_stuck_delivery", remember)
+
+    await payment_service.resume_after_payment(db, payment)
+
+    assert told == [], f"предупреждение на нормальной выдаче: {told}"

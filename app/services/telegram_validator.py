@@ -19,8 +19,6 @@ import httpx
 
 from app.config import get_settings
 
-TELEGRAM_API_BASE = "https://api.telegram.org"
-
 
 @dataclass
 class TelegramMe:
@@ -42,19 +40,37 @@ async def validate_bot_token(token: str) -> TelegramMe:
 
     token = token.strip()
     if not token or ":" not in token:
-        raise InvalidBotToken("Токен пустой или имеет неверный формат")
+        raise InvalidBotToken(
+            "Токен выглядит неверно. Он состоит из цифр, двоеточия и длинной строки, например 123456789:AAH… — "
+            "скопируй его целиком из сообщения @BotFather."
+        )
 
-    url = f"{TELEGRAM_API_BASE}/bot{token}/getMe"
+    api_base = get_settings().telegram_api_base_url or "https://api.telegram.org"
+    url = f"{api_base.rstrip('/')}/bot{token}/getMe"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url)
     except httpx.HTTPError as exc:
-        raise InvalidBotToken(f"Не удалось связаться с Telegram API: {exc}") from exc
+        raise InvalidBotToken(
+            "Не получилось связаться с Telegram, чтобы проверить токен. Попробуй ещё раз через минуту."
+        ) from exc
 
-    data = response.json()
-    if not data.get("ok"):
-        description = data.get("description", "Неизвестная ошибка")
-        raise InvalidBotToken(f"Telegram отклонил токен: {description}")
+    try:
+        data = response.json()
+    except ValueError as exc:
+        # Прокси или сбой на их стороне отдали не JSON — это «не удалось проверить», а не 500.
+        raise InvalidBotToken(
+            "Не получилось связаться с Telegram, чтобы проверить токен. Попробуй ещё раз через минуту."
+        ) from exc
+    if not isinstance(data, dict) or not data.get("ok"):
+        data = data if isinstance(data, dict) else {}
+        description = str(data.get("description", ""))
+        if "unauthorized" in description.lower() or "not found" in description.lower():
+            raise InvalidBotToken(
+                "Telegram не узнал этот токен. Проверь, что скопировал его целиком, без пробелов. "
+                "Если ты пересоздавал токен в @BotFather, нужен новый — старый уже не работает."
+            )
+        raise InvalidBotToken(f"Telegram отклонил токен: {description or 'неизвестная ошибка'}")
 
     result = data["result"]
     if not result.get("is_bot"):
@@ -98,6 +114,45 @@ def validate_init_data(init_data: str, *, max_age_seconds: int | None = 86400) -
         auth_date = int(parsed["auth_date"])
         if time.time() - auth_date > max_age_seconds:
             raise InvalidInitData("initData is too old")
+
+    return parsed
+
+
+def validate_login_widget_data(data: dict, *, max_age_seconds: int = 86400) -> dict:
+    """Verify the HMAC signature of a Telegram Login Widget payload.
+
+    See: https://core.telegram.org/widgets/login#checking-authorization
+
+    Deliberately a *different* signing scheme from `validate_init_data`
+    above — same "sorted key=value lines" data-check-string construction,
+    but the secret is plain SHA-256(bot_token), not
+    HMAC("WebAppData", bot_token). Mixing the two up silently accepts
+    forged logins, so they're kept as two separate functions rather than
+    one "clever" parameterized one.
+    """
+
+    settings = get_settings()
+    if not settings.meta_bot_token:
+        raise InvalidInitData("META_BOT_TOKEN is not configured on the server")
+
+    parsed = {k: v for k, v in data.items() if v is not None}
+    received_hash = parsed.pop("hash", None)
+    if not received_hash:
+        raise InvalidInitData("Login payload is missing hash")
+
+    data_check_string = "\n".join(f"{key}={value}" for key, value in sorted(parsed.items()))
+
+    secret_key = hashlib.sha256(settings.meta_bot_token.encode()).digest()
+    computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(computed_hash, str(received_hash)):
+        raise InvalidInitData("Login payload signature is invalid")
+
+    if "auth_date" in parsed:
+        import time
+
+        if time.time() - int(parsed["auth_date"]) > max_age_seconds:
+            raise InvalidInitData("Login payload is too old")
 
     return parsed
 

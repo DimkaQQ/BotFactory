@@ -33,6 +33,19 @@ export function useTelegramWebApp() {
   return { webApp, ready, initData, user };
 }
 
+/** Open a URL in the system browser, used to hand the user off from the
+ * Mini App "dashboard" to the full web constructor. `Telegram.WebApp.openLink`
+ * leaves the Mini App (unlike a plain <a>, which Telegram would open in its
+ * own in-app browser); falls back to window.open outside Telegram. */
+export function openExternal(url: string) {
+  const webApp = window.Telegram?.WebApp;
+  if (webApp?.openLink) {
+    webApp.openLink(url);
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 declare global {
   interface Window {
     Telegram?: {
@@ -44,6 +57,10 @@ declare global {
         ready: () => void;
         expand: () => void;
         close: () => void;
+        /** "light" | "dark": Telegram's own resolved theme, used by src/theme.ts. */
+        colorScheme?: "light" | "dark";
+        onEvent?: (event: string, cb: () => void) => void;
+        offEvent?: (event: string, cb: () => void) => void;
         MainButton: {
           text: string;
           show: () => void;
@@ -52,6 +69,20 @@ declare global {
           offClick: (cb: () => void) => void;
         };
         showAlert?: (message: string) => void;
+        showConfirm?: (message: string, callback: (confirmed: boolean) => void) => void;
+        isVersionAtLeast?: (version: string) => boolean;
+        openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
+        BackButton: {
+          isVisible: boolean;
+          show: () => void;
+          hide: () => void;
+          onClick: (cb: () => void) => void;
+          offClick: (cb: () => void) => void;
+        };
+        HapticFeedback?: {
+          impactOccurred: (style: "light" | "medium" | "heavy" | "rigid" | "soft") => void;
+          notificationOccurred: (type: "error" | "success" | "warning") => void;
+        };
       };
     };
   }

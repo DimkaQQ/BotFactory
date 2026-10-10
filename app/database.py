@@ -7,7 +7,16 @@ from app.config import get_settings
 
 settings = get_settings()
 
-engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
+engine = create_async_engine(
+    settings.database_url,
+    echo=False,
+    pool_pre_ping=True,
+    # Один воркер обслуживает вебхуки всех ботов сразу; пул по умолчанию
+    # (5+10) исчерпывался на всплеске диалогов и ронял заодно /health.
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=15,
+)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

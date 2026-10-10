@@ -1,0 +1,122 @@
+/**
+ * "Точно удалить?": the app's own dialog, not the browser's.
+ *
+ * Inside Telegram this defers to `showConfirm`, which draws the platform's
+ * native sheet. Outside it, the fallback used to be `window.confirm`: a grey
+ * OS box in a typeface the app does not use, anchored to the top of the
+ * window, with buttons labelled by the browser's locale rather than ours —
+ * and it blocks the whole page while it is up. Every destructive action in
+ * the product goes through here, so that box was the last thing a user saw
+ * before losing a bot or a block.
+ *
+ * Built imperatively rather than as a React component because it is called
+ * from plain event handlers deep in the tree (`await confirmDialog(...)`),
+ * where there is no render to hang a portal off. `<dialog showModal()>`
+ * gives focus trapping, Esc-to-dismiss and the top layer for free.
+ */
+
+const CANCEL = "Отмена";
+//: Подпись по умолчанию: «Удалить», потому что почти всё здесь удаление.
+//: Но она была захардкожена на ВСЕ подтверждения, и рассылка спрашивала
+//: «Отправить это сообщение всем? Отменить будет нельзя» с красной кнопкой
+//: «Удалить» под вопросом. Человек, который не пишет код, на такую кнопку
+//: не нажмёт никогда: и рассылка, одна из причин купить продукт, была
+//: заблокирована одним словом.
+const CONFIRM = "Удалить";
+
+function webConfirm(message: string, confirmLabel: string, danger: boolean): Promise<boolean> {
+  // No document (SSR, a test runner without a DOM), refuse rather than
+  // silently proceeding with something destructive.
+  if (typeof document === "undefined" || typeof HTMLDialogElement === "undefined") {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "confirm-dialog";
+
+    const text = document.createElement("p");
+    text.className = "confirm-dialog__text";
+    text.textContent = message;
+
+    const row = document.createElement("div");
+    row.className = "confirm-dialog__actions";
+
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "confirm-dialog__button";
+    cancel.textContent = CANCEL;
+
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className = `confirm-dialog__button${danger ? " confirm-dialog__button--danger" : " confirm-dialog__button--go"}`;
+    confirm.textContent = confirmLabel;
+
+    row.append(cancel, confirm);
+    dialog.append(text, row);
+    document.body.appendChild(dialog);
+
+    let answer = false;
+    const close = (value: boolean) => {
+      answer = value;
+      dialog.close();
+    };
+    cancel.addEventListener("click", () => close(false));
+    confirm.addEventListener("click", () => close(true));
+    // Esc and a click on the backdrop both mean "no": the safe answer is
+    // always the one that changes nothing.
+    dialog.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      close(false);
+    });
+    dialog.addEventListener("click", (e) => {
+      if (e.target === dialog) close(false);
+    });
+    dialog.addEventListener("close", () => {
+      dialog.remove();
+      resolve(answer);
+    });
+
+    dialog.showModal();
+    // Focus lands on "Отмена", not on the destructive button: an Enter
+    // pressed out of habit must not delete anything.
+    cancel.focus();
+  });
+}
+
+/** Native-feeling confirmation: Telegram's own popup inside the Mini App,
+ * the app's dialog everywhere else. */
+/**
+ * `confirmLabel`: что написано на кнопке согласия. По умолчанию «Удалить»,
+ * потому что большая часть подтверждений здесь про удаление; всё остальное
+ * обязано называть своё действие своим именем.
+ */
+export function confirmDialog(message: string, confirmLabel: string = CONFIRM): Promise<boolean> {
+  const webApp = window.Telegram?.WebApp;
+  // Нативный лист годится только внутри настоящего Mini App. Скрипт Telegram
+  // на странице создаёт объект `Telegram.WebApp` и в обычном браузере тоже —
+  // с версией 6.0 и функцией showConfirm, которая при вызове бросает
+  // WebAppMethodUnsupported (окна поддерживаются с 6.2). Раньше хватало
+  // проверки «функция есть», и в браузере кнопки «Выйти», «Удалить» и
+  // «Разослать» молча ничего не делали: исключение уходило в никуда.
+  const native =
+    !!webApp?.showConfirm &&
+    !!webApp.initData &&
+    (typeof webApp.isVersionAtLeast !== "function" || webApp.isVersionAtLeast("6.2"));
+  if (native) {
+    // Нативный лист Telegram рисует свои «ОК/Отмена» и подписи не принимает,
+    // поэтому глагол уходит в сам вопрос, иначе внутри Telegram кнопка
+    // осталась бы безымянной.
+    const text = confirmLabel === CONFIRM ? message : `${message}\n\n${confirmLabel}?`;
+    return new Promise((resolve) => {
+      try {
+        webApp!.showConfirm!(text, resolve);
+      } catch {
+        // Старый клиент Telegram или окно уже открыто: свой диалог лучше,
+        // чем молчание на кнопке, которая что-то удаляет.
+        void webConfirm(message, confirmLabel, confirmLabel === CONFIRM).then(resolve);
+      }
+    });
+  }
+  return webConfirm(message, confirmLabel, confirmLabel === CONFIRM);
+}

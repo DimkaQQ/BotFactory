@@ -1,27 +1,84 @@
+"""Telegram updates for published client bots.
+
+Two things happen before an update is believed, and one after.
+
+Before: the URL carries the bot's id, which is a UUID4 and therefore hard to
+guess — but "hard to guess" is not authentication, and a forged update here
+could impersonate anyone, including the shop owner confirming their own
+payment. So Telegram is asked to echo a per-bot secret on every delivery
+(`secret_token`), and an update that fails to carry it is refused.
+
+After: the dialogue is sent from a background task rather than from this
+request. Blocks are paced with typing delays and a "Пауза" block can hold
+for fifteen seconds, which is far longer than Telegram waits before
+redelivering the update — and a redelivered update replays the whole
+conversation.
+"""
+
+import hmac
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Header, HTTPException, status
 
-from app.database import get_db
-from app.services import bot_dispatcher, bot_registry
+from app.database import AsyncSessionLocal
+from app.services import background, bot_dispatcher, bot_registry
+from app.services.security import webhook_secret
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["webhook"])
 
 
+async def _dispatch(bot_id: uuid.UUID, update: dict) -> None:
+    """Own session: the request that scheduled this has already returned, and
+    its session is closed."""
+    async with AsyncSessionLocal() as db:
+        bot_instance = await bot_registry.get_or_create(bot_id, db)
+        if bot_instance is None:
+            return
+        try:
+            await bot_dispatcher.process_update(bot_instance, update, bot_id, db)
+        except Exception:
+            # One bot's broken dialogue must never affect another's.
+            logger.exception("Error handling update for bot %s", bot_id)
+
+
 @router.post("/webhook/{bot_id}")
-async def handle_update(bot_id: uuid.UUID, update: dict, db: AsyncSession = Depends(get_db)) -> dict:
-    bot_instance = await bot_registry.get_or_create(bot_id, db)
-    if bot_instance is None:
-        return {"ok": False}
+async def handle_update(
+    bot_id: uuid.UUID,
+    update: dict,
+    x_telegram_bot_api_secret_token: str | None = Header(default=None),
+) -> dict:
+    # A missing header is refused exactly like a wrong one. Letting it
+    # through — which this route briefly did, as a migration path for bots
+    # published before secrets existed — is not a smaller hole than having no
+    # check at all: an attacker simply omits the header. Those older bots are
+    # instead re-registered at startup (see app/main.py), so nothing has to be
+    # trusted on the way past.
+    if x_telegram_bot_api_secret_token is None or not hmac.compare_digest(
+        x_telegram_bot_api_secret_token.encode(), webhook_secret(bot_id).encode()
+    ):
+        logger.warning("Rejected an update for bot %s: bad or missing secret token", bot_id)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bad secret token")
 
-    try:
-        await bot_dispatcher.process_update(bot_instance, update, bot_id, db)
-    except Exception:
-        # An error in one bot's dialogue must never take down the shared webhook.
-        logger.exception("Error handling update for bot %s", bot_id)
-
+    # Keyed on the chat, so one conversation's updates keep their order even
+    # though the request no longer waits for them.
+    chat = _chat_of(update)
+    background.spawn(
+        _dispatch(bot_id, update),
+        name=f"update:{bot_id}",
+        key=f"{bot_id}:{chat}" if chat is not None else None,
+    )
     return {"ok": True}
+
+
+def _chat_of(update: dict) -> int | None:
+    for field in ("message", "edited_message", "callback_query"):
+        payload = update.get(field) or {}
+        message = payload.get("message") if field == "callback_query" else payload
+        chat = ((message or {}).get("chat") or {}).get("id")
+        if chat is not None:
+            return chat
+    pre_checkout = update.get("pre_checkout_query") or {}
+    return (pre_checkout.get("from") or {}).get("id")

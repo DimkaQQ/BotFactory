@@ -1,0 +1,3531 @@
+openapi: 3.1.0
+info:
+  title: Robokassa API
+  version: 1.3.0
+  description: |
+    OpenAPI-спецификация платежных интерфейсов Robokassa. Она описывает запуск
+    платежей, выставление счетов, проверку состояния операций, возвраты,
+    холдирование, рекуррентные платежи, SMS-уведомления и обработку callback-запросов.
+
+    Правила формирования подписи, фискализации, настройки уведомлений и подключения
+    отдельных возможностей приведены в документации Robokassa.
+  contact:
+    name: Robokassa
+    url: https://docs.robokassa.ru/
+x-robokassa-authentication:
+  description: |
+    Robokassa использует зависящие от запроса подписи в query-параметрах,
+    form-телах, JWT или JWS. Эти механизмы нельзя точно описать стандартным
+    OpenAPI Security Scheme, поэтому способ проверки явно указан у каждой
+    операции в расширении `x-robokassa-authentication`.
+  standardSecuritySchemeSupported: false
+  operationExtension: x-robokassa-authentication
+  types:
+    request-signature: Контрольная сумма запроса, рассчитанная с паролем магазина.
+    jwt: JWT, подписанный паролем магазина.
+    jws: JWS, подпись которого проверяется сертификатом Robokassa.
+    none: Метод не требует криптографической аутентификации запроса.
+x-robokassa-contract-verification:
+  date: 2026-08-10
+  environment: production
+  verifiedOperations:
+    - createPayment
+    - createPaymentPost
+    - createInvoice
+    - deactivateInvoice
+    - getInvoiceInformation
+    - listInvoices
+    - notifyInvoiceCustomer
+    - getCurrencies
+    - getOperationState
+    - confirmHold
+    - cancelHold
+    - createCoFPayment
+    - createCoFPaymentPost
+    - createSplitPayment
+    - createSplitPaymentPost
+  partiallyVerifiedOperations:
+    - operation: createRefund
+      result: Получен HTTP 401 — API возвратов не подключен магазину или Password3 не активирован.
+    - operation: getRefundState
+      result: Подтвержден HTTP 400 для несуществующего requestId; успешная заявка не создавалась.
+    - operation: paymentSuccessRedirectGet
+      result: Контракт описан по документации; завершенный платеж для проверки редиректа не выполнялся.
+    - operation: paymentSuccessRedirectPost
+      result: Контракт описан по документации; завершенный платеж для проверки редиректа не выполнялся.
+    - operation: paymentFailRedirectGet
+      result: Контракт описан по документации; прерванный платеж для проверки редиректа не выполнялся.
+    - operation: paymentFailRedirectPost
+      result: Контракт описан по документации; прерванный платеж для проверки редиректа не выполнялся.
+    - operation: createRecurringPayment
+      result: Запрос подтвержден официальным WordPress-плагином; повторное списание не выполнялось.
+    - operation: sendSmsGet
+      result: Запрос подтвержден официальным WordPress-плагином; SMS не отправлялось.
+    - operation: sendSmsPost
+      result: POST описан документацией; плагин использует GET-вариант.
+    - operation: paymentResult2Notification
+      result: Контракт описан по документации; уведомление не получалось в ходе проверки.
+    - operation: registerFiscalReceipt
+      result: Контракт описан по документации сервиса; реальный чек не регистрировался.
+  notes:
+    - >-
+      CreateInvoice без IsTest проверен с основным Паролем#1; созданный счет
+      после проверки деактивирован.
+    - >-
+      CreateInvoice с IsTest=1 и основным Паролем#1 отклоняется; успешный запрос
+      с тестовым Паролем#1 не выполнялся.
+    - Запуск оплаты проверен до отображения платежной страницы, без проведения платежа.
+    - Успешный OpStateExt проверен на существующей завершенной операции; чувствительные значения не сохранялись.
+    - Confirm проверен первым и повторным вызовом; повторного списания не произошло.
+    - После Cancel проверен переход состояния операции из 50 в 60.
+    - Реальный возврат средств не выполнялся.
+x-robokassa-retry-policy:
+  confirmHold:
+    automaticRetry: false
+    onFalse:
+      action: checkOperationState
+    states:
+      "20": Операция всё ещё в HOLD. Не повторять без явного решения пользователя.
+      "50": Операция обрабатывается. Проверить статус позже.
+      "60": Confirm не требуется, деньги возвращены покупателю.
+      "100": Confirm уже выполнен. Повторять нельзя.
+  cancelHold:
+    automaticRetry: false
+    onFalse:
+      action: checkOperationState
+    states:
+      "20": Операция всё ещё в HOLD. Не повторять без явного решения пользователя.
+      "50": Операция обрабатывается. Проверить статус позже.
+      "60": Cancel успешно выполнен, деньги возвращены покупателю.
+      "100": Операция уже подтверждена, выполнить Cancel нельзя.
+externalDocs:
+  description: Документация Robokassa
+  url: https://docs.robokassa.ru/ru/
+tags:
+  - name: Payments
+    description: Запуск оплаты через платежную страницу.
+  - name: Invoices
+    description: Выставление счетов через Invoice API.
+  - name: Operations
+    description: Получение состояния операций.
+  - name: Reference
+    description: Справочные методы Robokassa.
+  - name: Refunds
+    description: Создание возвратов и получение их состояния.
+  - name: Holding
+    description: Подтверждение и отмена двухстадийных платежей.
+  - name: Recurring
+    description: Повторные списания по рекуррентным платежам.
+  - name: SplitPayments
+    description: Создание платежей с распределением суммы между магазинами.
+  - name: Messaging
+    description: Отправка SMS через дополнительный сервис Robokassa.
+  - name: Fiscalization
+    description: Отдельная регистрация фискальных чеков после оплаты.
+paths:
+  /Merchant/Index.aspx:
+    get:
+      tags:
+        - Payments
+      summary: Открыть платежную страницу
+      description: |
+        Создает операцию оплаты и открывает платежную страницу Robokassa.
+        Для тестового платежа передайте `IsTest=1`.
+
+        Значение `SignatureValue` рассчитывается на стороне магазина. Базовая
+        строка имеет вид
+        `MerchantLogin:OutSum:InvId:модификаторы:Пароль#1:Shp_*`.
+
+        Дополнительные параметры с префиксом `Shp_` разрешены. Их необходимо
+        включать в подпись в алфавитном порядке.
+      operationId: createPayment
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://auth.robokassa.ru
+      parameters:
+        - $ref: "#/components/parameters/MerchantLogin"
+        - $ref: "#/components/parameters/OutSum"
+        - $ref: "#/components/parameters/SignatureValue"
+        - $ref: "#/components/parameters/InvId"
+        - name: Description
+          in: query
+          description: Название товара или услуги, без специальных символов.
+          schema:
+            type: string
+            maxLength: 100
+        - name: Email
+          in: query
+          description: Email покупателя для чеков и уведомлений.
+          schema:
+            type: string
+            format: email
+        - name: IncCurrLabel
+          in: query
+          description: Предлагаемый способ оплаты из интерфейса GetCurrencies.
+          schema:
+            type: string
+        - name: Culture
+          in: query
+          description: Язык платежной страницы.
+          schema:
+            type: string
+            enum:
+              - ru
+              - en
+        - name: Encoding
+          in: query
+          description: Кодировка передаваемых данных.
+          schema:
+            type: string
+            default: UTF-8
+        - name: IsTest
+          in: query
+          description: Признак тестового режима.
+          schema:
+            type: integer
+            enum:
+              - 0
+              - 1
+        - name: ExpirationDate
+          in: query
+          description: Крайний срок оплаты в формате `YYYY-MM-DDThh:mm`.
+          schema:
+            type: string
+            example: 2026-07-22T18:30
+        - name: Receipt
+          in: query
+          description: Фискальные данные — минимизированный JSON в URL-кодировке.
+          schema:
+            type: string
+        - name: IsWithoutFreeSale
+          in: query
+          description: |
+            Если `true` и параметр `Receipt` отсутствует, автоматический чек с
+            позицией «Свободная продажа» не формируется. Параметр не участвует
+            в расчете `SignatureValue`.
+          schema:
+            type: boolean
+        - name: FiscalParentOpId
+          in: query
+          description: |
+            `OpId` родительской операции для связанной фискализации. Используется,
+            например, чтобы связать аванс с последующей доплатой. Параметр не
+            участвует в расчете `SignatureValue`.
+          schema:
+            type: integer
+            format: int64
+        - name: StepByStep
+          in: query
+          description: Признак двухстадийной оплаты.
+          schema:
+            type: boolean
+        - name: PaymentMethods
+          in: query
+          description: Разрешенные способы оплаты. Параметр можно повторять.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+        - name: ResultUrl2
+          in: query
+          description: Дополнительный адрес серверного уведомления.
+          schema:
+            type: string
+            format: uri
+        - name: SuccessUrl2
+          in: query
+          description: Дополнительный адрес возврата после успешной оплаты.
+          schema:
+            type: string
+            format: uri
+        - name: SuccessUrl2Method
+          in: query
+          description: Метод запроса к SuccessUrl2.
+          schema:
+            $ref: "#/components/schemas/RedirectMethod"
+        - name: FailUrl2
+          in: query
+          description: Дополнительный адрес возврата после ошибки оплаты.
+          schema:
+            type: string
+            format: uri
+        - name: FailUrl2Method
+          in: query
+          description: Метод запроса к FailUrl2.
+          schema:
+            $ref: "#/components/schemas/RedirectMethod"
+        - name: Token
+          in: query
+          description: Токен сохраненной карты.
+          schema:
+            type: string
+        - name: Recurring
+          in: query
+          description: Признак периодического платежа.
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: |
+            HTML-страница платежной формы или страница с сообщением об ошибке
+            параметров. При неверной подписи код прикладной ошибки передается
+            внутри контекста страницы, например `RoboxContext.error.code=29`.
+          content:
+            text/html:
+              schema:
+                type: string
+        "302":
+          description: |
+            Запрос обработан. В заголовке `Location` возвращается относительный
+            URL платежной страницы. Этот ответ не подтверждает создание или
+            оплату операции.
+          headers:
+            Location:
+              description: Относительный URL платежной страницы.
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+                example: /Merchant/Index/01234567-89ab-4cde-8f01-23456789abcd
+        default:
+          description: Транспортная ошибка запуска платежа.
+      x-robokassa-custom-parameters:
+        prefix: Shp_
+        description: Пользовательские параметры возвращаются в уведомлениях без изменений.
+      x-robokassa-signature:
+        parameter: SignatureValue
+        password: Пароль#1
+        holdingFormulaWithoutReceipt: MerchantLogin:OutSum:InvId:true:Пароль#1
+        holdingFormulaWithReceipt: MerchantLogin:OutSum:InvId:Receipt:true:Пароль#1
+        holdingModifierCondition: Значение true добавляется в строку подписи только при StepByStep=true.
+        documentation: https://docs.robokassa.ru/ru/pay-interface#signature
+      x-robokassa-environment:
+        testSupported: true
+        productionSupported: true
+        note: Метод работает в тестовом и основном режиме. Тестовый режим включается параметром IsTest=1.
+    post:
+      tags:
+        - Payments
+      summary: Открыть платежную страницу через HTML-форму
+      description: |
+        POST-вариант запуска обычного платежа. Параметры передаются как
+        `application/x-www-form-urlencoded`. Формирование `SignatureValue` и
+        обработка ответа совпадают с GET-вариантом.
+      operationId: createPaymentPost
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://auth.robokassa.ru
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/PaymentStartRequest"
+      responses:
+        "200":
+          description: |
+            HTML-страница платежной формы или страница с сообщением об ошибке
+            параметров. При неверной подписи код прикладной ошибки передается
+            внутри контекста страницы, например `RoboxContext.error.code=29`.
+          content:
+            text/html:
+              schema:
+                type: string
+        "302":
+          description: |
+            Запрос обработан. В заголовке `Location` возвращается относительный
+            URL платежной страницы. Этот ответ не подтверждает создание или
+            оплату операции.
+          headers:
+            Location:
+              description: Относительный URL платежной страницы.
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+                example: /Merchant/Index/01234567-89ab-4cde-8f01-23456789abcd
+        default:
+          description: Транспортная ошибка запуска платежа.
+      x-robokassa-custom-parameters:
+        prefix: Shp_
+        description: Пользовательские параметры возвращаются в уведомлениях без изменений.
+      x-robokassa-signature:
+        parameter: SignatureValue
+        password: Пароль#1
+        holdingFormulaWithoutReceipt: MerchantLogin:OutSum:InvId:true:Пароль#1
+        holdingFormulaWithReceipt: MerchantLogin:OutSum:InvId:Receipt:true:Пароль#1
+        holdingModifierCondition: Значение true добавляется в строку подписи только при StepByStep=true.
+        documentation: https://docs.robokassa.ru/ru/pay-interface#signature
+      x-robokassa-environment:
+        testSupported: true
+        productionSupported: true
+        note: Метод работает в тестовом и основном режиме. Тестовый режим включается параметром IsTest=1.
+
+  /Fiscalization.Api.External/Receipt/Register:
+    post:
+      tags:
+        - Fiscalization
+      summary: Зарегистрировать чек после оплаты
+      description: |
+        Регистрирует один или несколько чеков для успешно оплаченных операций.
+        Метод используется, если при запуске оплаты был передан
+        `IsWithoutFreeSale=true`, а `Receipt` не передавался.
+
+        Payload собирается по схеме `FiscalReceiptRegisterPayload`. Итоговый JWT
+        передается в body как JSON-строка. JWT формируется по тем же правилам,
+        что и для Invoice API.
+      operationId: registerFiscalReceipt
+      x-robokassa-authentication:
+        type: jwt
+        required: true
+      servers:
+        - url: https://services.robokassa.ru
+      requestBody:
+        $ref: "#/components/requestBodies/InvoiceJwt"
+      responses:
+        "200":
+          description: Результат регистрации чеков.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FiscalReceiptRegisterResponse"
+              example:
+                IsSuccess: true
+                Data:
+                  ReceiptRegistrationResults:
+                    - IsSuccess: true
+                      OpId: 123456789
+                      ReceiptId: 987654
+                      ReceiptType: Sell
+                      Errors: []
+                Errors: []
+        "400":
+          description: JWT или Payload не прошли проверку.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FiscalReceiptRegisterResponse"
+              example:
+                IsSuccess: false
+                Errors:
+                  - Text: Incorrect JWT
+                    Type: ValidationError
+        default:
+          description: Транспортная ошибка сервиса фискализации.
+      x-robokassa-jwt:
+        payloadSchema: "#/components/schemas/FiscalReceiptRegisterPayload"
+        payloadSchemaRef:
+          $ref: "#/components/schemas/FiscalReceiptRegisterPayload"
+        secret: MerchantLogin:Пароль#1
+        signingInput: BASE64URL_HEADER.BASE64URL_PAYLOAD
+        signature: HMAC(signingInput, secret)
+        documentation: https://docs.robokassa.ru/ru/deferred-receipt-registration#register-receipt
+      externalDocs:
+        description: Регистрация чека после оплаты
+        url: https://docs.robokassa.ru/ru/deferred-receipt-registration/
+
+  /InvoiceServiceWebApi/api/CreateInvoice:
+    post:
+      tags:
+        - Invoices
+      summary: Создать счет
+      description: |
+        Создает одноразовую или многоразовую ссылку на оплату. Тело запроса —
+        подписанный JWT в виде строки. JWT состоит из Header, Payload и Signature.
+
+        Для подписи используется HMAC с выбранным алгоритмом. Секретный ключ
+        составляется как `MerchantLogin:Пароль#1`. При создании тестового счета
+        с `AdditionalParameters.IsTest=1` используется тестовый Пароль#1, без
+        `IsTest` — основной Пароль#1.
+
+        Payload собирается по схеме `InvoiceCreatePayload`. Итоговый JWT
+        передается в body как JSON-строка, а не как JSON-объект.
+      operationId: createInvoice
+      x-robokassa-authentication:
+        type: jwt
+        required: true
+      servers:
+        - url: https://services.robokassa.ru
+      requestBody:
+        $ref: "#/components/requestBodies/InvoiceJwt"
+      responses:
+        "200":
+          description: |
+            Результат обработки запроса. Invoice API возвращает HTTP 200 как при
+            успешном создании счета, так и при прикладной ошибке. Результат нужно
+            определять по полю `isSuccess`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/InvoiceCreateSuccess"
+                  - $ref: "#/components/schemas/InvoiceError"
+              examples:
+                success:
+                  summary: Счет создан
+                  value:
+                    id: 01234567-89ab-4cde-8f01-23456789abcd
+                    invId: 1234567890
+                    url: https://auth.robokassa.ru/merchant/Invoice/AbCdEfGhIjKlMnOpQrStUv
+                    isSuccess: true
+                malformedRequest:
+                  summary: Некорректный JWT
+                  value:
+                    isSuccess: false
+                    message: Некорректно составлен запрос
+        default:
+          description: Транспортная ошибка Invoice API.
+      x-robokassa-jwt:
+        payloadSchema: "#/components/schemas/InvoiceCreatePayload"
+        payloadSchemaRef:
+          $ref: "#/components/schemas/InvoiceCreatePayload"
+        secret: MerchantLogin:Пароль#1
+        secretSelection:
+          test: Тестовый Пароль#1, если AdditionalParameters.IsTest=1.
+          production: Основной Пароль#1, если IsTest не передан.
+        signingInput: BASE64URL_HEADER.BASE64URL_PAYLOAD
+        signature: HMAC(signingInput, secret)
+        documentation: https://docs.robokassa.ru/ru/invoice-api#create
+      x-robokassa-environment:
+        testSupported: true
+        productionSupported: true
+        note: >-
+          Тестовый счет создается при передаче AdditionalParameters.IsTest=1 и
+          подписи JWT тестовым Паролем#1.
+
+  /InvoiceServiceWebApi/api/DeactivateInvoice:
+    post:
+      tags:
+        - Invoices
+      summary: Деактивировать счет
+      description: |
+        Деактивирует созданный счет или ссылку. В Payload необходимо передать
+        `MerchantLogin` и один из идентификаторов: `EncodedId`, `Id` или `InvId`.
+
+        Payload собирается по схеме `InvoiceDeactivatePayload`. Итоговый JWT
+        передается в body как JSON-строка, а не как JSON-объект.
+      operationId: deactivateInvoice
+      x-robokassa-authentication:
+        type: jwt
+        required: true
+      servers:
+        - url: https://services.robokassa.ru
+      requestBody:
+        $ref: "#/components/requestBodies/InvoiceJwt"
+      responses:
+        "200":
+          description: |
+            Результат обработки запроса. Прикладная ошибка, как и успешный
+            результат, возвращается с HTTP 200 и определяется по `isSuccess`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/InvoiceActionSuccess"
+                  - $ref: "#/components/schemas/InvoiceError"
+              examples:
+                success:
+                  value:
+                    isSuccess: true
+                malformedRequest:
+                  summary: Некорректный JWT
+                  value:
+                    isSuccess: false
+                    message: Некорректно составлен запрос
+        default:
+          description: Транспортная ошибка Invoice API.
+      x-robokassa-jwt:
+        payloadSchema: "#/components/schemas/InvoiceDeactivatePayload"
+        payloadSchemaRef:
+          $ref: "#/components/schemas/InvoiceDeactivatePayload"
+        secret: MerchantLogin:Пароль#1
+        signingInput: BASE64URL_HEADER.BASE64URL_PAYLOAD
+        signature: HMAC(signingInput, secret)
+        documentation: https://docs.robokassa.ru/ru/invoice-api#deactivate
+      x-robokassa-environment:
+        testSupported: true
+        productionSupported: true
+        note: Метод деактивирует как основные, так и тестовые счета.
+
+  /InvoiceServiceWebApi/api/GetInvoiceInformationList:
+    post:
+      tags:
+        - Invoices
+      summary: Получить список счетов
+      description: |
+        Возвращает счета, соответствующие фильтрам из JWT Payload. Ответ содержит
+        массив `invoiceInformationList`, общее количество `total` и признак
+        `isSuccess`.
+
+        Payload собирается по схеме `InvoiceInformationFilter`. Итоговый JWT
+        передается в body как JSON-строка, а не как JSON-объект.
+      operationId: listInvoices
+      x-robokassa-authentication:
+        type: jwt
+        required: true
+      servers:
+        - url: https://services.robokassa.ru
+      requestBody:
+        $ref: "#/components/requestBodies/InvoiceJwt"
+      responses:
+        "200":
+          description: |
+            Результат обработки запроса. Успешный список и прикладная ошибка
+            возвращаются с HTTP 200 и различаются по `isSuccess`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/InvoiceInformationListResponse"
+                  - $ref: "#/components/schemas/InvoiceError"
+              examples:
+                success:
+                  value:
+                    invoiceInformationList:
+                      - id: 01234567-89ab-4cde-8f01-23456789abcd
+                        invId: 1234567890
+                        invoiceType: OneTime
+                        created: 2026-07-23T09:54:27.010856+00:00
+                        modified: 2026-07-23T09:56:54.907627+00:00
+                        culture: ru
+                        outSum: 1
+                        expirationDate: 2026-07-23T09:56:54.907627+00:00
+                        description: OpenAPI contract verification
+                        invoiceItems: []
+                        isCustomerNotificationEmailSent: false
+                        invoiceStatus: Expired
+                        invoicePaymentUrl: https://auth.robokassa.ru/merchant/Invoice/AbCdEfGhIjKlMnOpQrStUv
+                        shortInvoicePaymentUrl: https://auth.robokassa.ru/Merchant/Invoice/AbCdEfGhIjKlMnOpQrStUv
+                        aliases: []
+                        userFields: {}
+                        payments: []
+                        isWithoutFreeSale: false
+                    total: 1
+                    isSuccess: true
+                malformedRequest:
+                  summary: Некорректный JWT
+                  value:
+                    isSuccess: false
+                    message: Некорректно составлен запрос
+        default:
+          description: Транспортная ошибка Invoice API.
+      x-robokassa-jwt:
+        payloadSchema: "#/components/schemas/InvoiceInformationFilter"
+        payloadSchemaRef:
+          $ref: "#/components/schemas/InvoiceInformationFilter"
+        secret: MerchantLogin:Пароль#1
+        signingInput: BASE64URL_HEADER.BASE64URL_PAYLOAD
+        signature: HMAC(signingInput, secret)
+        documentation: https://docs.robokassa.ru/ru/invoice-api#status
+      x-robokassa-environment:
+        testSupported: true
+        productionSupported: true
+        note: Метод возвращает как основные, так и тестовые счета.
+
+  /InvoiceServiceWebApi/api/GetInvoiceInformation:
+    post:
+      tags:
+        - Invoices
+      summary: Получить информацию о счете
+      description: |
+        Возвращает один счет по внутреннему `Id` или номеру магазина `InvId`.
+        Payload собирается по схеме `InvoiceInformationPayload`. Итоговый JWT
+        передается в body как JSON-строка, а не как JSON-объект.
+      operationId: getInvoiceInformation
+      x-robokassa-authentication:
+        type: jwt
+        required: true
+      servers:
+        - url: https://services.robokassa.ru
+      requestBody:
+        $ref: "#/components/requestBodies/InvoiceJwt"
+      responses:
+        "200":
+          description: |
+            Успешный результат и прикладная ошибка возвращаются с HTTP 200 и
+            различаются по `isSuccess`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/InvoiceInformationSuccess"
+                  - $ref: "#/components/schemas/InvoiceError"
+              examples:
+                success:
+                  value:
+                    invoiceInformation:
+                      id: 01234567-89ab-4cde-8f01-23456789abcd
+                      invId: 851
+                      invoiceType: OneTime
+                      created: 2026-08-10T10:00:00+00:00
+                      modified: 2026-08-10T10:01:00+00:00
+                      merchantLogin: robo-demo-test
+                      culture: ru
+                      outSum: 100
+                      description: Оплата заказа 851
+                      invoiceStatus: NotPaid
+                      aliases:
+                        - BankCard
+                        - SBP
+                      userFields: {}
+                      payments: []
+                      isWithoutFreeSale: false
+                    isSuccess: true
+                malformedRequest:
+                  summary: Некорректный JWT
+                  value:
+                    isSuccess: false
+                    message: Некорректно составлен запрос
+        default:
+          description: Транспортная ошибка Invoice API.
+      x-robokassa-jwt:
+        payloadSchema: "#/components/schemas/InvoiceInformationPayload"
+        payloadSchemaRef:
+          $ref: "#/components/schemas/InvoiceInformationPayload"
+        secret: MerchantLogin:Пароль#1
+        signingInput: BASE64URL_HEADER.BASE64URL_PAYLOAD
+        signature: HMAC(signingInput, secret)
+        documentation: https://docs.robokassa.ru/ru/invoice-api#get-invoice-information
+      x-robokassa-environment:
+        testSupported: true
+        productionSupported: true
+        note: Метод возвращает информацию как об основных, так и о тестовых счетах.
+
+  /InvoiceServiceWebApi/api/NotifyCustomer:
+    post:
+      tags:
+        - Invoices
+      summary: Отправить уведомление покупателю
+      description: |
+        Отправляет покупателю email-уведомление о счете. Payload собирается по
+        схеме `InvoiceNotificationPayload`. Итоговый JWT передается в body как
+        JSON-строка, а не как JSON-объект.
+      operationId: notifyInvoiceCustomer
+      x-robokassa-authentication:
+        type: jwt
+        required: true
+      servers:
+        - url: https://services.robokassa.ru
+      requestBody:
+        $ref: "#/components/requestBodies/InvoiceJwt"
+      responses:
+        "200":
+          description: |
+            Успешный результат и прикладная ошибка возвращаются с HTTP 200 и
+            различаются по `isSuccess`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/InvoiceActionSuccess"
+                  - $ref: "#/components/schemas/InvoiceError"
+              examples:
+                success:
+                  value:
+                    isSuccess: true
+                malformedRequest:
+                  summary: Некорректный JWT
+                  value:
+                    isSuccess: false
+                    message: Некорректно составлен запрос
+        default:
+          description: Транспортная ошибка Invoice API.
+      x-robokassa-jwt:
+        payloadSchema: "#/components/schemas/InvoiceNotificationPayload"
+        payloadSchemaRef:
+          $ref: "#/components/schemas/InvoiceNotificationPayload"
+        secret: MerchantLogin:Пароль#1
+        signingInput: BASE64URL_HEADER.BASE64URL_PAYLOAD
+        signature: HMAC(signingInput, secret)
+        documentation: https://docs.robokassa.ru/ru/invoice-api#notify-customer
+      x-robokassa-environment:
+        testSupported: true
+        productionSupported: true
+        note: Метод отправляет уведомления как для основных, так и для тестовых счетов.
+
+  /Merchant/WebService/Service.asmx/OpStateExt:
+    get:
+      tags:
+        - Operations
+      summary: Получить расширенную информацию об операции
+      description: |
+        Возвращает состояние оплаты и реквизиты операции. Метод работает только
+        в основном режиме и не возвращает тестовые платежи с `IsTest=1`.
+
+        Подпись рассчитывается по формуле
+        `MerchantLogin:InvoiceID:Пароль#2`.
+      operationId: getOperationState
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      x-robokassa-signature:
+        parameter: Signature
+        password: Пароль#2
+        formula: MerchantLogin:InvoiceID:Пароль#2
+        documentation: https://docs.robokassa.ru/ru/xml-interfaces#checking-operation-status
+      servers:
+        - url: https://auth.robokassa.ru
+      parameters:
+        - $ref: "#/components/parameters/MerchantLogin"
+        - name: InvoiceID
+          in: query
+          required: true
+          description: Номер счета магазина.
+          schema:
+            type: integer
+            format: int64
+        - name: Signature
+          in: query
+          required: true
+          description: Контрольная сумма в шестнадцатеричном формате.
+          schema:
+            type: string
+            pattern: "^[0-9A-Fa-f]+$"
+      responses:
+        "200":
+          description: |
+            Результат запроса. Прикладные ошибки передаются с HTTP 200 в
+            `Result.Code` и `Result.Description`.
+          content:
+            text/xml:
+              schema:
+                $ref: "#/components/schemas/OperationStateResponse"
+              examples:
+                success:
+                  summary: Структура успешного ответа
+                  value: |
+                    <OperationStateResponse>
+                      <Result><Code>0</Code></Result>
+                      <State>
+                        <Code>100</Code>
+                        <RequestDate>2026-07-22T10:00:00+03:00</RequestDate>
+                        <StateDate>2026-07-22T09:59:00+03:00</StateDate>
+                      </State>
+                    </OperationStateResponse>
+                operationNotFound:
+                  summary: Операция не найдена
+                  value: |
+                    <OperationStateResponse xmlns="http://merchant.roboxchange.com/WebService/">
+                      <Result>
+                        <Code>3</Code>
+                        <Description>Не удалось найти операцию</Description>
+                      </Result>
+                    </OperationStateResponse>
+        default:
+          description: Транспортная ошибка XML-интерфейса.
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Метод возвращает состояние только основных операций; тестовые операции не отображаются.
+
+  /Merchant/WebService/Service.asmx/GetCurrencies:
+    get:
+      tags:
+        - Reference
+      summary: Получить доступные способы оплаты
+      description: |
+        Возвращает способы оплаты, доступные магазину. Список и ограничения
+        зависят от настроек конкретного магазина.
+      operationId: getCurrencies
+      x-robokassa-authentication:
+        type: none
+        required: false
+        reason: Справочный метод принимает MerchantLogin без контрольной суммы.
+      servers:
+        - url: https://auth.robokassa.ru
+      parameters:
+        - $ref: "#/components/parameters/MerchantLogin"
+        - name: Language
+          in: query
+          required: false
+          description: Язык названий способов оплаты.
+          schema:
+            type: string
+            enum:
+              - ru
+              - en
+      responses:
+        "200":
+          description: |
+            Результат запроса. Прикладные ошибки передаются с HTTP 200 в
+            `Result.Code` и `Result.Description`.
+          content:
+            text/xml:
+              schema:
+                $ref: "#/components/schemas/CurrenciesList"
+              examples:
+                success:
+                  value: |
+                    <CurrenciesList xmlns="http://merchant.roboxchange.com/WebService/">
+                      <Result><Code>0</Code></Result>
+                      <Groups>
+                        <Group Code="BankCard" Description="Банковской картой">
+                          <Items>
+                            <Currency Label="BankCardPSR" Alias="BankCard" Name="Банковская карта" />
+                          </Items>
+                        </Group>
+                      </Groups>
+                    </CurrenciesList>
+        default:
+          description: Транспортная ошибка XML-интерфейса.
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Метод справочный и не имеет отдельного тестового режима.
+
+  /RefundService/Refund/Create:
+    post:
+      tags:
+        - Refunds
+      summary: Создать заявку на возврат
+      description: |
+        Создает полный или частичный возврат по завершенной операции. Тело — JWT,
+        подписанный `Password3` алгоритмом HS256, HS384 или HS512.
+
+        Метод требует предварительного подключения API возвратов для магазина.
+        Реальный успешный возврат в рамках проверки спецификации не выполнялся.
+      operationId: createRefund
+      x-robokassa-authentication:
+        type: jwt
+        required: true
+      servers:
+        - url: https://services.robokassa.ru
+      requestBody:
+        required: true
+        description: |
+          В тело запроса передается одна JSON-строка с подписанным JWT:
+          `"BASE64URL_HEADER.BASE64URL_PAYLOAD.SIGNATURE"`.
+
+          Состав JWT:
+          - Header: JSON с типом токена и алгоритмом подписи, например `{"typ":"JWT","alg":"HS256"}`.
+          - Payload: JSON с параметрами возврата по схеме `RefundPayload`.
+          - BASE64URL_HEADER: Header после Base64Url-кодирования без padding.
+          - BASE64URL_PAYLOAD: Payload после Base64Url-кодирования без padding.
+          - Signature: подпись, рассчитанная магазином с использованием `Password3`.
+        content:
+          application/json:
+            schema:
+              type: string
+              contentMediaType: application/jwt
+              description: Подписанный JWT, переданный как JSON-строка, а не как JSON-объект.
+              pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+      responses:
+        "200":
+          description: Документированный результат создания заявки.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefundCreateResponse"
+        "400":
+          description: Некорректный JWT или невалидная подпись JWT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefundCreateResponse"
+              examples:
+                badRequest:
+                  value:
+                    success: false
+                    message: BadRequest
+                    requestId: null
+                signatureVerificationFailed:
+                  value:
+                    success: false
+                    message: signature verification has been failed
+                    requestId: null
+        "401":
+          description: Неверный Password3 или API возвратов не подключен магазину.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefundCreateResponse"
+              example:
+                success: false
+                message: Signature key is not exists or partner have not access to API
+                requestId: null
+        default:
+          description: Транспортная ошибка Refund API.
+      x-robokassa-jwt:
+        payloadSchema: "#/components/schemas/RefundPayload"
+        payloadSchemaRef:
+          $ref: "#/components/schemas/RefundPayload"
+        password: Password3
+        secret: Password3
+        signingInput: BASE64URL_HEADER.BASE64URL_PAYLOAD
+        signature: HMAC(signingInput, secret)
+        documentation: https://docs.robokassa.ru/ru/refund-api#refund-initiation
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Метод не имеет отдельного тестового режима.
+
+  /RefundService/Refund/GetState:
+    get:
+      tags:
+        - Refunds
+      summary: Получить состояние возврата
+      operationId: getRefundState
+      x-robokassa-authentication:
+        type: none
+        required: false
+        reason: Состояние возврата запрашивается по идентификатору requestId.
+      servers:
+        - url: https://services.robokassa.ru
+      parameters:
+        - name: id
+          in: query
+          required: true
+          description: "`requestId`, полученный при создании возврата."
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Документированное состояние возврата.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefundState"
+        "400":
+          description: Идентификатор некорректен или заявка не существует.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageError"
+              example:
+                message: Id is invalid or request id does not exist
+        default:
+          description: Транспортная ошибка Refund API.
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Метод не имеет отдельного тестового режима.
+
+  /Merchant/Payment/Confirm:
+    post:
+      tags:
+        - Holding
+      summary: Подтвердить списание удержанных средств
+      description: |
+        Завершает двухстадийный платеж в состоянии HOLD. Запрос можно выполнить
+        только один раз. Если передан новый `Receipt`, сумма и состав корзины могут
+        быть изменены только в меньшую сторону.
+
+        Проверенное поведение:
+        - первый вызов для операции в HOLD возвращает HTTP 200 и `"success: true"`;
+        - повторный вызов по тому же `InvoiceID` возвращает HTTP 200 и `"success: false"`;
+        - повторного списания не происходит;
+        - ранее подтвержденная операция остается в состоянии `100`.
+
+        При неоднозначном ответе или `"success: false"` запрещено автоматически
+        повторять Confirm. Сначала вызовите OpStateExt.
+      operationId: confirmHold
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://auth.robokassa.ru
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/HoldConfirmRequest"
+      responses:
+        "200":
+          description: |
+            Результат обработки запроса. Значение `"success: true"` означает,
+            что запрос принят. `"success: false"` может означать, что операция
+            уже была обработана или не может быть выполнена в текущем состоянии.
+
+            При `"success: false"` нельзя автоматически повторять запрос.
+            Сначала необходимо проверить состояние операции через OpStateExt.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HoldActionResponse"
+              examples:
+                success:
+                  value: "success: true"
+                rejected:
+                  value: "success: false"
+        default:
+          description: Транспортная ошибка.
+      x-robokassa-signature:
+        password: Пароль#1
+        formulaWithoutReceipt: MerchantLogin:OutSum:InvoiceID:Пароль#1
+        formulaWithReceipt: MerchantLogin:OutSum:InvoiceID:Receipt:Пароль#1
+        documentation: https://docs.robokassa.ru/ru/holding.html#request
+        clientExample: https://github.com/robokassa/cms-wordpress/blob/92c8c6aceffe283f89319ac41ead78bc573bb361/wp_robokassa.php#L1555
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Тестовый режим не поддерживается. Метод работает только в основном режиме.
+
+  /Merchant/Payment/Cancel:
+    post:
+      tags:
+        - Holding
+      summary: Отменить холдирование
+      description: |
+        Отменяет двухстадийный платеж в состоянии HOLD. `OutSum` передается в
+        запросе, но в строке подписи вместо суммы используется пустой сегмент.
+
+        Значение `"success: true"` означает, что запрос принят, но итоговый статус
+        необходимо проверить через OpStateExt. HTTP 200 сам по себе не означает
+        успешную отмену операции.
+
+        При `"success: false"` запрещено автоматически повторять Cancel.
+        Сначала вызовите OpStateExt и проверьте состояние операции.
+      operationId: cancelHold
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://auth.robokassa.ru
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/HoldCancelRequest"
+      responses:
+        "200":
+          description: |
+            Результат обработки запроса. Значение `"success: true"` означает,
+            что запрос принят. `"success: false"` может означать, что операция
+            уже была обработана или не может быть выполнена в текущем состоянии.
+
+            При `"success: false"` нельзя автоматически повторять запрос.
+            Сначала необходимо проверить состояние операции через OpStateExt.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HoldActionResponse"
+              examples:
+                success:
+                  value: "success: true"
+                rejected:
+                  value: "success: false"
+        default:
+          description: Транспортная ошибка.
+      x-robokassa-signature:
+        password: Пароль#1
+        formula: "MerchantLogin::InvoiceID:Пароль#1"
+        documentation: https://docs.robokassa.ru/ru/holding.html#cancel
+        clientExample: https://github.com/robokassa/cms-wordpress/blob/92c8c6aceffe283f89319ac41ead78bc573bb361/wp_robokassa.php#L1579
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Тестовый режим не поддерживается. Метод работает только в основном режиме.
+
+  /Merchant/Recurring:
+    post:
+      tags:
+        - Recurring
+      summary: Создать повторный платеж
+      description: |
+        Инициирует дочерний платеж после успешной материнской операции с
+        `Recurring=true`. `PreviousInvoiceID` обязателен, но не включается в
+        расчет `SignatureValue`.
+
+        Вызов может привести к повторному списанию средств без участия покупателя.
+      operationId: createRecurringPayment
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://auth.robokassa.ru
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/RecurringPaymentRequest"
+      responses:
+        "200":
+          description: |
+            Успешный ответ метода. В теле возвращается строка `OK{InvoiceID}`,
+            где `InvoiceID` — номер дочерней операции.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: OK156
+        "500":
+          description: Ошибка обработки рекуррентного платежа.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/RecurringProblem"
+              example:
+                type: https://tools.ietf.org/html/rfc9110#section-15.6.1
+                title: Internal error
+                status: 500
+                detail: "Recurring: Internal ERROR occurred"
+                instance: Recurring
+                traceId: 00-c2f78a888cbc57012f0fd49540ae996b-05591a05035c0377-00
+        default:
+          description: Транспортная ошибка запуска рекуррентного платежа.
+      x-robokassa-signature:
+        password: Пароль#1
+        note: PreviousInvoiceID не включается в подпись.
+        documentation: https://docs.robokassa.ru/ru/recurring-payments#request-parameters
+        clientExample: https://github.com/robokassa/cms-wordpress/blob/92c8c6aceffe283f89319ac41ead78bc573bb361/classes/Robokassa/Payment/RobokassaPayAPI.php#L742
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Тестовый режим не поддерживается. Метод работает только в основном режиме.
+
+  /Merchant/Payment/CoFPayment:
+    get:
+      tags:
+        - Payments
+      summary: Открыть платежную страницу для оплаты по сохраненной карте
+      description: |
+        Создает оплату по сохраненной карте. В параметре `Token` передается
+        `OpKey` операции, в которой эта карта уже использовалась.
+
+        Сценарий работает только для исходных операций, проведенных по банковской
+        карте. Для операций через pay-сервисы, СБП и BNPL оплата по сохраненной
+        карте не поддерживается.
+      operationId: createCoFPayment
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://auth.robokassa.ru
+      parameters:
+        - $ref: "#/components/parameters/MerchantLogin"
+        - $ref: "#/components/parameters/OutSum"
+        - $ref: "#/components/parameters/SignatureValue"
+        - $ref: "#/components/parameters/InvId"
+        - name: Token
+          in: query
+          required: true
+          description: OpKey операции, карту которой нужно использовать для новой оплаты.
+          schema:
+            type: string
+        - name: Description
+          in: query
+          description: Название товара или услуги, без специальных символов.
+          schema:
+            type: string
+            maxLength: 100
+        - name: Email
+          in: query
+          description: Email покупателя для чеков и уведомлений.
+          schema:
+            type: string
+            format: email
+        - name: Culture
+          in: query
+          description: Язык платежной страницы.
+          schema:
+            type: string
+            enum:
+              - ru
+              - en
+        - name: Receipt
+          in: query
+          description: Фискальные данные в URL-кодировке.
+          schema:
+            type: string
+        - name: ResultUrl2
+          in: query
+          description: Дополнительный адрес серверного уведомления.
+          schema:
+            type: string
+            format: uri
+      responses:
+        "200":
+          description: |
+            HTML-страница платежной формы или страница с сообщением об ошибке
+            параметров. При неверной подписи код прикладной ошибки передается
+            внутри контекста страницы, например `RoboxContext.error.code=29`.
+          content:
+            text/html:
+              schema:
+                type: string
+        "302":
+          description: |
+            Запрос обработан. В заголовке `Location` возвращается относительный
+            URL платежной страницы. Этот ответ не подтверждает создание или
+            оплату операции.
+          headers:
+            Location:
+              description: Относительный URL платежной страницы.
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+                example: /Merchant/Index/01234567-89ab-4cde-8f01-23456789abcd
+        default:
+          description: Транспортная ошибка запуска платежа.
+      x-robokassa-custom-parameters:
+        prefix: Shp_
+        description: Пользовательские параметры возвращаются в уведомлениях без изменений.
+      x-robokassa-signature:
+        parameter: SignatureValue
+        password: Пароль#1
+        formulaWithOnlyToken: MerchantLogin:OutSum:InvId:Token:Пароль#1
+        formulaWithReceiptAndToken: MerchantLogin:OutSum:InvId:Receipt:Token:Пароль#1
+        formulaWithResultUrl2AndToken: MerchantLogin:OutSum:InvId:Receipt:ResultUrl2:Token:Пароль#1
+        documentation: https://docs.robokassa.ru/ru/saving#saving-signature
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Тестовый режим не поддерживается. Метод работает только в основном режиме.
+    post:
+      tags:
+        - Payments
+      summary: Открыть платежную страницу для оплаты по сохраненной карте через HTML-форму
+      description: |
+        POST-вариант запуска CoF-платежа. Параметры передаются как
+        `application/x-www-form-urlencoded`; `Token` обязателен.
+      operationId: createCoFPaymentPost
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://auth.robokassa.ru
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/CoFPaymentRequest"
+      responses:
+        "200":
+          description: |
+            HTML-страница платежной формы или страница с сообщением об ошибке
+            параметров. При неверной подписи код прикладной ошибки передается
+            внутри контекста страницы, например `RoboxContext.error.code=29`.
+          content:
+            text/html:
+              schema:
+                type: string
+        "302":
+          description: |
+            Запрос обработан. В заголовке `Location` возвращается относительный
+            URL платежной страницы. Этот ответ не подтверждает создание или
+            оплату операции.
+          headers:
+            Location:
+              description: Относительный URL платежной страницы.
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+                example: /Merchant/Index/01234567-89ab-4cde-8f01-23456789abcd
+        default:
+          description: Транспортная ошибка запуска платежа.
+      x-robokassa-custom-parameters:
+        prefix: Shp_
+        description: Пользовательские параметры возвращаются в уведомлениях без изменений.
+      x-robokassa-signature:
+        parameter: SignatureValue
+        password: Пароль#1
+        formulaWithOnlyToken: MerchantLogin:OutSum:InvId:Token:Пароль#1
+        formulaWithReceiptAndToken: MerchantLogin:OutSum:InvId:Receipt:Token:Пароль#1
+        formulaWithResultUrl2AndToken: MerchantLogin:OutSum:InvId:Receipt:ResultUrl2:Token:Пароль#1
+        documentation: https://docs.robokassa.ru/ru/saving#saving-signature
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Тестовый режим не поддерживается. Метод работает только в основном режиме.
+
+  /Merchant/Payment/CreateV2:
+    get:
+      tags:
+        - SplitPayments
+      summary: Создать платеж со сплитованием
+      description: |
+        Инициализирует платежную форму с распределением суммы между
+        мастер-магазином и магазинами-участниками. Параметр `invoice` передается
+        как URL-кодированная JSON-строка.
+
+        Метод проверяет структуру `invoice` и подпись, затем возвращает редирект
+        на платежную страницу. Проведение оплаты и фактическое распределение
+        средств этим ответом не подтверждаются.
+      operationId: createSplitPayment
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://auth.robokassa.ru
+      parameters:
+        - name: invoice
+          in: query
+          required: true
+          description: URL-кодированное JSON-тело операции оплаты и распределения.
+          schema:
+            type: string
+          x-robokassa-json-schema: "#/components/schemas/SplitPaymentInvoice"
+          x-robokassa-json-schema-ref:
+            $ref: "#/components/schemas/SplitPaymentInvoice"
+        - name: signature
+          in: query
+          required: true
+          description: |
+            Подпись запроса. Рассчитывается по исходной JSON-строке `invoice`
+            до URL-кодирования и Паролю#1 мастер-магазина.
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]+$'
+      responses:
+        "200":
+          description: |
+            HTML-страница платежной формы или страница с сообщением об ошибке
+            параметров. При неверной подписи код прикладной ошибки передается
+            внутри контекста страницы, например `RoboxContext.error.code=29`.
+          content:
+            text/html:
+              schema:
+                type: string
+        "302":
+          description: |
+            Запрос обработан. В заголовке `Location` возвращается относительный
+            URL платежной страницы. Этот ответ не подтверждает проведение оплаты
+            или фактическое распределение средств.
+          headers:
+            Location:
+              description: Относительный URL платежной страницы.
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+                example: /Merchant/Index/01234567-89ab-4cde-8f01-23456789abcd
+        default:
+          description: Транспортная ошибка запуска платежа.
+      x-robokassa-signature:
+        parameter: signature
+        password: Пароль#1 мастер-магазина
+        base: Исходная JSON-строка `invoice` без URL-кодирования + Пароль#1.
+        documentation: https://docs.robokassa.ru/ru/split-payments#split-request-parameters
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Тестовый режим не поддерживается. Метод работает только в основном режиме.
+    post:
+      tags:
+        - SplitPayments
+      summary: Создать платеж со сплитованием через HTML-форму
+      description: |
+        POST-вариант инициализации платежной формы со сплитованием. Тело запроса
+        передается как `application/x-www-form-urlencoded`.
+
+        Подпись рассчитывается по исходной JSON-строке `invoice` до URL-кодирования
+        и Паролю#1 мастер-магазина.
+      operationId: createSplitPaymentPost
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://auth.robokassa.ru
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/SplitPaymentFormRequest"
+      responses:
+        "200":
+          description: |
+            HTML-страница платежной формы или страница с сообщением об ошибке
+            параметров. При неверной подписи код прикладной ошибки передается
+            внутри контекста страницы, например `RoboxContext.error.code=29`.
+          content:
+            text/html:
+              schema:
+                type: string
+        default:
+          description: Транспортная ошибка запуска платежа.
+      x-robokassa-signature:
+        parameter: signature
+        password: Пароль#1 мастер-магазина
+        base: Исходная JSON-строка `invoice` без URL-кодирования + Пароль#1.
+        documentation: https://docs.robokassa.ru/ru/split-payments#split-request-parameters
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Тестовый режим не поддерживается. Метод работает только в основном режиме.
+
+  /SMS/:
+    get:
+      tags:
+        - Messaging
+      summary: Отправить SMS методом GET
+      operationId: sendSmsGet
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://services.robokassa.ru
+      parameters:
+        - $ref: "#/components/parameters/SmsLogin"
+        - $ref: "#/components/parameters/SmsPhone"
+        - $ref: "#/components/parameters/SmsMessage"
+        - $ref: "#/components/parameters/SmsSignature"
+      responses:
+        "200":
+          description: Результат обработки запроса.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SmsResponse"
+        default:
+          description: Транспортная ошибка SMS-сервиса.
+      x-robokassa-signature:
+        password: Пароль#1
+        formula: login:phone:message:Пароль#1
+        documentation: https://docs.robokassa.ru/ru/sms-notifications#request-parameters
+        clientExample: https://github.com/robokassa/cms-wordpress/blob/92c8c6aceffe283f89319ac41ead78bc573bb361/classes/Robokassa/Payment/RobokassaPayAPI.php#L690
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Метод не имеет отдельного тестового режима.
+    post:
+      tags:
+        - Messaging
+      summary: Отправить SMS методом POST
+      operationId: sendSmsPost
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      servers:
+        - url: https://services.robokassa.ru
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/SmsRequest"
+      responses:
+        "200":
+          description: Результат обработки запроса.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SmsResponse"
+        default:
+          description: Транспортная ошибка SMS-сервиса.
+      x-robokassa-signature:
+        password: Пароль#1
+        formula: login:phone:message:Пароль#1
+        documentation: https://docs.robokassa.ru/ru/sms-notifications#request-parameters
+      x-robokassa-environment:
+        testSupported: false
+        productionSupported: true
+        note: Метод не имеет отдельного тестового режима.
+
+webhooks:
+  paymentResult:
+    post:
+      summary: Уведомление об успешной оплате на ResultURL
+      description: |
+        Robokassa отправляет данные на ResultURL магазина. Получатель обязан
+        проверить `SignatureValue` по формуле
+        `OutSum:InvId:Пароль#2:Shp_*` и только после этого изменить состояние заказа.
+      operationId: paymentResultNotification
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      x-robokassa-signature:
+        parameter: SignatureValue
+        password: Пароль#2
+        formula: OutSum:InvId:Пароль#2:Shp_*
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/PaymentResult"
+      responses:
+        "200":
+          $ref: "#/components/responses/ResultUrlAccepted"
+      x-robokassa-custom-parameters:
+        prefix: Shp_
+        description: Все переданные при запуске платежа параметры Shp_*.
+    get:
+      summary: Уведомление об успешной оплате на ResultURL методом GET
+      description: |
+        GET используется, если этот метод выбран в технических настройках магазина.
+        Проверка подписи и формат ответа совпадают с POST-уведомлением.
+      operationId: paymentResultNotificationGet
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      x-robokassa-signature:
+        parameter: SignatureValue
+        password: Пароль#2
+        formula: OutSum:InvId:Пароль#2:Shp_*
+      parameters:
+        - $ref: "#/components/parameters/ResultOutSum"
+        - $ref: "#/components/parameters/ResultInvId"
+        - $ref: "#/components/parameters/ResultSignatureValue"
+        - name: Fee
+          in: query
+          description: Комиссия Robokassa.
+          schema:
+            type: string
+        - name: EMail
+          in: query
+          description: Email покупателя.
+          schema:
+            type: string
+            format: email
+        - name: PaymentMethod
+          in: query
+          description: Использованный способ оплаты.
+          schema:
+            type: string
+        - name: IncCurrLabel
+          in: query
+          description: Валюта оплаты.
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/ResultUrlAccepted"
+      x-robokassa-custom-parameters:
+        prefix: Shp_
+        description: Все переданные при запуске платежа параметры Shp_*.
+
+  paymentResult2:
+    post:
+      summary: Дополнительное уведомление на ResultUrl2
+      description: |
+        Серверное уведомление в формате JWS Compact Serialization. Для холдов это
+        единственный способ получить состояние `HOLD`. Уведомление всегда
+        отправляется методом POST.
+
+        Получатель обязан проверить подпись JWS сертификатом Robokassa до
+        обработки полей `data` и изменения состояния заказа.
+      operationId: paymentResult2Notification
+      x-robokassa-authentication:
+        type: jws
+        required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: string
+              contentMediaType: application/jose
+              pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+              description: JWS в компактном представлении.
+      responses:
+        "200":
+          description: Уведомление принято магазином.
+        "400":
+          description: Некорректный формат JWS или подпись не прошла проверку.
+      x-jws-decoded-schema: "#/components/schemas/ResultUrl2Notification"
+      x-jws-decoded-schema-ref:
+        $ref: "#/components/schemas/ResultUrl2Notification"
+      x-jws-certificate: https://docs.robokassa.ru/media/files/jwtsign.cer
+
+  paymentSuccessRedirect:
+    get:
+      summary: Возврат покупателя на SuccessURL методом GET
+      description: |
+        Браузерный редирект после успешной оплаты. Не используйте его как
+        единственное подтверждение платежа — состояние заказа меняйте по ResultURL.
+      operationId: paymentSuccessRedirectGet
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      x-robokassa-signature:
+        parameter: SignatureValue
+        password: Пароль#1
+        formula: OutSum:InvId:Пароль#1:Shp_*
+      parameters:
+        - $ref: "#/components/parameters/ResultOutSum"
+        - $ref: "#/components/parameters/ResultInvId"
+        - $ref: "#/components/parameters/SuccessSignatureValue"
+        - $ref: "#/components/parameters/RedirectCulture"
+      responses:
+        "200":
+          description: Страница магазина, отображаемая покупателю.
+      x-robokassa-custom-parameters:
+        prefix: Shp_
+        description: Пользовательские параметры, переданные при запуске платежа.
+    post:
+      summary: Возврат покупателя на SuccessURL методом POST
+      description: |
+        Браузерный редирект после успешной оплаты. Параметры передаются как
+        `application/x-www-form-urlencoded`. Основное подтверждение приходит на ResultURL.
+      operationId: paymentSuccessRedirectPost
+      x-robokassa-authentication:
+        type: request-signature
+        required: true
+      x-robokassa-signature:
+        parameter: SignatureValue
+        password: Пароль#1
+        formula: OutSum:InvId:Пароль#1:Shp_*
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/PaymentSuccessRedirect"
+      responses:
+        "200":
+          description: Страница магазина, отображаемая покупателю.
+      x-robokassa-custom-parameters:
+        prefix: Shp_
+        description: Пользовательские параметры, переданные при запуске платежа.
+
+  paymentFailRedirect:
+    get:
+      summary: Возврат покупателя на FailURL методом GET
+      description: |
+        Браузерный редирект после отказа или прерывания оплаты. Он не означает
+        окончательную отмену операции; актуальное состояние проверяйте отдельно.
+      operationId: paymentFailRedirectGet
+      x-robokassa-authentication:
+        type: none
+        required: false
+        reason: FailURL не содержит контрольной суммы и не подтверждает состояние платежа.
+      parameters:
+        - $ref: "#/components/parameters/ResultOutSum"
+        - $ref: "#/components/parameters/ResultInvId"
+        - $ref: "#/components/parameters/RedirectCulture"
+      responses:
+        "200":
+          description: Страница магазина, отображаемая покупателю.
+      x-robokassa-custom-parameters:
+        prefix: Shp_
+        description: Пользовательские параметры, переданные при запуске платежа.
+    post:
+      summary: Возврат покупателя на FailURL методом POST
+      description: |
+        Браузерный редирект после отказа или прерывания оплаты. Параметры
+        передаются как `application/x-www-form-urlencoded`.
+      operationId: paymentFailRedirectPost
+      x-robokassa-authentication:
+        type: none
+        required: false
+        reason: FailURL не содержит контрольной суммы и не подтверждает состояние платежа.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/PaymentFailRedirect"
+      responses:
+        "200":
+          description: Страница магазина, отображаемая покупателю.
+      x-robokassa-custom-parameters:
+        prefix: Shp_
+        description: Пользовательские параметры, переданные при запуске платежа.
+
+components:
+  requestBodies:
+    InvoiceJwt:
+      required: true
+      description: |
+        Подписанный JWT передается в теле запроса как одна JSON-строка:
+        `"BASE64URL_HEADER.BASE64URL_PAYLOAD.SIGNATURE"`.
+
+        Состав JWT:
+        - Header: JSON с типом токена и алгоритмом подписи, например `{"typ":"JWT","alg":"MD5"}`.
+        - Payload: JSON с параметрами конкретного метода.
+        - BASE64URL_HEADER: Header после Base64Url-кодирования без padding.
+        - BASE64URL_PAYLOAD: Payload после Base64Url-кодирования без padding.
+        - Signature: подпись, рассчитанная магазином. Секретный ключ составляется
+          как `MerchantLogin:Пароль#1`.
+      content:
+        application/json:
+          schema:
+            type: string
+            contentMediaType: application/jwt
+            description: Подписанный JWT, переданный как JSON-строка, а не как JSON-объект.
+            pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+
+  parameters:
+    MerchantLogin:
+      name: MerchantLogin
+      in: query
+      required: true
+      description: Идентификатор магазина.
+      schema:
+        type: string
+    OutSum:
+      name: OutSum
+      in: query
+      required: true
+      description: Сумма к оплате с точкой в качестве десятичного разделителя.
+      schema:
+        type: string
+        pattern: '^\d+(\.\d+)?$'
+        example: "100.00"
+    InvId:
+      name: InvId
+      in: query
+      required: false
+      description: Уникальный номер счета магазина. Если значение равно `0` или параметр отсутствует, номер назначается автоматически.
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+        maximum: 9223372036854775807
+    SignatureValue:
+      name: SignatureValue
+      in: query
+      required: true
+      description: Подпись запроса, рассчитанная с использованием Пароля#1.
+      schema:
+        type: string
+    ResultOutSum:
+      name: OutSum
+      in: query
+      required: true
+      description: Сумма платежа в точном формате из уведомления.
+      schema:
+        type: string
+        example: "100.000000"
+    ResultInvId:
+      name: InvId
+      in: query
+      required: true
+      description: Номер счета магазина.
+      schema:
+        type: string
+        example: "450009"
+    ResultSignatureValue:
+      name: SignatureValue
+      in: query
+      required: true
+      description: Подпись уведомления, рассчитанная с использованием Пароля#2.
+      schema:
+        type: string
+    SuccessSignatureValue:
+      name: SignatureValue
+      in: query
+      required: true
+      description: Подпись SuccessURL, рассчитанная с использованием Пароля#1.
+      schema:
+        type: string
+    RedirectCulture:
+      name: Culture
+      in: query
+      required: false
+      description: Язык платежной страницы.
+      schema:
+        type: string
+        enum:
+          - ru
+          - en
+    SmsLogin:
+      name: login
+      in: query
+      required: true
+      description: Идентификатор магазина.
+      schema:
+        type: string
+    SmsPhone:
+      name: phone
+      in: query
+      required: true
+      description: Номер телефона в международном формате без символа `+`.
+      schema:
+        type: string
+        pattern: '^\d+$'
+        example: "79999999999"
+    SmsMessage:
+      name: message
+      in: query
+      required: true
+      description: Текст сообщения в UTF-8, не более 128 символов.
+      schema:
+        type: string
+        maxLength: 128
+    SmsSignature:
+      name: signature
+      in: query
+      required: true
+      description: Подпись `login:phone:message:Пароль#1`.
+      schema:
+        type: string
+
+  responses:
+    ResultUrlAccepted:
+      description: Уведомление принято.
+      content:
+        text/plain:
+          schema:
+            type: string
+            pattern: '^OK\d+$'
+            example: OK450009
+
+  schemas:
+    PaymentStartRequest:
+      type: object
+      required:
+        - MerchantLogin
+        - OutSum
+        - SignatureValue
+      properties:
+        MerchantLogin:
+          type: string
+        OutSum:
+          type: string
+          pattern: '^\d+(\.\d+)?$'
+          example: "100.00"
+        SignatureValue:
+          type: string
+        InvId:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9223372036854775807
+          description: Если значение равно `0` или поле отсутствует, номер назначается автоматически.
+        Description:
+          type: string
+          maxLength: 100
+        Email:
+          type: string
+          format: email
+        IncCurrLabel:
+          type: string
+        Culture:
+          type: string
+          enum:
+            - ru
+            - en
+        Encoding:
+          type: string
+          default: UTF-8
+        IsTest:
+          type: integer
+          enum:
+            - 0
+            - 1
+        ExpirationDate:
+          type: string
+        Receipt:
+          type: string
+        IsWithoutFreeSale:
+          type: boolean
+          description: |
+            Запрещает автоматически формировать чек с позицией «Свободная
+            продажа», если `Receipt` не передан. Не участвует в расчете
+            `SignatureValue`.
+        FiscalParentOpId:
+          type: integer
+          format: int64
+          description: |
+            OpId родительской операции для связанной фискализации. Не участвует
+            в расчете `SignatureValue`.
+        StepByStep:
+          type: boolean
+        PaymentMethods:
+          type: array
+          items:
+            type: string
+        ResultUrl2:
+          type: string
+          format: uri
+        SuccessUrl2:
+          type: string
+          format: uri
+        SuccessUrl2Method:
+          $ref: "#/components/schemas/RedirectMethod"
+        FailUrl2:
+          type: string
+          format: uri
+        FailUrl2Method:
+          $ref: "#/components/schemas/RedirectMethod"
+        Token:
+          type: string
+        Recurring:
+          type: boolean
+      patternProperties:
+        "^Shp_":
+          type: string
+      additionalProperties: false
+      description: Дополнительные поля допускаются только для параметров с префиксом `Shp_`.
+
+    CoFPaymentRequest:
+      type: object
+      required:
+        - MerchantLogin
+        - OutSum
+        - SignatureValue
+        - Token
+      properties:
+        MerchantLogin:
+          type: string
+        OutSum:
+          type: string
+          pattern: '^\d+(\.\d+)?$'
+          example: "100.00"
+        SignatureValue:
+          type: string
+        Token:
+          type: string
+          description: OpKey операции, карту которой нужно использовать для новой оплаты.
+        InvId:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9223372036854775807
+          description: Если значение равно `0` или поле отсутствует, номер назначается автоматически.
+        Description:
+          type: string
+          maxLength: 100
+        Email:
+          type: string
+          format: email
+        Culture:
+          type: string
+          enum:
+            - ru
+            - en
+        Receipt:
+          type: string
+        ResultUrl2:
+          type: string
+          format: uri
+      additionalProperties:
+        type: string
+      description: Дополнительные поля допускаются только для параметров с префиксом `Shp_`.
+
+    PaymentSuccessRedirect:
+      type: object
+      required:
+        - OutSum
+        - InvId
+        - SignatureValue
+      properties:
+        OutSum:
+          type: string
+        InvId:
+          type: string
+        SignatureValue:
+          type: string
+          description: Подпись с использованием Пароля#1.
+        Culture:
+          type: string
+          enum:
+            - ru
+            - en
+      patternProperties:
+        "^Shp_":
+          type: string
+      additionalProperties: false
+
+    PaymentFailRedirect:
+      type: object
+      required:
+        - OutSum
+        - InvId
+      properties:
+        OutSum:
+          type: string
+        InvId:
+          type: string
+        Culture:
+          type: string
+          enum:
+            - ru
+            - en
+      patternProperties:
+        "^Shp_":
+          type: string
+      additionalProperties: false
+
+    HoldConfirmRequest:
+      type: object
+      required:
+        - MerchantLogin
+        - InvoiceID
+        - OutSum
+        - SignatureValue
+      properties:
+        MerchantLogin:
+          type: string
+        InvoiceID:
+          type: integer
+          format: int64
+        OutSum:
+          type: string
+          pattern: '^\d+(\.\d+)?$'
+        Receipt:
+          type: string
+          description: Обновленный JSON чека в URL-кодировке.
+        SignatureValue:
+          type: string
+
+    HoldCancelRequest:
+      type: object
+      required:
+        - MerchantLogin
+        - InvoiceID
+        - OutSum
+        - SignatureValue
+      properties:
+        MerchantLogin:
+          type: string
+        InvoiceID:
+          type: integer
+          format: int64
+        OutSum:
+          type: string
+          description: Передается в запросе, но не включается в подпись.
+        SignatureValue:
+          type: string
+
+    HoldActionResponse:
+      type: string
+      enum:
+        - "success: true"
+        - "success: false"
+      description: |
+        Ответ возвращается как JSON-строка, а не JSON-объект.
+        HTTP 200 означает только успешную обработку HTTP-запроса.
+        Значение `"success: true"` означает, что запрос принят; итоговое состояние
+        необходимо проверить через OpStateExt, ResultURL или ResultUrl2.
+
+        Значение `"success: false"` запрещает автоматический повтор запроса.
+        Сначала необходимо проверить состояние операции. Повторный Confirm по уже
+        подтвержденному `InvoiceID` возвращает `"success: false"`; повторного
+        списания не происходит.
+
+    RecurringPaymentRequest:
+      type: object
+      required:
+        - MerchantLogin
+        - InvoiceID
+        - PreviousInvoiceID
+        - OutSum
+        - SignatureValue
+      properties:
+        MerchantLogin:
+          type: string
+        InvoiceID:
+          type: integer
+          format: int64
+          minimum: 1
+        PreviousInvoiceID:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Номер успешно оплаченной материнской операции.
+        OutSum:
+          type: string
+          pattern: '^\d+(\.\d+)?$'
+        Description:
+          type: string
+        Receipt:
+          type: string
+          description: JSON чека в URL-кодировке.
+        SignatureValue:
+          type: string
+      additionalProperties:
+        type: string
+      description: Дополнительные поля допускаются только для параметров с префиксом `Shp_`.
+
+    RecurringProblem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        traceId:
+          type: string
+
+    SplitPaymentInvoice:
+      type: object
+      required:
+        - outAmount
+        - merchant
+        - splitMerchants
+      properties:
+        outAmount:
+          type: number
+          exclusiveMinimum: 0
+          description: Требуемая к получению сумма заказа.
+        shop_params:
+          type: array
+          items:
+            $ref: "#/components/schemas/SplitPaymentShopParam"
+        email:
+          type: string
+          format: email
+        incCurr:
+          type: string
+          description: Предпочтительный способ оплаты.
+        language:
+          type: string
+          enum:
+            - ru
+            - en
+        expirationDate:
+          type: string
+          format: date-time
+        merchant:
+          $ref: "#/components/schemas/SplitPaymentMerchant"
+        splitMerchants:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SplitPaymentParticipant"
+
+    SplitPaymentFormRequest:
+      type: object
+      required:
+        - invoice
+        - signature
+      properties:
+        invoice:
+          type: string
+          description: URL-кодированная JSON-строка платежа со сплитованием.
+          x-robokassa-json-schema: "#/components/schemas/SplitPaymentInvoice"
+          x-robokassa-json-schema-ref:
+            $ref: "#/components/schemas/SplitPaymentInvoice"
+        signature:
+          type: string
+          description: Подпись по исходной JSON-строке `invoice` до URL-кодирования и Паролю#1 мастер-магазина.
+          pattern: '^[0-9a-fA-F]+$'
+
+    SplitPaymentShopParam:
+      type: object
+      required:
+        - name
+        - value
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+
+    SplitPaymentMerchant:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Идентификатор мастер-магазина.
+        comment:
+          type: string
+          maxLength: 100
+
+    SplitPaymentParticipant:
+      type: object
+      required:
+        - id
+        - amount
+      properties:
+        id:
+          type: string
+          description: Идентификатор магазина-участника.
+        InvoiceId:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9223372036854775807
+          description: Номер счета магазина-участника. Если значение равно `0` или поле отсутствует, номер назначается автоматически.
+        amount:
+          type: number
+          minimum: 0
+        receipt:
+          $ref: "#/components/schemas/SplitPaymentReceipt"
+
+    SplitPaymentReceipt:
+      type: object
+      required:
+        - items
+      properties:
+        sno:
+          type: string
+          enum:
+            - osn
+            - usn_income
+            - usn_income_outcome
+            - envd
+            - esn
+            - patent
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SplitPaymentReceiptItem"
+
+    SplitPaymentReceiptItem:
+      type: object
+      required:
+        - name
+        - quantity
+        - sum
+        - tax
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+        sum:
+          type: number
+          minimum: 0
+        tax:
+          type: string
+          enum:
+            - none
+            - vat0
+            - vat10
+            - vat110
+            - vat20
+            - vat120
+        payment_method:
+          type: string
+          enum:
+            - full_prepayment
+            - prepayment
+            - advance
+            - full_payment
+            - partial_payment
+            - credit
+            - credit_payment
+        payment_object:
+          type: string
+          enum:
+            - commodity
+            - excise
+            - job
+            - service
+            - gambling_bet
+            - gambling_prize
+            - lottery
+            - lottery_prize
+            - intellectual_activity
+            - payment
+            - agent_commission
+            - composite
+            - another
+            - property_right
+            - non-operating_gain
+            - insurance_premium
+            - sales_tax
+            - resort_fee
+        nomenclature_code:
+          type: string
+
+    SmsRequest:
+      type: object
+      required:
+        - login
+        - phone
+        - message
+        - signature
+      properties:
+        login:
+          type: string
+        phone:
+          type: string
+          pattern: '^\d+$'
+        message:
+          type: string
+          maxLength: 128
+        signature:
+          type: string
+
+    SmsResponse:
+      type: object
+      required:
+        - result
+      properties:
+        result:
+          oneOf:
+            - type: boolean
+            - type: integer
+              enum:
+                - 0
+                - 1
+        count:
+          type: integer
+          description: Количество доступных SMS после запроса. Поле заполняется только при успешном исполнении.
+        errorCode:
+          type: integer
+          enum:
+            - 0
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            - 6
+            - 1000
+            - 9999
+        errorMessage:
+          type:
+            - string
+            - "null"
+
+    ResultUrl2Notification:
+      type: object
+      required:
+        - header
+        - data
+      properties:
+        header:
+          type: object
+          required:
+            - type
+            - version
+            - timestamp
+          properties:
+            type:
+              type: string
+              example: PaymentStateNotification
+            version:
+              type: string
+              example: 1.0.0
+            timestamp:
+              type: string
+              description: Unix timestamp в виде строки.
+        data:
+          type: object
+          required:
+            - shop
+            - opKey
+            - invId
+            - paymentMethod
+            - incSum
+            - state
+          properties:
+            shop:
+              type: string
+            opKey:
+              type: string
+            invId:
+              type: string
+            paymentMethod:
+              type: string
+            incSum:
+              type: string
+            state:
+              type: string
+              examples:
+                - HOLD
+                - OK
+
+    RedirectMethod:
+      type: string
+      enum:
+        - GET
+        - POST
+
+    FiscalReceiptRegisterPayload:
+      type: object
+      description: Payload до Base64Url-кодирования и подписания JWT.
+      required:
+        - ShopLocator
+        - Receipts
+      properties:
+        ShopLocator:
+          $ref: "#/components/schemas/FiscalShopLocator"
+        Receipts:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/DeferredFiscalReceipt"
+
+    FiscalShopLocator:
+      type: object
+      description: Передайте один из идентификаторов магазина.
+      properties:
+        MrhId:
+          type: integer
+          format: int64
+          description: Внутренний номер магазина в Robokassa.
+        Id:
+          type: string
+          format: uuid
+          description: Внутренний GUID магазина.
+        Identifier:
+          type: string
+          description: MerchantLogin магазина. Рекомендуется для интеграции мерчанта.
+      oneOf:
+        - required:
+            - MrhId
+        - required:
+            - Id
+        - required:
+            - Identifier
+
+    DeferredFiscalReceipt:
+      type: object
+      required:
+        - OpId
+        - Type
+        - Items
+        - Payments
+      properties:
+        OpId:
+          type: integer
+          format: int64
+          description: Robox ID успешно оплаченной операции.
+        Url:
+          type: string
+          format: uri
+          description: URL главной страницы магазина без URL-кодирования.
+        TaxScheme:
+          $ref: "#/components/schemas/DeferredTaxScheme"
+        Type:
+          type: string
+          enum:
+            - Sell
+          description: Тип чека. Для продажи используется Sell.
+        VatType:
+          $ref: "#/components/schemas/DeferredVatType"
+        Items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/DeferredFiscalItem"
+        CorrectionInfo:
+          $ref: "#/components/schemas/DeferredCorrectionInfo"
+        Payments:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/DeferredFiscalPayment"
+        Client:
+          $ref: "#/components/schemas/DeferredFiscalClient"
+
+    DeferredTaxScheme:
+      type: string
+      enum:
+        - Osn
+        - UsnIncome
+        - UsnIncomeOutcome
+        - Envd
+        - Esn
+        - Patent
+        - AusnIncome
+        - AusnIncomeOutcome
+
+    DeferredVatType:
+      type: string
+      enum:
+        - None
+        - Vat0
+        - Vat10
+        - Vat18
+        - Vat110
+        - Vat118
+        - Vat20
+        - Vat120
+        - Vat12
+        - Vat8
+        - Vat5
+        - Vat105
+        - Vat7
+        - Vat107
+        - Vat22
+        - Vat122
+
+    DeferredFiscalItem:
+      type: object
+      required:
+        - Name
+        - Quantity
+        - VatType
+        - PaymentMethod
+        - PaymentObject
+      properties:
+        Name:
+          type: string
+          maxLength: 128
+        Quantity:
+          type: number
+          exclusiveMinimum: 0
+        Sum:
+          type: number
+          minimum: 0
+          description: Полная сумма позиции.
+        Cost:
+          type: number
+          minimum: 0
+          description: Цена единицы товара или услуги.
+        BonusSum:
+          type: number
+          minimum: 0
+          description: Часть стоимости позиции, оплаченная бонусами.
+        VatType:
+          $ref: "#/components/schemas/DeferredVatType"
+        PaymentMethod:
+          type: string
+          enum:
+            - FullPrepayment
+            - Prepayment
+            - Advance
+            - FullPayment
+            - PartialPayment
+            - Credit
+            - CreditPayment
+        PaymentObject:
+          type: string
+          description: Признак предмета расчета.
+          example: Commodity
+        NomenclatureCode:
+          type: string
+          description: Код маркировки без дополнительного кодирования.
+        AgentInfo:
+          $ref: "#/components/schemas/DeferredAgentInfo"
+        SupplierInfo:
+          $ref: "#/components/schemas/DeferredSupplierInfo"
+        IsNonAgentItem:
+          type: boolean
+          description: Отключает агентскую схему для отдельной позиции.
+      anyOf:
+        - required:
+            - Sum
+        - required:
+            - Cost
+
+    DeferredAgentInfo:
+      type: object
+      properties:
+        Type:
+          type: string
+          example: BankPayingAgent
+
+    DeferredSupplierInfo:
+      type: object
+      properties:
+        Name:
+          type: string
+        Inn:
+          type: string
+        Phones:
+          type: array
+          items:
+            type: string
+
+    DeferredCorrectionInfo:
+      type: object
+      properties:
+        Type:
+          type: string
+          example: Self
+        Description:
+          type: string
+        CorrectedReceiptId:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Номер корректируемого чека в Robokassa.
+        Prescription:
+          type: string
+          description: Номер предписания налогового органа.
+        BaseDate:
+          type: string
+          pattern: '^\d{4}\.\d{2}\.\d{2}$'
+          example: "2026.08.20"
+
+    DeferredFiscalPayment:
+      type: object
+      required:
+        - Type
+        - Sum
+      properties:
+        Type:
+          type: string
+          enum:
+            - Cash
+            - Cashless
+            - Advance
+            - Credit
+            - Another
+        Sum:
+          type: number
+          minimum: 0
+
+    DeferredFiscalClient:
+      type: object
+      properties:
+        Email:
+          type: string
+          format: email
+        Phone:
+          type: string
+      anyOf:
+        - required:
+            - Email
+        - required:
+            - Phone
+
+    FiscalReceiptError:
+      type: object
+      required:
+        - Text
+        - Type
+      properties:
+        Text:
+          type: string
+        Type:
+          type: string
+          enum:
+            - InternalError
+            - ValidationError
+            - ProcessingError
+
+    FiscalReceiptRegistrationResult:
+      type: object
+      required:
+        - IsSuccess
+        - OpId
+      properties:
+        IsSuccess:
+          type: boolean
+        OpId:
+          type: integer
+          format: int64
+        ReceiptId:
+          type: integer
+          format: int64
+        ReceiptType:
+          type: string
+          example: Sell
+        Errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FiscalReceiptError"
+
+    FiscalReceiptRegisterResponse:
+      type: object
+      required:
+        - IsSuccess
+      properties:
+        IsSuccess:
+          type: boolean
+        Data:
+          type: object
+          properties:
+            ReceiptRegistrationResults:
+              type: array
+              items:
+                $ref: "#/components/schemas/FiscalReceiptRegistrationResult"
+        Errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FiscalReceiptError"
+
+    InvoiceCreatePayload:
+      type: object
+      description: Payload до Base64Url-кодирования и подписания JWT.
+      required:
+        - MerchantLogin
+        - InvoiceType
+      properties:
+        MerchantLogin:
+          type: string
+          description: Логин магазина.
+        InvoiceType:
+          type: string
+          enum:
+            - OneTime
+            - Reusable
+        Culture:
+          type: string
+          enum:
+            - ru
+            - en
+        InvId:
+          type:
+            - integer
+            - "null"
+          format: int64
+        OutSum:
+          type: number
+          exclusiveMinimum: 0
+        ExpirationDate:
+          type: string
+          format: date-time
+          description: Дата и время окончания действия счета.
+        Description:
+          type: string
+        FiscalParentOpId:
+          type: integer
+          format: int64
+          description: OpId родительской операции для связной фискализации.
+        MerchantComments:
+          type: string
+        UserFields:
+          type: object
+          additionalProperties:
+            type: string
+        InvoiceItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItem"
+        SuccessUrl2Data:
+          $ref: "#/components/schemas/RedirectData"
+        FailUrl2Data:
+          $ref: "#/components/schemas/RedirectData"
+        Aliases:
+          type: array
+          description: Способы оплаты, доступные для счета.
+          items:
+            type: string
+        Payments:
+          type: array
+          description: Распределение суммы по типам платежа для фискализации.
+          items:
+            $ref: "#/components/schemas/InvoicePayment"
+        CustomUserProperty:
+          $ref: "#/components/schemas/InvoiceCustomUserProperty"
+        IsWithoutFreeSale:
+          type: boolean
+          description: Запрещает кассе создавать позицию «Свободная продажа».
+        Sno:
+          type: string
+          description: Система налогообложения.
+        AdditionalParameters:
+          type: object
+          description: |
+            Дополнительные строковые параметры платежной формы. Разрешенные
+            ключи: IsTest, IncCurrLabel, PaymentMethods, Email, ResultURL2,
+            StepByStep, Recurring, Token, Split, Culture, SuccessUrl2,
+            SuccessUrl2Method, FailUrl2, FailUrl2Method, IsWithoutFreeSale и
+            FiscalParentOpId. Неизвестные ключи игнорируются.
+            При IsTest=1 JWT подписывается тестовым Паролем#1.
+          additionalProperties:
+            type: string
+          example:
+            IsTest: "1"
+            IncCurrLabel: BankCard
+            PaymentMethods: '["BankCard","SBP"]'
+            Email: buyer@example.com
+      anyOf:
+        - required:
+            - OutSum
+        - required:
+            - InvoiceItems
+
+    InvoiceDeactivatePayload:
+      type: object
+      required:
+        - MerchantLogin
+      properties:
+        MerchantLogin:
+          type: string
+          description: Логин магазина.
+        EncodedId:
+          type: string
+          description: Последний сегмент ссылки на оплату счета.
+        Id:
+          type: string
+          format: uuid
+          description: Внутренний идентификатор счета Invoice API.
+        InvId:
+          type: integer
+          format: int64
+          description: Номер счета магазина.
+      oneOf:
+        - required:
+            - EncodedId
+        - required:
+            - Id
+        - required:
+            - InvId
+
+    InvoiceInformationFilter:
+      type: object
+      required:
+        - MerchantLogin
+        - CurrentPage
+        - PageSize
+        - InvoiceStatuses
+        - DateFrom
+        - DateTo
+        - InvoiceTypes
+      properties:
+        MerchantLogin:
+          type: string
+          description: Логин магазина.
+        CurrentPage:
+          type: integer
+          minimum: 1
+        PageSize:
+          type: integer
+          minimum: 1
+        InvoiceStatuses:
+          type: array
+          items:
+            type: string
+            enum:
+              - Paid
+              - Expired
+              - NotPaid
+        Keywords:
+          type: string
+          description: Поиск по сумме, идентификатору, описанию или email.
+        DateFrom:
+          type: string
+          format: date-time
+        DateTo:
+          type: string
+          format: date-time
+        IsAscending:
+          type: boolean
+        InvoiceTypes:
+          type: array
+          items:
+            type: string
+            enum:
+              - OneTime
+              - Reusable
+        Aliases:
+          type: array
+          description: Способы оплаты, разрешенные для счета.
+          items:
+            type: string
+        PaymentAliases:
+          type: array
+          items:
+            type: string
+        SumFrom:
+          type: number
+        SumTo:
+          type: number
+
+    InvoiceInformationPayload:
+      type: object
+      description: Payload запроса информации об одном счете.
+      required:
+        - MerchantLogin
+      properties:
+        MerchantLogin:
+          type: string
+          description: Логин магазина.
+        Id:
+          type: string
+          format: uuid
+          description: Внутренний идентификатор счета Invoice API.
+        InvId:
+          type: integer
+          format: int64
+          description: Номер счета магазина.
+      oneOf:
+        - required:
+            - Id
+        - required:
+            - InvId
+
+    InvoiceNotificationPayload:
+      type: object
+      description: Payload запроса на отправку email-уведомления покупателю.
+      required:
+        - MerchantLogin
+        - InvId
+      properties:
+        MerchantLogin:
+          type: string
+          description: Логин магазина.
+        InvId:
+          type: integer
+          format: int64
+          description: Номер счета магазина.
+        CustomerNotificationEmail:
+          type: string
+          format: email
+          description: Email покупателя.
+        CustomerNotificationName:
+          type: string
+          description: Имя покупателя.
+        CustomerNotificationPhone:
+          type: string
+          description: Телефон покупателя.
+
+    InvoiceItem:
+      type: object
+      required:
+        - Name
+        - Quantity
+        - Cost
+        - Tax
+      properties:
+        Name:
+          type: string
+        Quantity:
+          type: number
+          exclusiveMinimum: 0
+        Cost:
+          type: number
+          minimum: 0
+        Tax:
+          type: string
+          description: Ставка НДС из документации по фискализации.
+        PaymentMethod:
+          type: string
+          description: Признак способа расчета.
+        PaymentObject:
+          type: string
+          description: Признак предмета расчета.
+        NomenclatureCode:
+          type: string
+          description: Код маркировки товара.
+        AgentInfo:
+          $ref: "#/components/schemas/InvoiceAgentInfo"
+        SupplierInfo:
+          $ref: "#/components/schemas/InvoiceSupplierInfo"
+        IsNonAgentItem:
+          type: boolean
+          description: Признак неагентской позиции.
+
+    InvoiceAgentInfo:
+      type: object
+      properties:
+        Type:
+          type: string
+
+    InvoiceSupplierInfo:
+      type: object
+      properties:
+        Name:
+          type: string
+        Inn:
+          type: string
+        Phones:
+          type: array
+          items:
+            type: string
+
+    InvoicePayment:
+      type: object
+      required:
+        - Sum
+      properties:
+        Type:
+          type: string
+        Sum:
+          type: number
+
+    InvoiceCustomUserProperty:
+      type: object
+      properties:
+        Name:
+          type: string
+        Value:
+          type: string
+
+    InvoiceCreateSuccess:
+      type: object
+      required:
+        - id
+        - invId
+        - url
+        - isSuccess
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Внутренний идентификатор счета Invoice API.
+        invId:
+          type: integer
+          format: int64
+          description: Номер счета магазина.
+        url:
+          type: string
+          format: uri
+          description: Ссылка на оплату счета.
+        isSuccess:
+          type: boolean
+          const: true
+
+    InvoiceActionSuccess:
+      type: object
+      required:
+        - isSuccess
+      properties:
+        isSuccess:
+          type: boolean
+          const: true
+
+    InvoiceError:
+      type: object
+      required:
+        - isSuccess
+        - message
+      properties:
+        isSuccess:
+          type: boolean
+          const: false
+        message:
+          type: string
+          description: Описание прикладной ошибки Invoice API.
+
+    InvoiceInformationListResponse:
+      type: object
+      required:
+        - invoiceInformationList
+        - total
+        - isSuccess
+      properties:
+        invoiceInformationList:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceInformation"
+        total:
+          type: integer
+          minimum: 0
+        isSuccess:
+          type: boolean
+          const: true
+
+    InvoiceInformationSuccess:
+      type: object
+      required:
+        - invoiceInformation
+        - isSuccess
+      properties:
+        invoiceInformation:
+          $ref: "#/components/schemas/InvoiceInformation"
+        isSuccess:
+          type: boolean
+          const: true
+
+    InvoiceInformation:
+      type: object
+      required:
+        - id
+        - invId
+        - invoiceType
+        - created
+        - modified
+        - outSum
+        - invoiceItems
+        - isCustomerNotificationEmailSent
+        - invoiceStatus
+        - aliases
+        - userFields
+        - payments
+        - isWithoutFreeSale
+      properties:
+        id:
+          type: string
+          format: uuid
+        invId:
+          type: integer
+          format: int64
+        invoiceType:
+          type: string
+          enum:
+            - OneTime
+            - Reusable
+        created:
+          type: string
+          format: date-time
+        modified:
+          type: string
+          format: date-time
+        merchantLogin:
+          type:
+            - string
+            - "null"
+          description: Логин магазина.
+        culture:
+          type:
+            - string
+            - "null"
+        outSum:
+          type: number
+        expirationDate:
+          type:
+            - string
+            - "null"
+          format: date-time
+        description:
+          type:
+            - string
+            - "null"
+        fiscalParentOpId:
+          type:
+            - integer
+            - "null"
+          format: int32
+          description: OpId родительской операции для связной фискализации.
+        merchantComments:
+          type:
+            - string
+            - "null"
+        invoiceItems:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        customerNotificationEmail:
+          type:
+            - string
+            - "null"
+          format: email
+        isCustomerNotificationEmailSent:
+          type: boolean
+        opId:
+          type:
+            - integer
+            - "null"
+          format: int32
+          description: Идентификатор связанной платежной операции.
+        paymentMethod:
+          type:
+            - string
+            - "null"
+          description: Использованный способ оплаты.
+        invoiceStatus:
+          type: string
+          enum:
+            - Paid
+            - Expired
+            - NotPaid
+        invoicePaymentUrl:
+          type:
+            - string
+            - "null"
+          format: uri
+        shortInvoicePaymentUrl:
+          type:
+            - string
+            - "null"
+          format: uri
+        successUrl2Data:
+          oneOf:
+            - $ref: "#/components/schemas/RedirectData"
+            - type: "null"
+        failUrl2Data:
+          oneOf:
+            - $ref: "#/components/schemas/RedirectData"
+            - type: "null"
+        aliases:
+          type: array
+          items:
+            type: string
+        paymentAlias:
+          type:
+            - string
+            - "null"
+        paymentCardNumber:
+          type:
+            - string
+            - "null"
+          description: Маскированный номер карты, если применимо.
+        userFields:
+          type: object
+          additionalProperties:
+            type: string
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoicePayment"
+        customUserProperty:
+          oneOf:
+            - $ref: "#/components/schemas/InvoiceCustomUserProperty"
+            - type: "null"
+        isWithoutFreeSale:
+          type: boolean
+        additionalParameters:
+          type: object
+          additionalProperties:
+            type: string
+
+    RedirectData:
+      type: object
+      required:
+        - Url
+        - Method
+      properties:
+        Url:
+          type: string
+          format: uri
+        Method:
+          $ref: "#/components/schemas/RedirectMethod"
+
+    PaymentResult:
+      type: object
+      required:
+        - OutSum
+        - InvId
+        - SignatureValue
+      properties:
+        OutSum:
+          type: string
+          description: Сумма платежа в точном формате из уведомления.
+          example: "100.000000"
+        InvId:
+          type: string
+          description: Номер счета магазина.
+          example: "450009"
+        Fee:
+          type: string
+          description: Комиссия Robokassa.
+        EMail:
+          type: string
+          format: email
+        SignatureValue:
+          type: string
+          description: Подпись уведомления с использованием Пароля#2.
+        PaymentMethod:
+          type: string
+        IncCurrLabel:
+          type: string
+      patternProperties:
+        "^Shp_":
+          type: string
+      additionalProperties: false
+
+    OperationStateResponse:
+      type: object
+      xml:
+        name: OperationStateResponse
+        namespace: http://merchant.roboxchange.com/WebService/
+      required:
+        - Result
+      properties:
+        Result:
+          $ref: "#/components/schemas/OperationResult"
+        State:
+          $ref: "#/components/schemas/OperationState"
+        Info:
+          $ref: "#/components/schemas/OperationInfo"
+        UserFields:
+          $ref: "#/components/schemas/OperationUserFields"
+
+    OperationResult:
+      type: object
+      required:
+        - Code
+      properties:
+        Code:
+          type: integer
+          enum:
+            - 0
+            - 1
+            - 2
+            - 3
+            - 4
+            - 1000
+        Description:
+          type: string
+
+    OperationState:
+      type: object
+      properties:
+        Code:
+          type: integer
+          description: |
+            Код состояния операции. Для холдов:
+            - `20` — операция находится в HOLD;
+            - `50` — идет обработка операции;
+            - `60` — зачисление отменено, деньги возвращены покупателю;
+            - `100` — операция успешно подтверждена.
+          enum:
+            - 5
+            - 10
+            - 20
+            - 50
+            - 60
+            - 80
+            - 100
+          x-robokassa-state-descriptions:
+            "10": >-
+              Операция отменена, деньги от покупателя не были получены. Оплата не
+              была произведена. Покупатель отказался от оплаты или не совершил
+              платеж, и операция отменилась по истечении времени ожидания. Либо
+              платёж был совершён после истечения времени ожидания. В случае
+              возникновения спорных моментов по запросу от продавца или покупателя,
+              операция будет перепроверена службой поддержки, и в зависимости от
+              результата может быть переведена в другое состояние.
+            "20": Операция находится в HOLD.
+            "50": Идет обработка операции.
+            "60": Зачисление отменено, деньги возвращены покупателю.
+            "100": Операция успешно подтверждена.
+        RequestDate:
+          type: string
+          format: date-time
+        StateDate:
+          type: string
+          format: date-time
+
+    OperationInfo:
+      type: object
+      properties:
+        IncCurrLabel:
+          type: string
+        IncSum:
+          type: string
+        IncAccount:
+          type: string
+        PaymentMethod:
+          type: object
+          properties:
+            Code:
+              type: string
+            Description:
+              type: string
+        OutCurrLabel:
+          type: string
+        OutSum:
+          type: string
+        OpKey:
+          type: string
+        BankCardRRN:
+          type: string
+
+    OperationUserFields:
+      type: object
+      properties:
+        Field:
+          type: array
+          items:
+            type: object
+            properties:
+              Name:
+                type: string
+              Value:
+                type: string
+
+    CurrenciesList:
+      type: object
+      xml:
+        name: CurrenciesList
+        namespace: http://merchant.roboxchange.com/WebService/
+      required:
+        - Result
+      properties:
+        Result:
+          $ref: "#/components/schemas/OperationResult"
+        Groups:
+          type: object
+          properties:
+            Group:
+              type: array
+              items:
+                $ref: "#/components/schemas/CurrencyGroup"
+
+    CurrencyGroup:
+      type: object
+      properties:
+        Code:
+          type: string
+          xml:
+            attribute: true
+        Description:
+          type: string
+          xml:
+            attribute: true
+        Items:
+          type: object
+          properties:
+            Currency:
+              type: array
+              items:
+                $ref: "#/components/schemas/Currency"
+
+    Currency:
+      type: object
+      properties:
+        Label:
+          type: string
+          xml:
+            attribute: true
+        Alias:
+          type: string
+          xml:
+            attribute: true
+        Name:
+          type: string
+          xml:
+            attribute: true
+        MinValue:
+          type: string
+          xml:
+            attribute: true
+        MaxValue:
+          type: string
+          xml:
+            attribute: true
+
+    RefundPayload:
+      type: object
+      required:
+        - OpKey
+      properties:
+        OpKey:
+          type: string
+          description: Идентификатор завершенной платежной операции.
+        RefundSum:
+          type: number
+          exclusiveMinimum: 0
+          description: Сумма частичного возврата. Для полного возврата не передается.
+        InvoiceItems:
+          type: array
+          description: Позиции для формирования чека возврата прихода.
+          items:
+            $ref: "#/components/schemas/InvoiceItem"
+
+    RefundCreateResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+        message:
+          type:
+            - string
+            - "null"
+        requestId:
+          type:
+            - string
+            - "null"
+          format: uuid
+
+    RefundState:
+      type: object
+      required:
+        - requestId
+        - amount
+        - label
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        label:
+          type: string
+          description: Состояние заявки на возврат.
+
+    MessageError:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string

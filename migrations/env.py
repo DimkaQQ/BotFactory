@@ -8,7 +8,16 @@ from sqlalchemy import engine_from_config, pool
 sys.path.insert(0, os.getcwd())
 
 from app.database import Base  # noqa: E402
-from app.models import Bot, BotBlock, Client  # noqa: E402,F401  (register models on Base.metadata)
+from app.models import (  # noqa: E402,F401  (register models on Base.metadata)
+    Bot,
+    BotBlock,
+    BotSubscriber,
+    Client,
+    Payment,
+    PollAnswer,
+    ScheduledStep,
+    Subscription,
+)
 
 config = context.config
 
@@ -16,6 +25,18 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
+
+def _compare_type(context, inspected_column, metadata_column, inspected_type, metadata_type):  # noqa: ARG001
+    """Enum(native_enum=False) в модели — это VARCHAR в базе: считаем их одинаковыми.
+
+    Остальные различия типов (длина, тип данных) alembic по-прежнему покажет.
+    """
+    from sqlalchemy import Enum, String
+
+    if isinstance(metadata_type, Enum) and not metadata_type.native_enum and isinstance(inspected_type, String):
+        return False
+    return None
 
 
 def _sync_db_url() -> str:
@@ -44,7 +65,7 @@ def run_migrations_online() -> None:
     connectable = engine_from_config(configuration, prefix="sqlalchemy.", poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(connection=connection, target_metadata=target_metadata, compare_type=_compare_type)
         with context.begin_transaction():
             context.run_migrations()
 

@@ -1,0 +1,362 @@
+"""ЮKassa — direct REST API v3.
+
+Notifications from ЮKassa carry no signature at all, so the callback is
+treated as nothing more than a nudge: the adapter re-reads the payment
+through `GET /v3/payments/{id}` with the shop's own credentials and
+believes that, which is both simpler and stronger than an IP allowlist.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import uuid
+
+import httpx
+
+from app.models.payment import PaymentStatus
+from app.services.payments.base import (
+    Checkout,
+    CheckoutRequest,
+    CredentialField,
+    PaymentRef,
+    ProviderDefaults,
+    ProviderError,
+    Receipt,
+    RecurringMode,
+    RecurringSetup,
+    Vat,
+    WebhookResult,
+    minor_to_major,
+    receipt_from_credentials,
+    same_currency,
+)
+
+_BASE = "https://api.yookassa.ru/v3"
+
+
+# Код ставки НДС в ЮKassa — число. 11 = 22%, 12 = 22/122 (справочник 54-ФЗ).
+# Коды для 5%/7% (105/107) не сверены — не передаём, пока не проверим.
+YK_VAT = {Vat.NONE: 1, Vat.VAT0: 2, Vat.VAT10: 3, Vat.VAT110: 5, Vat.VAT22: 11, Vat.VAT122: 12}
+
+
+def receipt_yookassa(r: Receipt, currency: str = "RUB") -> dict:
+    # Телефон по схеме ЮKassa — только цифры (ITU-T E.164 без «+», пример 79000000000).
+    phone = "".join(ch for ch in (r.phone or "") if ch.isdigit())
+    customer = {k: v for k, v in (("email", r.email), ("phone", phone)) if v}
+    items = []
+    for i in r.items:
+        if i.vat not in YK_VAT:
+            raise ProviderError(f"ЮKassa: для ставки {i.vat.value} код НДС не сверен — выбери другую ставку")
+        items.append(
+            {
+                "description": i.name,
+                "quantity": float(i.qty),  # по схеме — число, не строка
+                "amount": {"value": f"{i.price:.2f}", "currency": currency.upper()},
+                "vat_code": YK_VAT[i.vat],
+                "payment_mode": i.method.value,
+                "payment_subject": i.obj.value,
+            }
+        )
+    return {"customer": customer, "items": items}
+
+
+def _tax_system(credentials: dict[str, str]) -> int | None:
+    """Код системы налогообложения (тег 1055, 1–6). Нужен сторонним онлайн-кассам с несколькими
+    системами налогообложения (и Атол Онлайн на ФФД 1.2); для «Чеков от ЮKassa» игнорируется."""
+    raw = (credentials.get("tax_system_code") or "").strip()
+    if not raw:
+        return None
+    if not raw.isdigit() or not 1 <= int(raw) <= 6:
+        raise ProviderError("ЮKassa: код системы налогообложения — число от 1 до 6")
+    return int(raw)
+
+
+def _receipt(
+    credentials: dict[str, str], description: str, amount_minor: int, currency: str, buyer: tuple | None = None
+) -> dict | None:
+    """Чек 54-ФЗ из одной позиции. Только если продавец указал почту для чеков:
+    без неё не знаем, куда его слать, и платёж идёт без `receipt`, как раньше."""
+    receipt = receipt_from_credentials(
+        credentials, description, amount_minor, buyer_email=(buyer or (None, None))[0], buyer_phone=(buyer or (None, None))[1]
+    )
+    if receipt is None:
+        return None
+    body = receipt_yookassa(receipt, currency)
+    tax_system = _tax_system(credentials)
+    if tax_system:
+        body["tax_system_code"] = tax_system
+    legacy = (credentials.get("vat_code") or "").strip()
+    if legacy.isdigit() and not (credentials.get("default_vat") or "").strip():
+        # Прежнее поле: числовой код ставки из кабинета, отдаём как есть.
+        for item in body["items"]:
+            item["vat_code"] = int(legacy)
+    return body
+
+
+class YooKassaProvider(ProviderDefaults):
+    slug = "yookassa"
+    title = "ЮKassa"
+    hint = (
+        "shopId и секретный ключ — в личном кабинете ЮKassa, «Интеграция → Ключи API». Уведомления мы "
+        "проверяем обратным запросом в API, поэтому подписывать их не нужно; адрес для уведомлений всё же "
+        "укажи в кабинете («Интеграция → HTTP-уведомления», событие payment.succeeded)."
+    )
+    currencies = ("RUB",)
+    region = "ru"
+    supports_status_check = True
+    # Автоплатежи: первый платёж просит сохранить способ оплаты, ответ
+    # приносит payment_method.id, и последующие списания идут с этим id
+    # без участия покупателя. Поля сверены с официальным SDK
+    # (yookassa 3.12.1: PaymentRequest.save_payment_method /
+    # .payment_method_id, ResponsePaymentData.id / .saved).
+    recurring = RecurringMode.token
+    credential_fields = (
+        CredentialField("shop_id", "shopId", "идентификатор магазина", secret=False),
+        CredentialField("secret_key", "Секретный ключ", "live_… или test_…"),
+        # Чек 54-ФЗ. Если у магазина подключены чеки ЮKassa, без `receipt` платёж не создаётся.
+        # Покупатель из Telegram почту не оставляет, поэтому чек уходит на этот адрес продавца.
+        CredentialField(
+            "fiscalization_enabled", "Передавать чек (54-ФЗ)", "1 — да, 0 или пусто — нет. Включай, только если у кассы подключена онлайн-касса",
+            secret=False, required=False,
+        ),
+        CredentialField(
+            "fiscal_email", "Почта для чеков (если включены чеки)", "email для чека 54-ФЗ", secret=False, required=False),
+        CredentialField(
+            "default_vat", "Ставка НДС в чеке", "none (по умолчанию), vat0, vat10, vat110, vat22, vat122", secret=False, required=False),
+        CredentialField(
+            "tax_system_code", "Система налогообложения в чеке", "число 1–6 из справочника ЮKassa; только если у кассы несколько систем налогообложения",
+            secret=False, required=False),
+        CredentialField(
+            "vat_code", "Код ставки НДС для чека", "1 — без НДС (по умолчанию); см. справочник ЮKassa", secret=False, required=False),
+    )
+
+    @staticmethod
+    def _auth(credentials: dict[str, str]) -> tuple[str, str]:
+        shop_id = (credentials.get("shop_id") or "").strip()
+        secret = (credentials.get("secret_key") or "").strip()
+        if not shop_id or not secret:
+            raise ProviderError("ЮKassa: не заполнены shopId или секретный ключ")
+        return shop_id, secret
+
+    async def create_checkout(self, request: CheckoutRequest) -> Checkout:
+        auth = self._auth(request.credentials)
+        body = {
+            "amount": {"value": minor_to_major(request.amount_minor), "currency": request.currency.upper()},
+            "capture": True,
+            "confirmation": {"type": "redirect", "return_url": request.return_url},
+            "description": request.description[:128] or "Оплата",
+            "metadata": {"order_id": str(request.payment_id)},
+        }
+        receipt = _receipt(
+            request.credentials, request.description, request.amount_minor, request.currency,
+            (request.buyer_email, request.buyer_phone),
+        )
+        if receipt:
+            body["receipt"] = receipt
+        if request.extra.get("subscription"):
+            # Turns this into the *first* payment of an autopayment series:
+            # the buyer confirms once, and the response carries a handle we
+            # can charge later. ЮKassa requires the shop to have autopayments
+            # enabled by their manager — an account without it refuses the
+            # field outright rather than silently ignoring it, which is the
+            # behaviour we want.
+            body["save_payment_method"] = True
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{_BASE}/payments",
+                json=body,
+                auth=auth,
+                # Any unique value; ours is the payment id, so a retried
+                # create can never charge twice.
+                headers={"Idempotence-Key": str(request.payment_id)},
+            )
+        if response.status_code >= 400:
+            raise ProviderError(f"ЮKassa: {_error(response)}")
+
+        payload = response.json()
+        url = (payload.get("confirmation") or {}).get("confirmation_url")
+        if not url:
+            raise ProviderError("ЮKassa: ответ без ссылки на оплату")
+        return Checkout(url=url, provider_payment_id=payload.get("id"))
+
+    def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
+        try:
+            event = json.loads(raw_body or b"{}")
+        except json.JSONDecodeError:
+            return PaymentRef()
+        obj = event.get("object") or {}
+        if event.get("event") == "refund.succeeded" and obj.get("payment_id"):
+            # В событии о возврате в object лежит возврат, а наш платёж — в payment_id.
+            return PaymentRef(provider_payment_id=str(obj["payment_id"]))
+        raw_id = (obj.get("metadata") or {}).get("order_id", "")
+        try:
+            return PaymentRef(payment_id=uuid.UUID(str(raw_id)))
+        except (ValueError, AttributeError):
+            return PaymentRef(provider_payment_id=str(obj.get("id")) if obj.get("id") else None)
+
+    async def verify_webhook(
+        self,
+        *,
+        headers: dict[str, str],
+        raw_body: bytes,
+        form: dict[str, str],
+        credentials: dict[str, str],
+        amount_minor: int,
+        invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
+        meta: dict | None = None,
+        currency: str = "",
+    ) -> WebhookResult:
+        try:
+            event = json.loads(raw_body or b"{}")
+        except json.JSONDecodeError:
+            event = {}
+        remote_id = provider_payment_id or (event.get("object") or {}).get("id")
+        if not remote_id:
+            raise ProviderError("ЮKassa: не удалось определить платёж")
+        return await self._read(credentials, str(remote_id), amount_minor, currency, expect_order=payment_id)
+
+    async def check_status(
+        self,
+        *,
+        credentials: dict[str, str],
+        amount_minor: int,
+        invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
+        meta: dict,
+        currency: str = "",
+    ) -> WebhookResult:
+        if not provider_payment_id:
+            raise ProviderError("ЮKassa: платёж ещё не создан")
+        return await self._read(credentials, provider_payment_id, amount_minor, currency, expect_order=payment_id)
+
+    async def _read(
+        self,
+        credentials: dict[str, str],
+        remote_id: str,
+        amount_minor: int,
+        currency: str = "",
+        expect_order: uuid.UUID | None = None,
+    ) -> WebhookResult:
+        """The single source of truth for this provider: what the shop's own
+        API says about the payment. Both the callback and the buyer's "Я
+        оплатил" tap end up here."""
+        # Идентификатор попадает в путь запроса: из неподписанного тела вебхука
+        # не принимаем слэши и точки (обход пути).
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", remote_id):
+            raise ProviderError("ЮKassa: неверный идентификатор платежа")
+        auth = self._auth(credentials)
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(f"{_BASE}/payments/{remote_id}", auth=auth)
+        if response.status_code >= 400:
+            raise ProviderError(f"ЮKassa: {_error(response)}")
+
+        payment = response.json()
+        # Платёж должен быть нашим: его metadata.order_id — id заказа, который проверяем.
+        order_ref = (payment.get("metadata") or {}).get("order_id")
+        if expect_order is not None and order_ref and str(order_ref) != str(expect_order):
+            raise ProviderError("ЮKassa: платёж относится к другому заказу")
+        status = payment.get("status")
+        # A refund does not change `status` — ЮKassa keeps it "succeeded" and
+        # adds `refunded_amount`. Checked first, or a refunded sale would go
+        # on counting as revenue for good.
+        refunded = (payment.get("refunded_amount") or {}).get("value")
+        total = (payment.get("amount") or {}).get("value")
+        try:
+            fully = bool(refunded) and float(refunded) > 0 and (not total or float(refunded) >= float(total) - 0.009)
+        except ValueError:
+            fully = False
+        # Частичный возврат заказ не отменяет: деньги вернули за часть, остальное — продажа.
+        if status == "succeeded" and fully:
+            return WebhookResult(status=PaymentStatus.refunded, provider_payment_id=str(remote_id))
+        if status == "succeeded" and payment.get("paid"):
+            value = (payment.get("amount") or {}).get("value", "")
+            try:
+                same = bool(value) and abs(float(value) - amount_minor / 100) <= 0.009
+            except (TypeError, ValueError):
+                same = False
+            if not same:
+                raise ProviderError(f"ЮKassa: сумма не совпадает (в кассе {value or 'не указана'})")
+            same_currency(self.title, (payment.get("amount") or {}).get("currency"), currency)
+            method = payment.get("payment_method") or {}
+            notes = {}
+            if method.get("saved") and method.get("id"):
+                notes["yookassa_payment_method_id"] = str(method["id"])
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=str(remote_id), meta=notes)
+
+        if status == "canceled":
+            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=str(remote_id))
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=str(remote_id))
+
+
+    def recurring_setup(self, settled: dict) -> RecurringSetup | None:
+        token = (settled or {}).get("yookassa_payment_method_id")
+        return RecurringSetup(token=str(token)) if token else None
+
+    async def charge_recurring(
+        self,
+        *,
+        credentials: dict[str, str],
+        setup: RecurringSetup,
+        amount_minor: int,
+        currency: str,
+        description: str,
+        payment_id: uuid.UUID,
+        is_test: bool = False,
+        #: The short numeric invoice number of *this* charge. Robokassa signs
+        #: the recurring call with it; the others never look at it.
+        invoice_no: int | None = None,
+    ) -> WebhookResult:
+        """The next period, with nobody present.
+
+        Same POST /payments as a normal sale, minus the confirmation block
+        and plus `payment_method_id` — ЮKassa then charges the saved method
+        outright. The idempotence key is our own payment id, so a retried
+        charge cannot take the money twice.
+        """
+        auth = self._auth(credentials)
+        body = {
+            "amount": {"value": minor_to_major(amount_minor), "currency": currency.upper()},
+            "capture": True,
+            "payment_method_id": setup.token,
+            "description": description[:128] or "Продление подписки",
+            "metadata": {"order_id": str(payment_id)},
+        }
+        receipt = _receipt(
+            credentials, description or "Продление подписки", amount_minor, currency,
+            (credentials.get("_buyer_email"), credentials.get("_buyer_phone")),  # кладёт subscription_service.charge_now
+        )
+        if receipt:
+            body["receipt"] = receipt
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                f"{_BASE}/payments", json=body, auth=auth, headers={"Idempotence-Key": str(payment_id)}
+            )
+        if response.status_code >= 400:
+            raise ProviderError(f"ЮKassa: {_error(response)}")
+
+        payload = response.json()
+        remote_id = str(payload.get("id") or "")
+        status = payload.get("status")
+        if status == "succeeded" and payload.get("paid"):
+            return WebhookResult(status=PaymentStatus.paid, provider_payment_id=remote_id)
+        if status == "canceled":
+            # A declined card is not an error to retry into oblivion — it is
+            # this period's answer, and the subscription layer treats it as
+            # "not paid" rather than "try again in a minute".
+            return WebhookResult(status=PaymentStatus.failed, provider_payment_id=remote_id)
+        # "pending" here means 3-D Secure was demanded for a payment nobody
+        # is watching, which for an autopayment is a decline in slow motion.
+        return WebhookResult(status=PaymentStatus.pending, provider_payment_id=remote_id)
+
+
+def _error(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+        return payload.get("description") or payload.get("error", {}).get("message") or response.text[:200]
+    except ValueError:
+        return response.text[:200]

@@ -1,0 +1,574 @@
+import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+
+import { type Bot, type BotBlock, ApiError, builderApi } from "../api/builderApi";
+import { confirmDialog } from "../confirm";
+import { openExternal } from "../hooks/useTelegramWebApp";
+import { useSwipeToDismiss } from "../hooks/useSwipeToDismiss";
+import { useDialogA11y } from "../hooks/useDialogA11y";
+import { useEscape } from "../hooks/useEscape";
+import { BOT_TEMPLATES, blocksLabel } from "../templates";
+import { SiteFooter } from "./SiteFooter";
+import { CrmPanel } from "./CrmPanel";
+import { FeedbackPanel } from "./FeedbackPanel";
+import { SalesOverviewPanel } from "./SalesOverviewPanel";
+import { TemplateIcon } from "../icons";
+import { ThemeToggle } from "./ThemeToggle";
+import { CurrencyCircleDollar, Lightbulb, Plus, UsersThree } from "@phosphor-icons/react";
+import { DeviceMobile, Robot, Sparkle, Trash, X } from "@phosphor-icons/react";
+
+
+
+const EASE_OUT = [0.16, 1, 0.3, 1] as const;
+
+interface Props {
+  greetingName?: string;
+  isMiniApp?: boolean;
+  onOpen: (botId: string) => void;
+  /** Выйти из аккаунта на этом устройстве. Не задан в Mini App, там
+   * сессия телеграмовская, выходить некуда. */
+  onLogout?: () => void;
+}
+
+const STATUS_LABEL: Record<Bot["status"], string> = {
+  draft: "Черновик",
+  active: "Опубликован",
+  disabled: "Отключён",
+};
+
+/* Same five days the constructor and the Telegram reminder use, so the list
+   never says "оплачен" about a bot the banner is already nagging over. */
+const DUE_SOON_MS = 5 * 24 * 60 * 60 * 1000;
+
+function dueSoon(paidUntil: string): boolean {
+  return new Date(paidUntil).getTime() - Date.now() < DUE_SOON_MS;
+}
+
+function shortDay(paidUntil: string): string {
+  return new Date(paidUntil).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+}
+
+function botTitle(bot: Bot): string {
+  if (bot.name) return bot.name;
+  if (bot.telegram_bot_username) return `@${bot.telegram_bot_username}`;
+  return "Новый бот";
+}
+
+function blockCountLabel(count: number): string {
+  if (count === 0) return "Пока пусто";
+  return blocksLabel(count);
+}
+
+export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
+  const [bots, setBots] = useState<Bot[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
+  const [overviewOpen, setOverviewOpen] = useState(false);
+  const [crmOpen, setCrmOpen] = useState(false);
+  const [ideaOpen, setIdeaOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Subscriptions ship switched off while the one-off sale is being shaken
+  // out, and the «Платная подписка» template is a promise of monthly
+  // charging from its first word, so it is not offered until the feature
+  // is back. Asked for only when the picker opens: the list screen has no
+  // business fetching the payment catalogue.
+  const [templates, setTemplates] = useState(() => BOT_TEMPLATES.filter((x) => !x.needsSubscriptions));
+  useEscape(() => setPickerOpen(false), pickerOpen);
+  const { sheetRef, handleProps } = useSwipeToDismiss(() => {
+    if (!creatingTemplateId) setPickerOpen(false);
+  });
+  useDialogA11y(sheetRef, ".sheet__title", pickerOpen);
+
+  const refresh = useCallback(async () => {
+    try {
+      const list = await builderApi.listBots();
+      setBots(list);
+      setError(null);
+    } catch (err) {
+      // The raw server `detail` is written for a log, not for a person, it
+      // has said things like "boom": so only the shape of the failure is
+      // shown, and the detail goes to the console for whoever is debugging.
+      if (err instanceof ApiError) console.error("listBots failed:", err.message);
+      setError("Не удалось загрузить ботов. Проверь соединение и попробуй ещё раз.");
+      // Without this the list stayed at `null` forever and three skeleton
+      // cards kept pulsing behind the error, as if something were still
+      // loading. Nothing was.
+      setBots((current) => current ?? []);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function handlePickTemplate(templateId: string) {
+    const template = BOT_TEMPLATES.find((t) => t.id === templateId);
+    if (!template) return;
+
+    setCreatingTemplateId(templateId);
+    // Бот, созданный под шаблон: если сборка оборвётся посередине, его надо убрать, иначе в списке
+    // останется «полусобранный» бот без стрелок.
+    let createdBotId: string | null = null;
+    try {
+      const bot = await builderApi.createBot();
+      createdBotId = bot.id;
+      if (template.suggestedName) {
+        await builderApi.renameBot(bot.id, template.suggestedName);
+      }
+      // Sequential on purpose: order_index falls back to "append", so
+      // blocks must land in template order, not race each other.
+      //
+      // Laid out along whichever axis the canvas has room in, because the
+      // first thing anyone sees is the whole graph framed by fitView, and a
+      // graph laid out across the short axis opens illegibly small. The
+      // seven-block template measured 540x1211 as a column: 0.39 zoom on a
+      // laptop, where block titles are a blur. The same chain as a row is
+      // about 1760x420, which frames at 0.61 there and 0.79 on a 1920
+      // screen. Below 960px the trade flips, that canvas is taller than it
+      // is wide, and a row would open at 0.20: so narrow screens keep the
+      // column. 960px is the same breakpoint the desktop shell uses.
+      // Either way the step perpendicular to the flow after a buttons block
+      // makes its branch read as a branch instead of a loop back.
+      const acrossTheWidth = window.innerWidth >= 960;
+      const created: BotBlock[] = [];
+      // Clear of the "▶ Старт" pseudo-node, which sits at (40, 40).
+      let x = 80;
+      let y = 170;
+      let column = 0;
+      for (const [index, block] of template.blocks.entries()) {
+        // Широкий ряд на десктопе открывался бы мелко: после четырёх блоков
+        // сценарий переходит на вторую строку, и холст вписывается крупнее.
+        if (acrossTheWidth && (column >= 4 || template.blocks[index - 1]?.block_type === "buttons")) {
+          column = 0;
+          x = 80;
+          y += 250;
+        }
+        if (!acrossTheWidth && template.blocks[index - 1]?.block_type === "buttons") x += 280;
+        created.push(await builderApi.createBlock(bot.id, block.block_type, block.content, { x, y }));
+        if (acrossTheWidth) {
+          x += 262;
+          column += 1;
+        }
+        else y += 190;
+      }
+
+      // Then wire them into an actual chain. A template arriving as a pile
+      // of disconnected blocks would send nothing but its first message —
+      // and it's also how someone learns what the arrows are for: the first
+      // bot they open already shows a working one.
+      if (template.nexts) {
+        // Своя разводка: стрелки «дальше» и ведение каждой кнопки заданы в шаблоне.
+        for (const [from, to] of template.nexts) {
+          await builderApi.updateBlock(bot.id, created[from].id, { next_block_id: created[to].id });
+        }
+        const byBlock = new Map<number, { button: number; to: number }[]>();
+        for (const link of template.links ?? []) {
+          byBlock.set(link.from, [...(byBlock.get(link.from) ?? []), { button: link.button, to: link.to }]);
+        }
+        for (const [from, list] of byBlock) {
+          const source = created[from];
+          const buttons = (source.content.buttons ?? []).map((b, index) => {
+            const link = list.find((l) => l.button === index);
+            return link ? { ...b, target_block_id: created[link.to].id } : b;
+          });
+          await builderApi.updateBlock(bot.id, source.id, { content: { ...source.content, buttons } });
+        }
+      } else {
+        // Простая цепочка. Блок кнопок ждёт нажатия, поэтому его «дальше», это
+        // ветка первой кнопки (см. bot_dispatcher.py).
+        for (let i = 0; i < created.length - 1; i++) {
+          const current = created[i];
+          const next = created[i + 1];
+          const buttons = current.content.buttons ?? [];
+          const branchIndex = buttons.findIndex((b) => b.action_type !== "url");
+          if (current.block_type === "buttons" && branchIndex !== -1) {
+            await builderApi.updateBlock(bot.id, current.id, {
+              content: {
+                ...current.content,
+                buttons: buttons.map((b, index) => (index === branchIndex ? { ...b, target_block_id: next.id } : b)),
+              },
+            });
+          } else {
+            await builderApi.updateBlock(bot.id, current.id, { next_block_id: next.id });
+          }
+        }
+      }
+      setPickerOpen(false);
+      onOpen(bot.id);
+    } catch (err) {
+      if (createdBotId) {
+        try {
+          await builderApi.deleteBot(createdBotId);
+        } catch {
+          // Не вышло убрать: бот останется в списке, и его можно удалить вручную.
+        }
+        void refresh();
+      }
+      setError(err instanceof ApiError ? err.message : "Не удалось создать бота по шаблону. Попробуй ещё раз.");
+    } finally {
+      setCreatingTemplateId(null);
+    }
+  }
+
+  function handleCreateClick() {
+    if (isMiniApp) {
+      // Building/editing a bot is a full drag-and-drop canvas, awkward
+      // inside Telegram's WebView. Send the user to the real browser
+      // instead of opening the in-app template picker.
+      openExternal(`${window.location.origin}/`);
+      return;
+    }
+    setPickerOpen(true);
+    builderApi
+      .listPaymentProviders()
+      .then((catalogue) =>
+        setTemplates(
+          catalogue.subscriptions_enabled
+            ? BOT_TEMPLATES
+            : BOT_TEMPLATES.filter((x) => !x.needsSubscriptions),
+        ),
+      )
+      .catch(() => {
+        /* Offering fewer templates is the safe failure here. */
+      });
+  }
+
+  async function handleDelete(bot: Bot, e: React.MouseEvent) {
+    e.stopPropagation();
+    // Диалог говорил только «это нельзя отменить», умалчивая о том, что
+    // уходит вместе с ботом: история продаж (в базе каскад по bot_id),
+    // оплаченный период и сама оплата запуска. Для человека, которому
+    // однажды понадобится доказать, что ему заплатили, это дорого.
+    const extra = [
+      bot.status !== "draft" ? "оплата запуска" : "",
+      bot.paid_until ? "оставшийся оплаченный период" : "",
+    ].filter(Boolean);
+    const confirmed = await confirmDialog(
+      `Удалить бота ${botTitle(bot)}?\n\nВместе с ним навсегда пропадёт история продаж и заказы` +
+        (extra.length ? `, а также ${extra.join(" и ")}` : "") +
+        ". Это нельзя отменить.",
+    );
+    if (!confirmed) return;
+
+    setDeletingId(bot.id);
+    const prev = bots;
+    setBots((list) => list?.filter((b) => b.id !== bot.id) ?? null);
+    try {
+      await builderApi.deleteBot(bot.id);
+    } catch (err) {
+      setBots(prev ?? null); // roll back on failure
+      setError(err instanceof ApiError ? err.message : "Не удалось удалить бота");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div className="screen screen--list">
+      <header className="app-header">
+        <div className="app-header__top">
+          <div className="app-header__icon" aria-hidden="true">
+            <Robot size={22} weight="fill" />
+          </div>
+          <div className="app-header__titles">
+            <h1>Мои боты</h1>
+            {greetingName && <p className="app-header__greeting">Привет, {greetingName}!</p>}
+          </div>
+          <div className="app-header__actions">
+            {!isMiniApp && (bots?.length ?? 0) > 0 && (
+              <button
+                type="button"
+                className="bot-payments-button"
+                onClick={() => setOverviewOpen(true)}
+                aria-label="Продажи"
+                title="Продажи и нажатия на кнопки по всем ботам"
+              >
+                <CurrencyCircleDollar size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Продажи</span>
+              </button>
+            )}
+            {!isMiniApp && (bots?.length ?? 0) > 0 && (
+              <button
+                type="button"
+                className="bot-payments-button"
+                onClick={() => setCrmOpen(true)}
+                aria-label="Клиенты"
+                title="Клиенты, их контакты и календарь записи"
+              >
+                <UsersThree size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Клиенты</span>
+              </button>
+            )}
+            {!isMiniApp && (
+              <button
+                type="button"
+                className="bot-payments-button"
+                onClick={() => setIdeaOpen(true)}
+                aria-label="Предложить идею"
+                title="Есть идея или нашли ошибку? Напишите: я читаю всё"
+              >
+                <Lightbulb size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Идея</span>
+              </button>
+            )}
+            {!isMiniApp && <ThemeToggle />}
+            {/* Выхода не было нигде. На общем компьютере токен живёт 30
+                дней, а за ним: касса, список покупателей и кнопка снятия
+                бота с эфира. */}
+            {onLogout && (
+              <button
+                type="button"
+                className="header-logout-button"
+                title="Выйти из аккаунта на этом устройстве"
+                onClick={() => {
+                  void confirmDialog(
+                    "Выйти из аккаунта на всех устройствах?\n\nБоты, заказы и настройки " +
+                      "останутся на месте: войти снова можно через Telegram.",
+                    "Выйти",
+                  ).then((ok) => {
+                    if (ok) onLogout();
+                  });
+                }}
+              >
+                Выйти
+              </button>
+            )}
+            {!isMiniApp && (
+              <button type="button" className="header-create-button" onClick={handleCreateClick}>
+                <Plus size={16} weight="bold" aria-hidden="true" /> Новый бот
+              </button>
+            )}
+          </div>
+        </div>
+        {isMiniApp && (
+          <p className="app-hint" style={{ marginTop: "var(--sp-3)" }}>
+            <DeviceMobile size={16} aria-hidden="true" /> Здесь виден статус и кнопка публикации. Собирать бота: в браузере: открой {window.location.host},
+            с телефона это тоже работает.
+          </p>
+        )}
+      </header>
+
+      {error && (
+        <div className="list-error" role="alert">
+          <p className="publish-form__error">{error}</p>
+          <button
+            type="button"
+            className="list-error__retry"
+            onClick={() => {
+              setError(null);
+              setBots(null);
+              refresh();
+            }}
+          >
+            Повторить
+          </button>
+        </div>
+      )}
+
+      {bots === null ? (
+        <div className="bot-list" aria-hidden="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="bot-card bot-card--skeleton" style={{ animationDelay: `${i * 80}ms` }}>
+              <div className="skeleton-block skeleton-block--icon" />
+              <div className="bot-card__info">
+                <div className="skeleton-block" style={{ width: "62%", height: 14 }} />
+                <div className="skeleton-block" style={{ width: "40%", height: 11, marginTop: 6 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="bot-list">
+          {/* Empty-state and cards share one AnimatePresence so deleting the
+              last bot crossfades into "no bots yet" instead of the whole
+              list container getting swapped out mid-exit-animation. */}
+          <AnimatePresence initial={false} mode="popLayout">
+            {bots.length === 0 && (
+              <motion.div
+                key="empty"
+                className="bot-list__empty"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: EASE_OUT }}
+              >
+                {/* Points at the header's "+ Новый бот": the one control on
+                    an otherwise empty screen, and the one thing a first-time
+                    visitor has to find. Desktop only: below 960px that button
+                    is hidden and the footer button takes over. */}
+                {!isMiniApp && (
+                  <div className="empty-arrow" aria-hidden="true">
+                    <span className="empty-arrow__label">или сюда</span>
+                    <svg viewBox="0 0 160 132" fill="none">
+                      <path
+                        d="M8 126C44 118 104 104 124 30"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeDasharray="7 9"
+                      />
+                      <path d="M109 49L124 26L139 50" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                )}
+
+                <div className="empty-state">
+                  <div className="empty-state__icon" aria-hidden="true">
+                    <Robot size={34} weight="fill" />
+                  </div>
+                  <p className="empty-state__title">Здесь появятся твои боты</p>
+                  <p className="empty-state__hint">
+                    {isMiniApp
+                      ? "Собери первого в браузере: там визуальный холст с блоками и стрелками"
+                      : "Возьми готовый сценарий: блоки уже расставлены и связаны, останется вписать свой текст"}
+                  </p>
+
+                  {!isMiniApp && (
+                    <>
+                      <button type="button" className="empty-state__cta" onClick={handleCreateClick}>
+                        <Sparkle size={16} weight="fill" aria-hidden="true" /> Собрать первого бота
+                      </button>
+                      <ol className="empty-state__steps">
+                        <li>
+                          <span>1</span> Выбери сценарий
+                        </li>
+                        <li>
+                          <span>2</span> Правь блоки на холсте
+                        </li>
+                        <li>
+                          <span>3</span> Вставь токен: готово
+                        </li>
+                      </ol>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            )}
+            {bots.map((bot, index) => (
+              <motion.div
+                key={bot.id}
+                layout
+                className={`bot-card${deletingId === bot.id ? " bot-card--busy" : ""}`}
+                initial={{ opacity: 0, y: 14, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.16, ease: "easeIn" } }}
+                transition={{ duration: 0.32, delay: index * 0.04, ease: EASE_OUT }}
+                whileHover={{ y: -3, transition: { duration: 0.15, ease: EASE_OUT } }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <button
+                  type="button"
+                  className="bot-card__open"
+                  onClick={() => onOpen(bot.id)}
+                  disabled={deletingId === bot.id}
+                >
+                  <span className={`bot-card__icon bot-card__icon--${bot.status}`} aria-hidden="true">
+                    <Robot size={22} weight="fill" />
+                  </span>
+                  <span className="bot-card__info">
+                    <span className="bot-card__name">{botTitle(bot)}</span>
+                    <span className="bot-card__meta">
+                      <span className={`bot-card__status bot-card__status--${bot.status}`}>
+                        {bot.status === "active" && bot.paused ? "На паузе" : STATUS_LABEL[bot.status]}
+                      </span>
+                      <span className="bot-card__dot">·</span>
+                      {blockCountLabel(bot.block_count)}
+                      {bot.name && bot.telegram_bot_username && (
+                        <>
+                          <span className="bot-card__dot">·</span>@{bot.telegram_bot_username}
+                        </>
+                      )}
+                      {bot.paid_until && (
+                        <>
+                          <span className="bot-card__dot">·</span>
+                          <span className={`bot-card__due${dueSoon(bot.paid_until) ? " bot-card__due--soon" : ""}`}>
+                            {dueSoon(bot.paid_until) ? "нужно продлить" : `оплачен до ${shortDay(bot.paid_until)}`}
+                          </span>
+                        </>
+                      )}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="bot-card__delete"
+                  aria-label={`Удалить бота ${botTitle(bot)}`}
+                  onClick={(e) => handleDelete(bot, e)}
+                  disabled={deletingId === bot.id}
+                >
+                  <Trash size={18} aria-hidden="true" />
+                </button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      <div className="app-footer">
+        <button type="button" className="publish-button" onClick={handleCreateClick}>
+          {isMiniApp ? "Открыть в браузере →" : "+ Новый бот"}
+        </button>
+      </div>
+
+      {pickerOpen && (
+        <>
+          <div className="sheet-backdrop" onClick={() => !creatingTemplateId && setPickerOpen(false)} />
+          <div className="sheet sheet--picker" ref={sheetRef}>
+            <div className="sheet__handle" {...handleProps} />
+            <div className="sheet__head">
+              <div className="sheet__head-text">
+                <p className="sheet__title">С чего начнём?</p>
+                <p className="sheet__subtitle">
+                  Шаблон: это готовый сценарий: блоки уже расставлены и связаны стрелками. Любой можно
+                  переписать под себя.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="sheet__close"
+                aria-label="Закрыть"
+                onClick={() => !creatingTemplateId && setPickerOpen(false)}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="template-list">
+              {templates.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className={`template-card template-card--${template.accent}`}
+                  onClick={() => handlePickTemplate(template.id)}
+                  disabled={creatingTemplateId !== null}
+                >
+                  <span className="template-card__icon" aria-hidden="true">
+                    <TemplateIcon id={template.id} size={22} />
+                  </span>
+                  <span className="template-card__text">
+                    <span className="template-card__label">{template.label}</span>
+                    <span className="template-card__pitch">{template.pitch}</span>
+                    <span className="template-card__badge">
+                      {template.blocks.length > 0 ? blocksLabel(template.blocks.length) : "чистый холст"}
+                    </span>
+                  </span>
+                  {creatingTemplateId === template.id ? (
+                    <span className="template-card__spinner" aria-hidden="true" />
+                  ) : (
+                    <span className="template-card__go" aria-hidden="true">
+                      →
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Человек, у которого бот перестал продавать в субботу, не мог
+          написать никому: контактов не было ни на сайте, ни здесь. */}
+      {!isMiniApp && <SiteFooter compact />}
+      {ideaOpen && <FeedbackPanel onClose={() => setIdeaOpen(false)} />}
+      {crmOpen && bots && <CrmPanel bots={bots} onClose={() => setCrmOpen(false)} />}
+      {overviewOpen && bots && <SalesOverviewPanel bots={bots} onClose={() => setOverviewOpen(false)} />}
+    </div>
+  );
+}

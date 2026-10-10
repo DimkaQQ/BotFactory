@@ -1,0 +1,319 @@
+"""Prodamus — a signed payform link, with a signed callback back.
+
+The signature is the whole integration, and it is exacting: strip the
+signature key, sort every level of the structure by key, render every scalar
+as a string, JSON-encode (кириллица как есть, «/» экранируется как «\\/» — канон Prodamus) and without
+spaces, then HMAC-SHA256 with the shop's secret. Both directions use it —
+the outgoing link carries `signature`, the callback carries `Sign` — so the
+same serialiser has to produce byte-identical output from a dict we built
+ourselves and from a form body Prodamus posted at us. That round trip is
+the part worth testing, and it is (see tests/test_providers.py).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import re
+import uuid
+from urllib.parse import parse_qsl, urlencode
+
+from app.models.payment import PaymentStatus
+from app.services.payments.base import (
+    Checkout,
+    CheckoutRequest,
+    CredentialField,
+    PaymentRef,
+    ProviderDefaults,
+    ProviderError,
+    RecurringMode,
+    WebhookResult,
+    minor_to_major,
+)
+
+_KEY_PART_RE = re.compile(r"\[([^\[\]]*)\]")
+
+
+def _normalise(value):
+    """PHP's loose scalars, spelled out: booleans become "1"/"0", null the
+    empty string, numbers their decimal text."""
+    if isinstance(value, bool):
+        return "1" if value else ""
+    if value is None:
+        return ""
+    if isinstance(value, (int, float)):
+        return str(value)
+    return value
+
+
+def _prepare(obj):
+    if isinstance(obj, dict):
+        return {key: _prepare(obj[key]) for key in sorted(obj)}
+    if isinstance(obj, list):
+        return [_prepare(item) for item in obj]
+    return _normalise(obj)
+
+
+def sign(data: dict, secret: str) -> str:
+    """Подпись по официальному канону Prodamus (github.com/PRODAMUS/integration-expert).
+
+    Значения приводятся к строкам как PHP `strval` (True → "1", False/None → ""),
+    словари сортируются по ключам, JSON — как PHP `json_encode(…, JSON_UNESCAPED_UNICODE)`:
+    кириллица как есть, пробелов нет, а `/` превращается в `\\/`. Без этого экранирования
+    подпись любых данных со ссылками не сходится с эталонными тест-векторами.
+    """
+    payload = {k: v for k, v in data.items() if k not in ("signature", "sign", "_payform_sign")}
+    encoded = json.dumps(_prepare(payload), ensure_ascii=False, separators=(",", ":")).replace("/", "\\/")
+    return hmac.new(secret.encode(), encoded.encode(), hashlib.sha256).hexdigest()
+
+
+def _listify(node):
+    """PHP arrays keyed 0,1,2… JSON-encode as arrays, not objects — and the
+    signature is computed over that JSON, so the distinction is not
+    cosmetic."""
+    if isinstance(node, dict):
+        converted = {key: _listify(value) for key, value in node.items()}
+        keys = list(converted)
+        if keys and all(k.isdigit() for k in keys) and sorted(int(k) for k in keys) == list(range(len(keys))):
+            return [converted[str(i)] for i in range(len(keys))]
+        return converted
+    return node
+
+
+def parse_form(raw_body: str) -> dict:
+    """`products[0][name]=Гайд&sum=990` → nested dict/list, the way PHP's
+    own form parser would see it. This is the single most common reason a
+    Prodamus signature check fails, so it is done explicitly rather than
+    left to whatever a framework guessed."""
+    result: dict = {}
+    for key, value in parse_qsl(raw_body, keep_blank_values=True):
+        head, _, rest = key.partition("[")
+        path = [head] + _KEY_PART_RE.findall(f"[{rest}" if rest else "")
+        node = result
+        for part in path[:-1]:
+            node = node.setdefault(part, {})
+            if not isinstance(node, dict):  # a scalar already sits here — malformed input
+                raise ProviderError("Prodamus: не удалось разобрать тело уведомления")
+        node[path[-1]] = value
+    return _listify(result)
+
+
+def _flatten(data: dict) -> list[tuple[str, str]]:
+    """The inverse: nested structure → `products[0][name]` query pairs."""
+    pairs: list[tuple[str, str]] = []
+
+    def walk(prefix: str, node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                walk(f"{prefix}[{key}]" if prefix else str(key), value)
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(f"{prefix}[{index}]", value)
+        else:
+            pairs.append((prefix, _normalise(node)))
+
+    walk("", data)
+    return pairs
+
+
+# Everything else Prodamus may report — "pending", "hold", a blank — means
+# the payment is still in play and must not be written off.
+_FAILED = {"failed", "fail", "canceled", "cancelled", "order_canceled", "rejected", "error", "expired"}
+
+
+def _notification_body(headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> str:
+    """Тело уведомления как строка `ключ=значение&…`.
+
+    По документации Prodamus шлёт `multipart/form-data`: сырое тело тогда не
+    разобрать как urlencoded, но роутер уже собрал поля в `form` — с теми же
+    плоскими ключами вида `products[0][name]`. Обычный urlencoded идёт как есть.
+    """
+    if "multipart" in (headers.get("content-type") or "").lower() and form:
+        return urlencode(list(form.items()))
+    return raw_body.decode("utf-8", "replace")
+
+
+class ProdamusProvider(ProviderDefaults):
+    #: Адрес уведомления уходит в самом счёте — вписывать его в кабинете не нужно.
+    sends_own_callback_url = True
+    slug = "prodamus"
+    title = "Prodamus"
+    hint = (
+        "Домен вида myshop.payform.ru и секретный ключ — в личном кабинете Prodamus, раздел «Настройки → "
+        "Интеграции». Для тестов выдают демо-магазин demo.payform.ru со своим ключом. Адрес уведомления "
+        "(urlNotification) мы подставляем сами, отдельно в кабинете его прописывать не нужно."
+    )
+    currencies = ("RUB",)
+    region = "ru"
+    # Подписку ведёт сам Prodamus: в ссылку передаётся id подписного товара,
+    # дальше он списывает по своему плану. Важное следствие — цену и период
+    # задаёт карточка подписки в их кабинете, а не наш блок.
+    recurring = RecurringMode.gateway
+    credential_fields = (
+        CredentialField("shop_domain", "Домен платёжной формы", "myshop.payform.ru", secret=False),
+        CredentialField("secret_key", "Секретный ключ", "из раздела «Интеграции» в кабинете"),
+        CredentialField(
+            "webhook_secret",
+            "Ключ уведомлений (если выдан отдельно)",
+            "необязательно: сервисный ключ, который выдают вместе с кодом sys", required=False),
+    )
+    block_fields = (
+        CredentialField(
+            "prodamus_subscription_id",
+            "ID подписки в Prodamus",
+            "номер подписного товара из кабинета — цену и период он задаёт сам",
+            secret=False,
+        ),
+    )
+
+    async def create_checkout(self, request: CheckoutRequest) -> Checkout:
+        domain = (request.credentials.get("shop_domain") or "").strip().rstrip("/")
+        secret = (request.credentials.get("secret_key") or "").strip()
+        if not domain or not secret:
+            raise ProviderError("Prodamus: не заполнен домен формы или секретный ключ")
+        domain = domain.removeprefix("https://").removeprefix("http://")
+
+        from app.config import get_settings
+
+        base = get_settings().public_base_url.rstrip("/")
+        plan = str(request.extra.get("prodamus_subscription_id") or "").strip()
+        if request.extra.get("subscription") and not plan:
+            raise ProviderError("Prodamus: в блоке оплаты не указан ID подписки из кабинета Prodamus")
+
+        data = {
+            # Our payment id travels as order_id and comes straight back in
+            # the callback — no mapping table needed.
+            "order_id": str(request.payment_id),
+            # `subscription` replaces `products` outright: Prodamus documents
+            # that with a subscription id present "сумма платежа не
+            # учитывается". So the price is the plan's, ours is ignored, and
+            # sending both would only look like it mattered.
+            **(
+                {"subscription": plan}
+                if plan
+                else {
+                    "products": [
+                        {
+                            "name": request.description[:255] or "Оплата",
+                            "price": minor_to_major(request.amount_minor),
+                            "quantity": "1",
+                        }
+                    ]
+                }
+            ),
+            "urlNotification": f"{base}/webhook/pay/prodamus",
+            "urlSuccess": request.return_url,
+            "urlReturn": request.return_url,
+            "do": "pay",
+            # Наименование сервиса-интегратора: Prodamus просит указывать BotFactory
+            # (письмо их проектного менеджера от 8 октября 2026).
+            "sys": "BotFactory",
+        }
+        data["signature"] = sign(data, secret)
+        return Checkout(url=f"https://{domain}/?{urlencode(_flatten(data))}")
+
+    def locate_payment(self, *, headers: dict[str, str], raw_body: bytes, form: dict[str, str]) -> PaymentRef:
+        try:
+            data = parse_form(_notification_body(headers, raw_body, form))
+        except ProviderError:
+            return PaymentRef()
+        try:
+            return PaymentRef(payment_id=uuid.UUID(str(data.get("order_id", ""))))
+        except (ValueError, AttributeError):
+            return PaymentRef()
+
+    async def verify_webhook(
+        self,
+        *,
+        headers: dict[str, str],
+        raw_body: bytes,
+        form: dict[str, str],
+        credentials: dict[str, str],
+        amount_minor: int,
+        invoice_no: int,
+        payment_id: uuid.UUID,
+        provider_payment_id: str | None,
+        meta: dict | None = None,
+        currency: str = "",
+    ) -> WebhookResult:
+        secret = (credentials.get("secret_key") or "").strip()
+        if not secret:
+            raise ProviderError("Prodamus: не заполнен секретный ключ")
+
+        received = (headers.get("sign") or "").strip().lower()
+        if not received:
+            raise ProviderError("Prodamus: уведомление без заголовка Sign")
+
+        data = parse_form(_notification_body(headers, raw_body, form))
+        # Уведомления могут быть подписаны сервисным ключом (он выдаётся вместе с `sys`),
+        # а не секретом страницы: подходит любой из двух.
+        keys = [secret]
+        extra = (credentials.get("webhook_secret") or "").strip()
+        if extra:
+            keys.append(extra)
+        if not any(hmac.compare_digest(sign(data, key), received) for key in keys):
+            raise ProviderError("Prodamus: подпись уведомления не совпала")
+
+        status = str(data.get("payment_status", "")).lower()
+        if status != "success":
+            # Not an error: a failed attempt is a legitimate notification.
+            # "Anything non-empty is a failure" used to be the rule, which
+            # turned an in-progress notification into a permanently failed
+            # payment — and a failed payment is never delivered.
+            return WebhookResult(
+                status=PaymentStatus.failed if status in _FAILED else PaymentStatus.pending,
+                provider_payment_id=str(data.get("order_num") or "") or None,
+                response_body="success",
+            )
+
+        paid = str(data.get("sum", "")).replace(",", ".")
+        # `parse_form` above turns PHP-style keys into a nested structure, so
+        # the plan arrives as data["subscription"]["id"], not under the flat
+        # name it has on the wire. Both are read: a notification that ever
+        # carries the flat spelling still works.
+        nested = data.get("subscription")
+        plan = ""
+        if isinstance(nested, dict):
+            plan = str(nested.get("id") or "").strip()
+        elif nested:
+            plan = str(nested).strip()
+        plan = plan or str(data.get("subscription[id]") or data.get("subscription_id") or "").strip()
+
+        if plan:
+            # A subscription's price lives in the Prodamus dashboard, and the
+            # first charge can legitimately differ from the recurring one
+            # ("Стоимость первого платежа"). Comparing against the block's
+            # price would reject every renewal forever — and the shop owner
+            # would find out by losing subscribers.
+            #
+            # What still guards this: the notification's own signature,
+            # checked above with the shop's secret, which is the real gate.
+            # The amount is recorded rather than compared, so the sales log
+            # shows what was actually charged instead of what we guessed.
+            try:
+                charged = round(float(paid) * 100) if paid else None
+            except ValueError:
+                charged = None
+            return WebhookResult(
+                status=PaymentStatus.paid,
+                provider_payment_id=str(data.get("order_num") or "") or None,
+                response_body="success",
+                meta={
+                    "prodamus_subscription_id": plan,
+                    **({"charged_amount_minor": charged} if charged else {}),
+                },
+            )
+
+        try:
+            same = bool(paid) and abs(float(paid) - amount_minor / 100) <= 0.009
+        except ValueError:
+            same = False
+        if not same:
+            raise ProviderError(f"Prodamus: сумма не совпадает (пришло {paid or 'ничего'})")
+
+        return WebhookResult(
+            status=PaymentStatus.paid,
+            provider_payment_id=str(data.get("order_num") or "") or None,
+            response_body="success",
+        )

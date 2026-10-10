@@ -1,25 +1,244 @@
 :root {
   color-scheme: light dark;
-  --tg-bg: var(--tg-theme-bg-color, #ffffff);
-  --tg-text: var(--tg-theme-text-color, #1c1c1e);
-  --tg-hint: var(--tg-theme-hint-color, #8e8e93);
-  --tg-link: var(--tg-theme-link-color, #2481cc);
-  --tg-button: var(--tg-theme-button-color, #2481cc);
+
+  /* Палитра: холодные нейтрали и один акцент (изумруд). Внутри Telegram Mini App
+     значения --tg-theme-* приходят от самого Telegram и перекрывают эти запасные,
+     поэтому здесь описан именно «веб-вид» Bot Factory. Чистый #fff и #000 не
+     используются: плоский белый по всей площади выглядит недоделанным. */
+  --tg-bg: var(--tg-theme-bg-color, #fafafa);
+  --tg-text: var(--tg-theme-text-color, #0f1115);
+  /* Вторичный текст: 6.1:1 на фоне страницы и 5.6:1 на карточке. */
+  --tg-hint: var(--tg-theme-hint-color, #565c68);
+  --tg-link: var(--tg-theme-link-color, #047857);
+  --tg-button: var(--tg-theme-button-color, #047857);
   --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
-  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f0f1f3);
+  --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
+  --tg-separator: var(--tg-theme-section-separator-color, rgba(15, 17, 21, 0.09));
+  --tg-destructive: var(--tg-theme-destructive-text-color, #dc2626);
+  /* Красная заливка под белым текстом: 4.83:1 в обеих темах. */
+  --danger-fill: #dc2626;
+  --danger-on-fill: #ffffff;
+
+  --text-primary: var(--tg-text);
+  --text-secondary: color-mix(in srgb, var(--tg-text) 74%, transparent);
+  --text-tertiary: var(--tg-hint);
+  /* Цвет бренда как ТЕКСТ на поверхности: тот же, что --tg-link. */
+  --accent-on-surface: var(--tg-link);
+
+  /* Поверхности: страница, приподнятая карточка, утопленное поле. */
+  --surface-raised: color-mix(in srgb, var(--tg-bg) 60%, #ffffff);
+  --surface-sunken: color-mix(in srgb, var(--tg-secondary-bg) 70%, var(--tg-bg));
+  --ring: color-mix(in srgb, var(--tg-button) 32%, transparent);
+
+  /* Шкала отступов 8pt */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* Единая шкала скруглений: поля и кнопки 12, карточки 16, большие панели 22,
+     «таблетки» и чипы 999. Другие значения не вводим. */
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 999px;
+
+  --font-sans: "Onest Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Тени подкрашены под цвет текста, не чёрные. */
+  --shadow-card: 0 1px 2px color-mix(in srgb, var(--tg-text) 5%, transparent),
+    0 6px 20px -6px color-mix(in srgb, var(--tg-text) 8%, transparent);
+  --shadow-elevated: 0 2px 4px color-mix(in srgb, var(--tg-text) 5%, transparent),
+    0 28px 56px -16px color-mix(in srgb, var(--tg-text) 20%, transparent);
+
+  /* Цвета типов блоков: функциональные метки, а не декор. Приглушённые 700-е тона,
+     различимые между собой, без «радуги». */
+  --accent-welcome: #0369a1;
+  --accent-description: #4d7c0f;
+  --accent-image: #be185d;
+  --accent-video: #b91c1c;
+  --accent-buttons: #b45309;
+  --accent-poll: #0e7490;
+  --accent-delivery: #15803d;
+  --accent-delay: #52525b;
+  --accent-success: #059669;
+  --accent-warning: #d97706;
+  --accent-success-ink: #065f46;
+  --accent-warning-ink: #92400e;
+
+  /* Оболочка для десктопа (только веб-конструктор). */
+  --shell-max: 1440px;
+  --shell-max-canvas: 1760px;
+  --sidebar-w: 272px;
+
+  /* Движение: «smooth» для состояний, «out» для появления, «spring» для нажатий. */
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 0.15s;
+  --dur-base: 0.25s;
+  --dur-slow: 0.45s;
+}
+
+/* Тёмная тема. Ключом служит атрибут data-theme на <html> (его ставит
+   index.html до первой отрисовки и src/theme.ts), а не media-запрос: палитра
+   в одном месте, ручной переключатель работает так же, как системная тема. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --tg-bg: var(--tg-theme-bg-color, #0b0c0f);
+  --tg-text: var(--tg-theme-text-color, #eceef2);
+  --tg-hint: var(--tg-theme-hint-color, #9aa1ad);
+  --tg-link: var(--tg-theme-link-color, #34d399);
+  /* Заливка кнопки остаётся тёмно-зелёной: белый текст на ней 5.5:1. */
+  --tg-button: var(--tg-theme-button-color, #047857);
+  --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
+  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #14161b);
+  --tg-section-bg: var(--tg-theme-section-bg-color, var(--tg-secondary-bg));
+  --tg-separator: var(--tg-theme-section-separator-color, rgba(236, 238, 242, 0.1));
+  --tg-destructive: var(--tg-theme-destructive-text-color, #f87171);
+
+  --surface-raised: color-mix(in srgb, var(--tg-bg) 94%, #ffffff);
+  --surface-sunken: color-mix(in srgb, var(--tg-bg) 70%, #000000);
+  --ring: color-mix(in srgb, var(--tg-link) 40%, transparent);
+
+  /* На тёмном фоне глубина идёт от более тёмной тени, а не от мягкой. */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 24px -8px rgba(0, 0, 0, 0.5);
+  --shadow-elevated: 0 2px 4px rgba(0, 0, 0, 0.5), 0 28px 56px -16px rgba(0, 0, 0, 0.7);
+
+  --accent-welcome: #38bdf8;
+  --accent-description: #a3e635;
+  --accent-image: #f472b6;
+  --accent-video: #f87171;
+  --accent-buttons: #fbbf24;
+  --accent-poll: #22d3ee;
+  --accent-delivery: #4ade80;
+  --accent-delay: #a1a1aa;
+  --accent-success: #34d399;
+  --accent-success-ink: #34d399;
+  --accent-warning: #fbbf24;
+  --accent-warning-ink: #fbbf24;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Scrollbars in the app's own palette — the OS default is a hard grey bar
+   that reads as a foreign object on these off-white surfaces.
+   Both syntaxes on purpose: current Chrome/Firefox honour the standard
+   scrollbar-width/-color pair (and ignore the ::-webkit-* rules once
+   scrollbar-width is set), older WebKit only understands the pseudo-
+   elements. The thumb there is drawn with a transparent border +
+   background-clip so it sits inset instead of glued to the edge. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--tg-text) 22%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--tg-text) 18%, transparent);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--tg-text) 32%, transparent);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+html {
+  height: 100%;
+  scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100%;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
   background: var(--tg-bg);
-  color: var(--tg-text);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  color: inherit;
 }
 
 button {
-  font-family: inherit;
+  touch-action: manipulation;
+}
+
+/* Consistent keyboard-focus ring everywhere — replaces the browser default
+   outline (which clashes with our rounded corners) but only shows for
+   keyboard/programmatic focus, never on a mouse/touch tap. */
+a,
+button,
+input,
+select,
+textarea,
+[tabindex] {
+  outline: none;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent-on-surface);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+/* Окна-диалоги получают фокус программно (для скринридера и Tab): рамка вокруг всего окна не нужна. */
+[role="dialog"]:focus-visible {
+  outline: none;
 }

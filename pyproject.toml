@@ -1,0 +1,21 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["frontend", "migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "BLE"]
+ignore = [
+    "B008",   # Depends(...) в аргументах — штатная идиома FastAPI
+    "E501",   # длину строк держит форматирование, а не линтер
+    "UP017",
+    "UP042",  # str+Enum: значения лежат в БД, менять базовый класс нельзя
+]
+
+[tool.ruff.lint.per-file-ignores]
+# строковые аннотации связей SQLAlchemy ("Client", "Bot") — не опечатки
+"app/models/*.py" = ["F821"]
+"tests/*" = ["BLE001", "B017", "B011"]
+
+[tool.coverage.run]
+source = ["app", "meta_bot"]

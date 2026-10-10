@@ -2,9 +2,71 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bot Factory — конструктор</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Bot Factory: конструктор Telegram-ботов</title>
+    <meta name="description" content="Собирайте Telegram-ботов для продаж без кода: блоки и стрелки, живой предпросмотр, готовые сценарии, приём оплаты в свою кассу." />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0c0f" media="(prefers-color-scheme: dark)" />
+    <link rel="canonical" href="https://bot.dimkaprojects.xyz/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:site_name" content="Bot Factory" />
+    <meta property="og:title" content="Bot Factory: конструктор Telegram-ботов для продаж" />
+    <meta property="og:description" content="Соберите диалог из блоков и стрелок. Покупатель платит в вашу кассу, бот выдаёт товар. Собирать и проверять бесплатно." />
+    <meta property="og:url" content="https://bot.dimkaprojects.xyz/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Bot Factory: конструктор Telegram-ботов для продаж" />
+    <meta name="twitter:description" content="Блоки и стрелки, живой предпросмотр, готовые сценарии, приём оплаты в свою кассу." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Bot Factory" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23047857'/%3E%3Crect x='14' y='20' width='36' height='26' rx='9' fill='%23fff'/%3E%3Ccircle cx='25' cy='33' r='3.5' fill='%23047857'/%3E%3Ccircle cx='39' cy='33' r='3.5' fill='%23047857'/%3E%3Crect x='30' y='12' width='4' height='9' rx='2' fill='%23fff'/%3E%3C/svg%3E"
+    />
+    <!-- Скрипт Telegram нужен только внутри Mini App, и там он обязан быть готов до старта
+         приложения (синхронно). В обычном браузере он не ждёт: раньше медленный telegram.org
+         откладывал первую отрисовку лендинга на секунды. -->
+    <script>
+      (function () {
+        var inTelegram =
+          /tgWebApp/.test(location.hash + location.search) ||
+          !!window.TelegramWebviewProxy ||
+          /Telegram/i.test(navigator.userAgent);
+        var src = "https://telegram.org/js/telegram-web-app.js";
+        if (inTelegram) {
+          document.write('<script src="' + src + '"><\/script>');
+        } else {
+          var s = document.createElement("script");
+          s.src = src;
+          s.async = true;
+          document.head.appendChild(s);
+        }
+      })();
+    </script>
+    <!-- Resolve the theme before the first paint. The palette in index.css
+         is keyed on this attribute alone (see src/theme.ts), so without it
+         the page would flash light and then correct itself once the React
+         bundle mounted. Deliberately tiny and dependency-free: it has to
+         run synchronously, ahead of everything. -->
+    <script>
+      (function () {
+        var theme = "dark";
+        try {
+          var stored = localStorage.getItem("bf_theme");
+          var tg = window.Telegram && window.Telegram.WebApp;
+          theme =
+            stored === "light" || stored === "dark"
+              ? stored
+              : tg && tg.colorScheme === "light"
+                ? "light"
+                : "dark";
+        } catch (e) {
+          /* Private-mode localStorage — тёмная тема по умолчанию. */
+        }
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

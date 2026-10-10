@@ -1,0 +1,1734 @@
+"""Creating payments and acting on what the provider tells us afterwards.
+
+Two flows meet here:
+
+* an **order** — someone paying a client's bot. On "paid" the bot picks its
+  dialogue back up at the payment block's next block, which is how the
+  buyer receives what they bought.
+* a **publication** — a client paying us to publish a bot. On "paid" the
+  bot's `publication_paid_at` is stamped and the publish button unlocks.
+
+Money never touches us in the first case: the credentials belong to the bot
+owner and the checkout link points straight at their merchant account.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+import logging
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import Integer, func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings
+from app.models.bot import Bot as BotModel
+from app.models.bot_block import BotBlock
+from app.models.payment import Payment, PaymentKind, PaymentStatus
+from app.models.subscription import SubscriptionStatus
+from app.services import dates
+from app.services import payments as payment_providers
+from app.services.payments import CheckoutRequest, ProviderError
+from app.services.payments.base import check_receipt_contact
+from app.services.security import decrypt_token, encrypt_token
+
+logger = logging.getLogger(__name__)
+
+
+def encrypt_credentials(credentials: dict[str, str]) -> bytes:
+    return encrypt_token(json.dumps(credentials, ensure_ascii=False))
+
+
+def decrypt_credentials(blob: bytes | None) -> dict[str, str]:
+    if not blob:
+        return {}
+    try:
+        return json.loads(decrypt_token(blob))
+    except (ValueError, json.JSONDecodeError):
+        logger.exception("Could not read stored payment credentials")
+        return {}
+
+
+#: Подсказки «чем платить за запуск» по странам клиентов. Карта Stripe не
+#: подходит плательщикам из РФ и Беларуси (санкции), поэтому им предлагаются
+#: крипта и звёзды Telegram; клиентам из Казахстана и Узбекистана доступно всё.
+_WHO_CAN_PAY = {
+    "stripe": "Банковская карта · Казахстан, Узбекистан и другие страны (кроме РФ и Беларуси)",
+    "cryptobot": "USDT или TON в Crypto Bot · из любой страны, в том числе из РФ",
+    "stars": "Звёзды Telegram · из любой страны, в том числе из РФ",
+}
+
+
+_HOW_IT_GOES = {
+    "stripe": "Откроется защищённая страница оплаты: введи данные карты — это минута. Карту мы не видим и не сохраняем.",
+    "cryptobot": "Откроется Crypto Bot в Telegram с готовым счётом. Нужен баланс USDT или TON — его можно купить прямо там.",
+    "stars": "Откроется окно оплаты Telegram. Звёзды покупаются в самом Telegram, если их нет на балансе.",
+}
+
+
+@dataclass(frozen=True)
+class PlatformMethod:
+    """One way a client can pay us for publishing a bot."""
+
+    provider: str
+    price_minor: int
+    currency: str
+    credentials: dict[str, str]
+    is_test: bool
+    #: What one more period costs through this method, once the bot is on
+    #: the air. 0 — the default — means this deployment sells the launch
+    #: only, and the bot then runs forever.
+    renewal_price_minor: int = 0
+
+    @property
+    def title(self) -> str:
+        return payment_providers.get_provider(self.provider).title
+
+    @property
+    def how(self) -> str:
+        """Что произойдёт, когда человек нажмёт: чтобы не было страха неизвестности."""
+        return _HOW_IT_GOES.get(self.provider, "")
+
+    @property
+    def who(self) -> str:
+        """Кому подходит этот способ — чтобы человек сразу видел свой."""
+        return _WHO_CAN_PAY.get(self.provider, "")
+
+
+def platform_methods_misconfigured() -> bool:
+    """`PLATFORM_PAYMENT_METHODS` задан, но разобрать из него ни одного способа нельзя.
+
+    Опечатка в JSON раньше превращала список в пустой, а пустой список означает
+    «платной публикации нет»: бот выходил в эфир бесплатно, и об этом знал только
+    журнал. Публикация обязана остановиться, а не раздавать запуск даром.
+    """
+    raw = get_settings().platform_payment_methods.strip()
+    if not raw:
+        return False
+    try:
+        entries = json.loads(raw)
+    except json.JSONDecodeError:
+        return True
+    if not isinstance(entries, list) or not entries:
+        return True
+    for entry in entries:
+        try:
+            payment_providers.get_provider(str(entry["provider"]).strip().lower())
+            int(entry["price_minor"])
+            str(entry["currency"])
+            return False
+        except (KeyError, TypeError, ValueError, ProviderError):
+            continue
+    return True
+
+
+def platform_methods() -> list[PlatformMethod]:
+    """Every method offered at the publication checkout.
+
+    Read fresh rather than cached: these carry live credentials, and a
+    deployment changing them should not need a restart to take effect.
+    """
+    settings = get_settings()
+    raw = settings.platform_payment_methods.strip()
+
+    if raw:  # noqa: SIM108 — the two branches build the list quite differently
+        try:
+            entries = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.error("PLATFORM_PAYMENT_METHODS is not valid JSON — publication payments will fail")
+            return []
+        methods = []
+        for entry in entries:
+            try:
+                provider = str(entry["provider"]).strip().lower()
+                payment_providers.get_provider(provider)  # rejects a typo here, not at checkout
+                methods.append(
+                    PlatformMethod(
+                        provider=provider,
+                        price_minor=int(entry["price_minor"]),
+                        currency=str(entry["currency"]).upper(),
+                        credentials=dict(entry.get("credentials") or {}),
+                        is_test=bool(entry.get("is_test", False)),
+                        renewal_price_minor=int(entry.get("renewal_price_minor") or 0),
+                    )
+                )
+            except (KeyError, TypeError, ValueError, ProviderError):
+                logger.error("Skipping a malformed entry in PLATFORM_PAYMENT_METHODS: %r", entry)
+        return _without_test_till(methods)
+
+    # Nothing configured as a list — fall back to the single-provider
+    # settings, so a deployment set up before this keeps working.
+    if settings.publication_price_minor <= 0:
+        return []
+    credentials: dict[str, str] = {}
+    if settings.platform_payment_credentials.strip():
+        try:
+            credentials = json.loads(settings.platform_payment_credentials)
+        except json.JSONDecodeError:
+            logger.error("PLATFORM_PAYMENT_CREDENTIALS is not valid JSON — publication payments will fail")
+    return _without_test_till([
+        PlatformMethod(
+            provider=settings.platform_payment_provider,
+            price_minor=settings.publication_price_minor,
+            currency=settings.publication_currency.upper(),
+            credentials=credentials,
+            is_test=settings.platform_payment_is_test,
+            renewal_price_minor=settings.renewal_price_minor,
+        )
+    ])
+
+
+def _without_test_till(methods: list[PlatformMethod]) -> list[PlatformMethod]:
+    """Drop our own till if it is the one that pays itself.
+
+    Failing to free publishing rather than to fake-paid publishing: a lost
+    sale is recoverable and visible, a `paid` row with no money behind it is
+    neither.
+    """
+    if get_settings().platform_allow_test_till:
+        return methods
+    kept = [m for m in methods if m.provider != "test"]
+    if len(kept) != len(methods):
+        logger.error(
+            "«Тестовая оплата» настроена как касса платформы — она отмечает счёт оплаченным "
+            "без денег. Способ отключён, публикация остаётся бесплатной. Поставь настоящего "
+            "провайдера или PLATFORM_ALLOW_TEST_TILL=true, если это стенд."
+        )
+    return kept
+
+
+def platform_method(provider: str | None) -> PlatformMethod:
+    """The method the client picked, or the first one offered."""
+    methods = platform_methods()
+    if not methods:
+        raise ProviderError("Публикация сейчас бесплатна — оплата не требуется")
+    if provider:
+        for method in methods:
+            if method.provider == provider.strip().lower():
+                return method
+        raise ProviderError(f"Такой способ оплаты не подключён: {provider}")
+    return methods[0]
+
+
+#: Потолок цены в основных единицах. Выше этого — почти наверняка опечатка
+#: или слипшиеся разряды, а не намерение; ни один шлюз такой счёт всё равно
+#: не примет.
+_MAX_PRICE_MAJOR = 10_000_000
+
+
+def price_to_minor(value) -> int:
+    """"990", "990.5", 990.5 -> minor units. Parsed via string, because a
+    price is a decimal amount and floats round it wrong.
+
+    Anything that is not a price raises `ProviderError`, not `ValueError`.
+    It used to blow up on None and on "1.2.3" — and "1.2.3" is typeable,
+    the editor's filter allows several separators — which escaped past the
+    "цена не указана" check below into a generic "попробуй ещё раз позже"
+    for the buyer and nothing at all for the shop. A sale that cannot
+    happen has to say why.
+    """
+    if value is None:
+        return 0
+    text = str(value).strip().replace(",", ".").replace(" ", "")
+    if not text:
+        return 0
+    if text.count(".") > 1 or not text.replace(".", "").isdigit():
+        raise ProviderError(
+            f"Цена в блоке оплаты записана неверно: «{value}». "
+            f"Нужно число, например 990 или 990.50."
+        )
+    whole_part = text.partition(".")[0] or "0"
+    if int(whole_part) > _MAX_PRICE_MAJOR:
+        # Не гипотетика: поле принимало «99999999999999» молча, и такой счёт
+        # ушёл бы в кассу как есть. Ни один шлюз его не примет, а покупатель
+        # увидит невнятную ошибку вместо цены.
+        raise ProviderError(
+            f"Цена в блоке оплаты слишком большая: «{value}». "
+            f"Максимум {_MAX_PRICE_MAJOR:,}".replace(",", " ") + "."
+        )
+    if "." not in text:
+        return int(text) * 100
+    whole, _, frac = text.partition(".")
+    frac = (frac + "00")[:2]
+    return int(whole or 0) * 100 + int(frac)
+
+
+def currency_for(provider_slug: str, requested: str | None) -> str:
+    """The currency this provider will actually charge in.
+
+    The block carries a currency and the provider supports a fixed list, and
+    the two drift apart easily: a block created before a provider was chosen
+    defaults to one currency, and the `<select>` in the editor happily shows
+    the provider's list while leaving the old value in the data. The buyer
+    would then be told "250 RUB" and charged 250 ⭐. The provider decides.
+
+    But only where the block never said. Substituting silently in *both*
+    cases meant a shop that had deliberately priced something at 990 ₸ and
+    then switched to a rouble-only provider started charging 990 ₽ — five
+    times the money, with nothing anywhere saying so. An explicit currency
+    the provider cannot charge is now a refusal the owner can read.
+    """
+    provider = payment_providers.get_provider(provider_slug)
+    wanted = (requested or "").strip().upper()
+    if not wanted:
+        return provider.currencies[0]
+    if wanted in provider.currencies:
+        return wanted
+    raise ProviderError(
+        f"{provider.title} не принимает {wanted}. Поменяй валюту в блоке оплаты "
+        f"(доступно: {', '.join(provider.currencies)}) или выбери другого провайдера."
+    )
+
+
+# How long a checkout link is offered again instead of a new one being made.
+# Long enough for someone to go and pay, short enough that a link the
+# provider has since expired is not handed out.
+_REUSE_WINDOW = timedelta(minutes=30)
+
+
+def block_fingerprint(content: dict, next_block_id=None) -> str:
+    """What the buyer would be sent to, boiled down.
+
+    An open order is offered again rather than re-created, but only while it
+    is still an order for the same thing: if the shop has since edited the
+    link a "pay by link" block points at, or swapped the Lava offer, the
+    stored checkout URL now leads somewhere else entirely.
+
+    `next_block_id` is in here because the delivery target is pinned onto the
+    payment when it is created. Rewiring the arrow while an order is open
+    used to keep handing over the *old* goods for the rest of the reuse
+    window — the owner changed what they sell and the bot went on selling
+    the previous thing for half an hour.
+    """
+    watched = {k: content.get(k) for k in ("title", "link_url", "offer_id", "button_label")}
+    watched["deliver_from"] = str(next_block_id) if next_block_id else None
+    return json.dumps(watched, ensure_ascii=False, sort_keys=True)
+
+
+def _purchase_terms(content: dict) -> dict:
+    """What the adapter is allowed to know about this sale.
+
+    The single choke point for the subscription switch. Every adapter reads
+    `extra["subscription"]` to decide whether to mint a recurring invoice —
+    Stripe creates a real subscription off it, Stars asks Telegram to bill
+    every 30 days — so hiding the toggle in the constructor would not be
+    enough on its own: a block saved while the feature was on would go on
+    selling subscriptions with nothing in the UI to show for it.
+
+    With the switch off, the flag is stripped here and the same block is
+    sold exactly as a one-off purchase.
+    """
+    from app.config import get_settings
+
+    if get_settings().subscriptions_enabled or not content.get("subscription"):
+        return content
+    return {key: value for key, value in content.items() if key not in ("subscription", "period_days")}
+
+
+async def _open_payment(
+    db: AsyncSession,
+    *,
+    bot_id: uuid.UUID,
+    block_id: uuid.UUID,
+    chat_id: int,
+    amount_minor: int,
+    currency: str,
+    fingerprint: str,
+) -> Payment | None:
+    """This buyer's still-open order for this exact product, if there is one."""
+    result = await db.execute(
+        select(Payment)
+        .where(
+            Payment.bot_id == bot_id,
+            Payment.block_id == block_id,
+            Payment.chat_id == chat_id,
+            Payment.kind == PaymentKind.order,
+            Payment.status == PaymentStatus.pending,
+            Payment.amount_minor == amount_minor,
+            Payment.currency == currency,
+            Payment.created_at > datetime.now(timezone.utc) - _REUSE_WINDOW,
+        )
+        .order_by(Payment.created_at.desc())
+        .limit(1)
+    )
+    payment = result.scalar_one_or_none()
+    # Without a stored link there is nothing to offer again.
+    if payment is None or not (payment.meta or {}).get("checkout_url"):
+        return None
+    if (payment.meta or {}).get("fingerprint") != fingerprint:
+        return None
+    return payment
+
+
+async def _create(
+    db: AsyncSession,
+    *,
+    kind: PaymentKind,
+    provider_slug: str,
+    credentials: dict[str, str],
+    is_test: bool,
+    amount_minor: int,
+    currency: str,
+    description: str,
+    return_url: str,
+    bot_id: uuid.UUID | None = None,
+    client_id: uuid.UUID | None = None,
+    block_id: uuid.UUID | None = None,
+    telegram_user_id: int | None = None,
+    chat_id: int | None = None,
+    extra: dict | None = None,
+    bot_token: str | None = None,
+    meta: dict | None = None,
+) -> tuple[Payment, str]:
+    provider = payment_providers.get_provider(provider_slug)
+    buyer_email = (meta or {}).get("buyer_email")
+    buyer_phone = (meta or {}).get("buyer_phone")
+    # Чек включён, а слать его некуда — отказ до того, как платёж записан и выставлен.
+    check_receipt_contact(credentials, buyer_email, buyer_phone)
+
+    payment = Payment(
+        kind=kind,
+        status=PaymentStatus.pending,
+        provider=provider.slug,
+        amount_minor=amount_minor,
+        currency=currency.upper(),
+        description=description[:255],
+        bot_id=bot_id,
+        client_id=client_id,
+        block_id=block_id,
+        telegram_user_id=telegram_user_id,
+        chat_id=chat_id,
+        meta={},
+    )
+    db.add(payment)
+    # Committed before the provider is called, not after. `invoice_no` is
+    # database-generated and the checkout link can't be signed without it, so
+    # the row has to exist first either way — but holding the transaction
+    # open across an outbound HTTP call with a 30-second timeout means one
+    # pooled connection per checkout in flight, and the pool is fifteen.
+    # Fifteen people opening checkout at once would stall every other request
+    # in the process, the constructor's own API included. This is the same
+    # trap `_pause` in the dispatcher was written to avoid.
+    #
+    # Committing first also closes a worse hole: the provider can no longer
+    # mint an invoice for an order that was never written down.
+    await db.commit()
+
+    try:
+        checkout = await provider.create_checkout(
+            CheckoutRequest(
+                payment_id=payment.id,
+                invoice_no=payment.invoice_no,
+                amount_minor=amount_minor,
+                currency=currency.upper(),
+                description=description,
+                return_url=return_url,
+                is_test=is_test,
+                credentials=credentials,
+                extra=_purchase_terms(extra or {}),
+                bot_token=bot_token,
+                telegram_user_id=telegram_user_id,
+                buyer_email=buyer_email,
+                buyer_phone=buyer_phone,
+            )
+        )
+    except Exception:
+        # No checkout means no way for anyone to pay this row, and
+        # `_open_payment` skips anything without a `checkout_url` — but an
+        # inert stub would still show up in the owner's order list as a sale
+        # that never happened. Take it back out.
+        await db.delete(payment)
+        await db.commit()
+        raise
+
+    # Several providers mint their own id at creation and then use only
+    # that in the callback, so it is stored now, not when the money lands.
+    payment.provider_payment_id = checkout.provider_payment_id
+    payment.meta = {"checkout_url": checkout.url, **checkout.meta, **(meta or {})}
+    if kind == PaymentKind.order and credentials:
+        # Слепок кассы на момент счёта: подтверждать эту оплату нужно теми
+        # ключами, с которыми счёт выставлен, даже если владелец сменил кассу или
+        # ключи. Хранится зашифрованным и стирается, когда платёж закрыт.
+        payment.meta = {
+            **payment.meta,
+            "kassa": {"cred": encrypt_credentials(credentials).decode(), "is_test": bool(is_test)},
+        }
+    await db.commit()
+    await db.refresh(payment)
+    return payment, checkout.url
+
+
+async def create_order_payment(
+    db: AsyncSession,
+    *,
+    bot: BotModel,
+    block: BotBlock,
+    chat_id: int,
+    telegram_user_id: int | None,
+) -> tuple[Payment, str]:
+    """A customer buying something from a client's bot."""
+    content = block.content or {}
+    amount_minor = price_to_minor(content.get("price"))
+    if amount_minor <= 0:
+        raise ProviderError("В блоке оплаты не указана цена")
+    if not bot.payment_provider:
+        raise ProviderError("У бота не подключён платёжный провайдер")
+
+    settings = get_settings()
+    from app.services.bot_dispatcher import fill_placeholders
+
+    # Название из шаблона («[название продукта]») не должно попасть в чек кассы.
+    title = fill_placeholders(content.get("title") or "", price="", title="").strip() or "Оплата"
+    currency = currency_for(bot.payment_provider, content.get("currency"))
+
+    # Someone who taps /start three times is looking at one product, not
+    # three orders. Reusing the open one keeps the shop's order list honest
+    # and, for pay-by-link, stops every tap of «Я оплатил» from pinging the
+    # owner about a different row.
+    fingerprint = block_fingerprint(content, block.next_block_id)
+    existing = await _open_payment(
+        db, bot_id=bot.id, block_id=block.id, chat_id=chat_id, amount_minor=amount_minor,
+        currency=currency, fingerprint=fingerprint,
+    )
+    if existing is not None:
+        # Повторное нажатие «Оплатить» после смены выбора: обновляем выбор в заказе.
+        fresh = await recent_choices(db, bot.id, telegram_user_id)
+        held = await _held_booking(db, bot.id, telegram_user_id)
+        patch = {}
+        if fresh and fresh != (existing.meta or {}).get("choices"):
+            patch["choices"] = fresh
+        if held is not None and str(held.id) != (existing.meta or {}).get("booking_id"):
+            patch["booking_id"] = str(held.id)
+        if patch:
+            existing.meta = {**(existing.meta or {}), **patch}
+            await db.commit()
+        return existing, (existing.meta or {})["checkout_url"]
+    # Send the buyer back where they came from — the bot — rather than to a
+    # web page of ours they have no use for.
+    return_url = (
+        f"https://t.me/{bot.telegram_bot_username}"
+        if bot.telegram_bot_username
+        else f"{settings.public_base_url.rstrip('/')}/api/pay/done"
+    )
+
+    # Telegram Stars invoices are minted by the selling bot itself, so that
+    # one provider — and only it — is handed the bot's token.
+    bot_token = None
+    if bot.payment_provider == "stars" and bot.bot_token_encrypted:
+        bot_token = decrypt_token(bot.bot_token_encrypted)
+
+    return await _create(
+        db,
+        kind=PaymentKind.order,
+        provider_slug=bot.payment_provider,
+        credentials=decrypt_credentials(bot.payment_credentials_encrypted),
+        is_test=bot.payment_is_test,
+        amount_minor=amount_minor,
+        currency=currency,
+        description=title,
+        return_url=return_url,
+        bot_id=bot.id,
+        block_id=block.id,
+        telegram_user_id=telegram_user_id,
+        chat_id=chat_id,
+        # The block is the product: whatever the chosen provider needs per
+        # item (Lava's offerId, the link a "pay by link" block points at)
+        # lives in its content.
+        extra=content,
+        bot_token=bot_token,
+        # Pinned now, not looked up at delivery time: the shop can edit the
+        # canvas while an order is open ("правки применяются сразу"), and a
+        # deleted block must not turn into money taken with nothing sent.
+        meta={
+            "deliver_from": str(block.next_block_id) if block.next_block_id else None,
+            "fingerprint": fingerprint,
+            **(
+                {"booking_id": str(held.id)}
+                if (held := await _held_booking(db, bot.id, telegram_user_id)) is not None
+                else {}
+            ),
+            **(
+                {"choices": choices}
+                if (choices := await recent_choices(db, bot.id, telegram_user_id))
+                else {}
+            ),
+        },
+    )
+
+
+async def _held_booking(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None):
+    from app.services import booking
+
+    return await booking.latest_held(db, bot_id, telegram_user_id)
+
+
+async def recent_choices(db: AsyncSession, bot_id: uuid.UUID, telegram_user_id: int | None) -> list[str]:
+    """Что покупатель выбрал на кнопках с пометкой «запомнить выбор» (день, время,
+    вариант) за последние 3 часа: по одному, последнему, на каждый блок."""
+    if telegram_user_id is None:
+        return []
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.button_click import ButtonClick
+
+    rows = (
+        await db.execute(
+            select(ButtonClick)
+            .where(
+                ButtonClick.bot_id == bot_id,
+                ButtonClick.telegram_user_id == telegram_user_id,
+                ButtonClick.collect_choice.is_(True),
+                ButtonClick.created_at > datetime.now(timezone.utc) - timedelta(hours=3),
+            )
+            .order_by(ButtonClick.created_at)
+        )
+    ).scalars().all()
+    latest: dict = {}
+    for row in rows:
+        latest[row.block_id] = row.label  # поздний нажатый перекрывает ранний в том же блоке
+    return list(latest.values())
+
+
+async def _open_platform_payment(
+    db: AsyncSession,
+    *,
+    bot_id: uuid.UUID | None = None,
+    client_id: uuid.UUID | None = None,
+    kind: PaymentKind,
+    amount_minor: int,
+    currency: str,
+) -> Payment | None:
+    """This bot's still-open invoice of this kind, if there is one.
+
+    The buyer side has had this since the beginning (`_open_payment`); the
+    side where *we* take the money did not, and two tabs — or one slow
+    network and a second tap — opened two invoices for the same launch.
+    Both were payable, so a client could be charged 198 $ for one bot, and
+    the second payment bought nothing at all: `_extend_paid_period` returns
+    early once `publication_paid_at` is set, so it did not even add a
+    period. Platform payments are invisible in the UI, so nobody would ever
+    have noticed.
+    """
+    result = await db.execute(
+        select(Payment)
+        .where(
+            (Payment.client_id == client_id) if client_id is not None else (Payment.bot_id == bot_id),
+            Payment.kind == kind,
+            Payment.status == PaymentStatus.pending,
+            Payment.amount_minor == amount_minor,
+            Payment.currency == currency,
+            Payment.created_at > datetime.now(timezone.utc) - _REUSE_WINDOW,
+        )
+        .order_by(Payment.created_at.desc())
+        .limit(1)
+    )
+    payment = result.scalar_one_or_none()
+    if payment is None or not (payment.meta or {}).get("checkout_url"):
+        return None
+    return payment
+
+
+def _platform_bot_token(method: PlatformMethod) -> str | None:
+    """Счёт в звёздах выставляет бот, а принимает деньги платформа — поэтому
+    для оплаты запуска это мета-бот: подтверждение придёт ему же
+    (см. meta_bot/handlers/payments.py)."""
+    if method.provider != "stars":
+        return None
+    token = get_settings().meta_bot_token
+    if not token:
+        raise ProviderError("Оплата звёздами недоступна: у сервиса не задан токен мета-бота")
+    return token
+
+
+async def create_publication_payment(
+    db: AsyncSession, *, bot: BotModel, client_id: uuid.UUID, provider: str | None = None
+) -> tuple[Payment, str]:
+    """A client paying us to put their bot on the air, by whichever of the
+    offered methods they picked."""
+    settings = get_settings()
+    method = platform_method(provider)
+
+    existing = await _open_platform_payment(
+        db, bot_id=bot.id, kind=PaymentKind.publication,
+        amount_minor=method.price_minor, currency=method.currency,
+    )
+    if existing is not None:
+        return existing, (existing.meta or {})["checkout_url"]
+
+    return await _create(
+        db,
+        kind=PaymentKind.publication,
+        provider_slug=method.provider,
+        credentials=method.credentials,
+        is_test=method.is_test,
+        amount_minor=method.price_minor,
+        currency=method.currency,
+        description=f"Публикация бота в Telegram · {bot.name or 'Новый бот'}",
+        # Back into the constructor, which polls the payment and unlocks
+        # the publish button as soon as it turns paid.
+        return_url=f"{settings.public_base_url.rstrip('/')}/?paid={bot.id}",
+        bot_id=bot.id,
+        client_id=client_id,
+        bot_token=_platform_bot_token(method),
+    )
+
+
+async def create_renewal_payment(
+    db: AsyncSession, *, bot: BotModel, client_id: uuid.UUID, provider: str | None = None
+) -> tuple[Payment, str]:
+    """A client paying us for the bot's next period.
+
+    The same checkout as the launch, at the renewal price — deliberately an
+    ordinary invoice rather than a charge against a saved card; see the
+    module docstring of `platform_billing` for why.
+    """
+    from app.services import platform_billing
+
+    settings = get_settings()
+    method = platform_method(provider)
+    if method.renewal_price_minor <= 0:
+        raise ProviderError("Продление не требуется — бот оплачен бессрочно")
+
+    # Подписка одна на клиента: открытый счёт на неё переиспользуется, из какого
+    # бота ни нажали «Продлить».
+    existing = await _open_platform_payment(
+        db, client_id=client_id, kind=PaymentKind.renewal,
+        amount_minor=method.renewal_price_minor, currency=method.currency,
+    )
+    if existing is not None:
+        return existing, (existing.meta or {})["checkout_url"]
+
+    period = platform_billing.period_days()
+    return await _create(
+        db,
+        kind=PaymentKind.renewal,
+        provider_slug=method.provider,
+        credentials=method.credentials,
+        is_test=method.is_test,
+        amount_minor=method.renewal_price_minor,
+        currency=method.currency,
+        description=f"Подписка на все боты, {period} дн.",
+        return_url=f"{settings.public_base_url.rstrip('/')}/?paid={bot.id}",
+        bot_id=bot.id,
+        client_id=client_id,
+        bot_token=_platform_bot_token(method),
+    )
+
+
+async def find_payment(db: AsyncSession, ref) -> Payment | None:
+    if ref.payment_id is not None:
+        result = await db.execute(select(Payment).where(Payment.id == ref.payment_id))
+        return result.scalar_one_or_none()
+    if ref.invoice_no is not None:
+        result = await db.execute(select(Payment).where(Payment.invoice_no == ref.invoice_no))
+        return result.scalar_one_or_none()
+    if ref.provider_payment_id is not None:
+        result = await db.execute(
+            select(Payment).where(Payment.provider_payment_id == ref.provider_payment_id)
+        )
+        return result.scalar_one_or_none()
+    return None
+
+
+async def credentials_for(db: AsyncSession, payment: Payment) -> tuple[dict[str, str], bool]:
+    """Whose merchant account this payment belongs to — the bot owner's, or
+    ours for a publication or a renewal."""
+    if payment.kind in (PaymentKind.publication, PaymentKind.renewal):
+        # Keyed on the payment's own provider: several methods are offered at
+        # once, and a callback about a Stripe payment must not be verified
+        # with the crypto app's token.
+        for method in platform_methods():
+            if method.provider == payment.provider:
+                return method.credentials, method.is_test
+        logger.error("Payment %s used provider %r, which is no longer configured", payment.id, payment.provider)
+        return {}, False
+
+    snapshot = (payment.meta or {}).get("kassa")
+    if snapshot and payment.status == PaymentStatus.pending and _snapshot_is_fresh(payment):
+        creds = decrypt_credentials(str(snapshot.get("cred") or "").encode())
+        if creds:
+            return creds, bool(snapshot.get("is_test"))
+
+    result = await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))
+    bot = result.scalar_one_or_none()
+    if bot is None:
+        return {}, False
+    return decrypt_credentials(bot.payment_credentials_encrypted), bot.payment_is_test
+
+
+#: Сколько живёт слепок кассы у неоплаченного счёта: дольше ссылка на оплату не ждёт.
+KASSA_SNAPSHOT_HOURS = 48
+
+
+def _snapshot_is_fresh(payment: Payment) -> bool:
+    created = payment.created_at
+    if created is None:
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - created < timedelta(hours=KASSA_SNAPSHOT_HOURS)
+
+
+async def scrub_old_kassa_snapshots(db: AsyncSession) -> int:
+    """Стереть зашифрованные ключи из старых неоплаченных счетов (слепок нужен ≤ 48 ч)."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=KASSA_SNAPSHOT_HOURS)
+    rows = (
+        await db.execute(
+            select(Payment).where(Payment.created_at < cutoff, Payment.meta["kassa"].isnot(None)).limit(500)
+        )
+    ).scalars().all()
+    for payment in rows:
+        payment.meta = {k: v for k, v in (payment.meta or {}).items() if k != "kassa"}
+    await db.commit()
+    return len(rows)
+
+
+async def resume_after_payment(db: AsyncSession, payment: Payment) -> None:
+    """Deliver what was bought: pick the dialogue back up at the payment
+    block's next block.
+
+    Failures are logged, never raised back at the provider — the money is
+    already taken and an error here would only make it retry and re-deliver.
+    But the attempt is recorded either way: `meta.delivered_at` is stamped
+    only once the goods have actually gone out, which is what lets
+    `redeliver_undelivered` pick up anything a restart cut in half.
+    """
+    from app.services import bot_dispatcher, bot_registry
+
+    if payment.kind != PaymentKind.order or not payment.bot_id or payment.chat_id is None:
+        return
+
+    # Where delivery goes was captured when the order was created. Looking it
+    # up through the block now would find nothing if the shop has since
+    # edited the canvas — and "the block was deleted" must not silently mean
+    # "money taken, nothing sent".
+    target = (payment.meta or {}).get("deliver_from")
+    if target is None:
+        result = await db.execute(select(BotBlock).where(BotBlock.id == payment.block_id))
+        block = result.scalar_one_or_none()
+        target = str(block.next_block_id) if block is not None and block.next_block_id else None
+
+    # The pinned target can itself have been deleted since — pinning survives
+    # the payment block going away, not the delivery block. Either way the
+    # answer is the same: do not quietly send a receipt and nothing else.
+    if target is not None:
+        exists = await db.execute(
+            select(BotBlock.id).where(BotBlock.id == uuid.UUID(str(target)), BotBlock.bot_id == payment.bot_id)
+        )
+        if exists.scalar_one_or_none() is None:
+            target = None
+
+    try:
+        bot_instance = await bot_registry.get_or_create(payment.bot_id, db)
+        if bot_instance is None:
+            logger.warning("Payment %s: bot %s has no token — cannot deliver", payment.id, payment.bot_id)
+            return
+
+        await bot_instance.send_message(
+            payment.chat_id, "✅ Оплата получена, спасибо!" + await _how_to_stop(db, payment)
+        )
+        if target:
+            delivered = await bot_dispatcher.walk_chain(
+                bot_instance,
+                payment.chat_id,
+                uuid.UUID(str(target)),
+                payment.bot_id,
+                db,
+                telegram_user_id=payment.telegram_user_id,
+            )
+            if not delivered:
+                # Money taken, goods refused by Telegram — a text over 4096
+                # characters, an image it could not fetch, a buyer who
+                # blocked the bot. Leaving `delivered_at` unstamped is the
+                # whole point: the sweep skips anything stamped, so this
+                # used to be the end of it, with the owner told the order
+                # was paid and nobody told it never arrived.
+                logger.error("Payment %s: paid but part of the delivery did not go out", payment.id)
+                # Only on the first go. The sweep retries this order every
+                # ten minutes, and a warning that arrives six times is a
+                # warning nobody finishes reading.
+                if int((payment.meta or {}).get("delivery_attempts") or 0) <= 1:
+                    await _notify_owner_of_stuck_delivery(db, payment, reason="telegram")
+                return
+            # Цепочка отработала без единой ошибки — и именно поэтому заказ
+            # помечается доставленным, даже если выдавать в ней было нечего.
+            # Так выглядит блок «Выдача», удалённый после продажи: покупатель
+            # получает «Спасибо за покупку!» и всё, заказ в журнале числится
+            # успешным, автодозвон его не трогает, и не узнаёт никто.
+            if not await _chain_delivers_something(db, payment.bot_id, uuid.UUID(str(target))):
+                logger.error("Payment %s: the chain after payment hands over nothing", payment.id)
+                await _notify_owner_of_stuck_delivery(db, payment, reason="nothing")
+        else:
+            # Paid, but the scenario no longer says what to hand over. Tell
+            # the buyer someone is coming rather than leaving them with a
+            # receipt and nothing else, and make it loud in the log.
+            logger.error("Payment %s: paid but there is nothing to deliver — the block is gone", payment.id)
+            await bot_instance.send_message(
+                payment.chat_id,
+                "Оплата получена, но товар пока не пришёл — продавец уже знает и свяжется с тобой.",
+            )
+            await _notify_owner_of_stuck_delivery(db, payment)
+
+        await _stamp_delivered(db, payment)
+    except Exception:
+        logger.exception("Payment %s: paid but delivery failed", payment.id)
+
+
+#: Дальше этого по цепочке не смотрим: выдача, до которой нужно пройти
+#: двадцать блоков, — это уже не выдача.
+_MAX_DELIVERY_LOOKAHEAD = 20
+
+
+async def _chain_delivers_something(db: AsyncSession, bot_id, start_block_id) -> bool:
+    """Есть ли в цепочке после оплаты хоть что-то, что можно назвать товаром.
+
+    Товар — это файл, доступ в закрытый чат или ссылка. Ссылка в обычном
+    тексте считается тоже: половина продавцов выдаёт именно так, и считать
+    это «ничем» значило бы слать им предупреждение с каждой продажи.
+    """
+    import re
+
+    next_id = start_block_id
+    seen: set = set()
+    for _ in range(_MAX_DELIVERY_LOOKAHEAD):
+        if next_id is None or next_id in seen:
+            break
+        seen.add(next_id)
+        result = await db.execute(
+            select(BotBlock).where(BotBlock.id == next_id, BotBlock.bot_id == bot_id)
+        )
+        block = result.scalar_one_or_none()
+        if block is None:
+            break
+        content = block.content or {}
+        if str(content.get("media_file_id") or "").strip():
+            return True
+        if str(content.get("group_chat_id") or "").strip():
+            return True
+        if re.search(r"https?://\S|t\.me/\S", str(content.get("text") or "")):
+            return True
+        for button in content.get("buttons") or []:
+            if str(button.get("action_value") or "").strip().startswith(("http", "tg:")):
+                return True
+        next_id = block.next_block_id
+    return False
+
+
+async def _how_to_stop(db: AsyncSession, payment: Payment) -> str:
+    """Приписка к первому чеку по подписке: как перестать платить.
+
+    Команда `/cancel` в боте была, а узнать о ней покупателю было неоткуда —
+    ни в одном сообщении она не называлась. Списание с сохранённой карты,
+    которое нечем остановить, человек останавливает через банк, и для
+    продавца это уже не отписка, а спор по платежу.
+    """
+    from app.models.subscription import BillingMode
+    from app.services import subscription_service
+
+    try:
+        subscription = await subscription_service.find_for_payment(db, payment)
+    except Exception:  # noqa: BLE001 — чек важнее приписки к нему
+        logger.exception("Payment %s: could not look up the subscription", payment.id)
+        return ""
+    if subscription is None:
+        return ""
+    if subscription.billing_mode == BillingMode.auto:
+        return "\nЭто подписка, она продлевается сама. Остановить списания — команда /cancel."
+    # Автосписания нет: следующий период человек оплатит сам. Про /cancel
+    # всё равно говорим — по ней бот перестанет присылать счета.
+    return "\nЭто подписка: счёт на следующий период придёт сюда же. Отказаться — команда /cancel."
+
+
+async def _stamp_delivered(db: AsyncSession, payment: Payment) -> None:
+    payment.meta = {**(payment.meta or {}), "delivered_at": datetime.now(timezone.utc).isoformat()}
+    await db.commit()
+
+
+async def _notify_owner_of_stuck_delivery(
+    db: AsyncSession, payment: Payment, *, reason: str = "missing"
+) -> None:
+    """Tell the shop that a paid order did not reach its buyer.
+
+    Two different accidents, and the shop can only act on one of them if it
+    is told which: the delivery block was deleted after the sale, or
+    Telegram refused what the block tried to send.
+    """
+    from app.models.client import Client
+    from app.services import bot_registry
+
+    try:
+        result = await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))
+        bot_row = result.scalar_one_or_none()
+        if bot_row is None or bot_row.client_id is None:
+            return
+        result = await db.execute(select(Client).where(Client.id == bot_row.client_id))
+        owner = result.scalar_one_or_none()
+        instance = await bot_registry.get_or_create(payment.bot_id, db)
+        if owner is None or not owner.telegram_user_id or instance is None:
+            return
+        if reason == "nothing":
+            text = (
+                f"⚠️ Заказ №{payment.invoice_no} оплачен, и бот отправил всё, что стоит после оплаты, — "
+                f"но выдавать там нечего: ни файла, ни ссылки, ни доступа в чат. "
+                f"Проверь блок «Выдача»: покупатель получил только текст."
+            )
+        elif reason == "telegram":
+            text = (
+                f"⚠️ Заказ №{payment.invoice_no} оплачен, но выдача не ушла — Telegram её отклонил. "
+                f"Чаще всего это слишком длинный текст (больше 4096 символов), картинка по ссылке, "
+                f"которую Telegram не смог скачать, или покупатель заблокировал бота. "
+                f"Бот попробует выдать ещё раз сам; если не выйдет — свяжись с покупателем."
+            )
+        else:
+            text = (
+                f"⚠️ Заказ №{payment.invoice_no} оплачен, но выдавать нечего — блок после оплаты удалён. "
+                f"Свяжись с покупателем и восстанови блок «Выдача»."
+            )
+        await instance.send_message(owner.telegram_user_id, text)
+    except Exception:  # noqa: BLE001
+        logger.info("Could not warn the owner about stuck payment %s", payment.id, exc_info=True)
+
+
+#: How many times the sweep re-tries one order before it stops. Ten minutes
+#: apart, so this is roughly an hour of trying — long enough to ride out a
+#: Telegram outage, short enough not to nag the shop all week about a text
+#: that will never fit.
+_MAX_DELIVERY_ATTEMPTS = 6
+
+
+async def redeliver_undelivered(limit: int = 100) -> None:
+    """Hand over anything that was paid for but never delivered.
+
+    Delivery happens in a background task now, and the provider was already
+    told "received" — so a restart in between used to lose the goods for
+    good, with no retry from anywhere and nothing in the database to say so.
+    Run at startup, this closes that window.
+    """
+    from app.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Payment)
+            .where(
+                Payment.kind == PaymentKind.order,
+                Payment.status == PaymentStatus.paid,
+                # Anything settled a while ago and still unmarked was cut off
+                # mid-flight; a payment from the last minute may simply be
+                # in progress right now.
+                Payment.paid_at < datetime.now(timezone.utc) - timedelta(minutes=1),
+                # Filtered in SQL, not afterwards in Python: applying LIMIT
+                # first and then dropping the delivered ones meant a single
+                # undelivered order sitting behind a hundred delivered ones
+                # was never found at all.
+                ~Payment.meta.has_key("delivered_at"),  # noqa: W601 — JSONB ? operator
+                # A delivery Telegram will never accept — a text over 4096
+                # characters, a dead image link — fails identically every
+                # ten minutes forever, and each attempt used to message the
+                # shop again. After `_MAX_DELIVERY_ATTEMPTS` the sweep lets
+                # it go and says so once; the order stays unstamped, so it
+                # is still visibly undelivered to anyone reading the table.
+                ~Payment.meta.has_key("delivery_gave_up_at"),  # noqa: W601
+            )
+            .order_by(Payment.paid_at.desc())
+            .limit(limit)
+        )
+        pending = list(result.scalars().all())
+
+    if not pending:
+        return
+    logger.warning("Re-delivering %d payment(s) that were paid but never handed over", len(pending))
+    for payment in pending:
+        async with AsyncSessionLocal() as db:
+            fresh = (await db.execute(select(Payment).where(Payment.id == payment.id))).scalar_one_or_none()
+            if fresh is None or (fresh.meta or {}).get("delivered_at"):
+                continue
+
+            attempts = await _claim_delivery(db, fresh)
+            if attempts is None:
+                # Someone else is handing this order over right now. Read
+                # the row, decide, write — the shape every other money path
+                # here deliberately avoids — let two passes both get past
+                # the `delivered_at` check and deliver the same goods twice.
+                # For a block that hands out a group invite that is a second
+                # single-use link, which can be passed on.
+                continue
+
+            await resume_after_payment(db, fresh)
+
+            await db.refresh(fresh)
+            if (fresh.meta or {}).get("delivered_at") or attempts < _MAX_DELIVERY_ATTEMPTS:
+                continue
+            fresh.meta = {
+                **(fresh.meta or {}),
+                "delivery_gave_up_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.commit()
+            logger.error(
+                "Payment %s: giving up after %d delivery attempts — the shop has been told",
+                fresh.id, attempts,
+            )
+            await _notify_owner_gave_up(db, fresh)
+
+
+async def _claim_delivery(db: AsyncSession, payment: Payment) -> int | None:
+    """Take the right to hand this order over, or find it already taken.
+
+    One conditional UPDATE, the same shape `mark_paid` uses: the attempt
+    counter is raised only if it still holds the value this caller read, so
+    exactly one of several concurrent sweeps wins and the rest step aside.
+    Returns the attempt number on success, None when somebody else has it.
+
+    Reachable inside a single process, not just across replicas: delivery
+    runs in a background task, a chain with typing pauses easily takes
+    longer than a minute, and the sweep picks up anything paid over a minute
+    ago with no `delivered_at`.
+    """
+    was = int((payment.meta or {}).get("delivery_attempts") or 0)
+    result = await db.execute(
+        update(Payment)
+        .where(
+            Payment.id == payment.id,
+            func.coalesce(Payment.meta["delivery_attempts"].astext.cast(Integer), 0) == was,
+            ~Payment.meta.has_key("delivered_at"),  # noqa: W601
+        )
+        # `meta || jsonb_build_object(...)` rather than jsonb_set: the path
+        # argument of jsonb_set is text[], and handing it a plain string is
+        # a runtime "function does not exist", not a type error anything
+        # catches earlier.
+        .values(meta=Payment.meta.op("||")(func.jsonb_build_object("delivery_attempts", was + 1)))
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        return None
+    await db.refresh(payment)
+    return was + 1
+
+
+async def _notify_owner_gave_up(db: AsyncSession, payment: Payment) -> None:
+    """Last word to the shop about an order the bot could not hand over.
+
+    Said once, at the end, rather than every ten minutes: an alert that
+    repeats forever is an alert that stops being read.
+    """
+    from app.models.client import Client
+    from app.services import bot_registry
+
+    try:
+        bot_row = (
+            await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))
+        ).scalar_one_or_none()
+        if bot_row is None or bot_row.client_id is None:
+            return
+        owner = (
+            await db.execute(select(Client).where(Client.id == bot_row.client_id))
+        ).scalar_one_or_none()
+        instance = await bot_registry.get_or_create(payment.bot_id, db)
+        if owner is None or not owner.telegram_user_id or instance is None:
+            return
+        await instance.send_message(
+            owner.telegram_user_id,
+            f"🔴 Заказ №{payment.invoice_no} оплачен, но выдать его так и не удалось — "
+            f"бот прекратил попытки. Деньги у тебя, товара у покупателя нет: свяжись с ним "
+            f"и проверь блок «Выдача» (чаще всего дело в слишком длинном тексте или в ссылке "
+            f"на файл, которую Telegram не может скачать).",
+        )
+    except Exception:  # noqa: BLE001
+        logger.info("Could not tell the owner we gave up on payment %s", payment.id, exc_info=True)
+
+
+async def redeliver_forever(every_seconds: float = 600.0) -> None:
+    """Keep sweeping for paid-but-undelivered orders while the process runs.
+
+    One pass at startup only covered a restart. It left the other way of
+    losing a sale wide open: `resume_after_payment` swallows a failed send —
+    a Telegram 5xx, a rate limit, a network blip — without stamping
+    `delivered_at`, so the buyer's goods sat there until the next deploy.
+    Now the same sweep that fixes a restart also retries a bad minute.
+    """
+    import asyncio
+
+    while True:
+        await asyncio.sleep(every_seconds)
+        try:
+            await redeliver_undelivered()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # A sweep that dies takes every later sweep with it, which is the
+            # failure this loop exists to prevent.
+            logger.exception("Redelivery sweep failed; will try again")
+
+
+async def apply_result(db: AsyncSession, payment: Payment, result, *, deliver: bool = True) -> bool:
+    """Turn a provider's verdict into what actually happens to the order.
+
+    The single place a payment becomes paid, whatever prompted the news — a
+    callback, the buyer's "Я оплатил", a Stars update, or the shop owner
+    confirming by hand. Returns True if this call is what settled it.
+
+    `deliver=False` settles the payment without sending anything, for callers
+    that want to acknowledge the provider first and hand the goods over from
+    a background task — see `deliver_later`.
+    """
+    await _remember(db, payment, result)
+    await _gateway_subscription_event(db, payment, result)
+
+    if result.status == PaymentStatus.paid:
+        if await mark_paid(db, payment, result.provider_payment_id):
+            # Before delivery, not after: a Stars renewal arrives as an
+            # ordinary successful_payment on the original invoice, and the
+            # period has to be pushed out even if the goods themselves fail
+            # to send. Losing a month of paid access to a Telegram hiccup is
+            # not a trade worth making.
+            from app.services import subscription_service
+
+            try:
+                await subscription_service.start_or_extend(db, payment)
+            except Exception:
+                logger.exception("Payment %s settled but the subscription could not be updated", payment.id)
+            if deliver:
+                await resume_after_payment(db, payment)
+            from app.services import booking_flow
+
+            try:
+                await booking_flow.confirm_after_payment(db, payment)
+            except Exception:
+                logger.exception("Payment %s settled but the booking could not be confirmed", payment.id)
+            _later(_notify_owner_of_sale, payment.id, name=f"sale-notice-{payment.id}")
+            return True
+        return False
+
+    if result.status == PaymentStatus.refunded:
+        # A refund arrives *after* the payment succeeded, so testing for
+        # "still pending" meant every refund notification did nothing at all
+        # and the order kept counting as a sale.
+        if payment.status != PaymentStatus.refunded:
+            payment.status = PaymentStatus.refunded
+            payment.meta = {**(payment.meta or {}), "refunded_at": datetime.now(timezone.utc).isoformat()}
+            await db.commit()
+            logger.info("Payment %s refunded", payment.id)
+        return False
+
+    if result.status == PaymentStatus.failed and payment.status == PaymentStatus.pending:
+        payment.status = PaymentStatus.failed
+        await db.commit()
+    return False
+
+
+async def _gateway_subscription_event(db: AsyncSession, payment: Payment, result) -> None:
+    """Событие подписки, которую ведёт сам шлюз (LiqPay): продление или отмена.
+
+    Продление приходит уведомлением по тому же заказу, который уже `paid`, — `mark_paid`
+    тут ничего бы не сделал, а период продлить надо. Адаптер помечает его
+    `gateway_renewal=<id платежа у шлюза>`; повтор того же id (шлюз повторяет уведомления)
+    период второй раз не двигает."""
+    notes = getattr(result, "meta", None) or {}
+    renewal = notes.get("gateway_renewal")
+    unsubscribed = notes.get("gateway_unsubscribed")
+    if not (renewal or unsubscribed) or payment.kind != PaymentKind.order:
+        return
+    from app.services import subscription_service
+
+    if renewal and result.status == PaymentStatus.paid and payment.status == PaymentStatus.paid:
+        await db.refresh(payment, with_for_update=True)  # два одинаковых уведомления подряд — одна запись
+        seen = list((payment.meta or {}).get("renewals_seen") or [])
+        if str(renewal) in seen:
+            await db.commit()  # только снять блокировку строки
+            return
+        payment.meta = {**(payment.meta or {}), "renewals_seen": (seen + [str(renewal)])[-50:]}
+        await db.commit()
+        try:
+            subscription = await subscription_service.start_or_extend(db, payment)
+            if subscription is not None:
+                await subscription_service._tell_them_it_renewed(db, subscription)
+        except Exception:
+            logger.exception("Payment %s: renewal %s settled but the subscription was not extended", payment.id, renewal)
+    elif unsubscribed:
+        subscription = await subscription_service.find_for_payment(db, payment)
+        if subscription is not None and subscription.status == SubscriptionStatus.active:
+            await subscription_service.cancel(db, subscription, why="отписка на стороне шлюза", keep_paid_period=True)
+
+
+async def _remember(db: AsyncSession, payment: Payment, result) -> None:
+    """Write down what the adapter learned, before deciding what it means.
+
+    Most providers hand us one notification and are done. Payme instead
+    holds a conversation about the same transaction and expects every answer
+    to match the last, so an adapter can return notes in
+    `WebhookResult.meta` and read them back on the next call.
+
+    Committed on its own, ahead of the status handling: `mark_paid` rolls
+    back when it loses the race to settle, and these notes must survive
+    that.
+    """
+    notes = dict(getattr(result, "meta", None) or {})
+    remote_id = getattr(result, "provider_payment_id", None)
+    changed = False
+
+    # Where the gateway, not the block, decides the price — a Prodamus
+    # subscription plan is the case — the row has to say what was actually
+    # charged. Otherwise the sales log shows the number we guessed at
+    # checkout, and a shop that raised its price in the dashboard would see
+    # the old one forever. Only an adapter that knows this applies sets it;
+    # nothing infers it from an amount simply arriving smaller.
+    notes.pop("gateway_renewal", None)  # разовые сигналы адаптера, в платеже не хранятся
+    notes.pop("gateway_unsubscribed", None)
+    charged = notes.pop("charged_amount_minor", None)
+    if isinstance(charged, int) and charged > 0 and charged != payment.amount_minor:
+        logger.info(
+            "Payment %s: provider charged %s, not the %s the block asked for",
+            payment.id,
+            charged,
+            payment.amount_minor,
+        )
+        notes["block_amount_minor"] = payment.amount_minor
+        payment.amount_minor = charged
+        changed = True
+
+    if remote_id and payment.provider_payment_id != remote_id:
+        payment.provider_payment_id = remote_id
+        changed = True
+    if notes:
+        payment.meta = {**(payment.meta or {}), **notes}
+        changed = True
+
+    if changed:
+        await db.commit()
+
+
+def deliver_later(payment_id: uuid.UUID) -> None:
+    """Hand the goods over after the current request has answered.
+
+    Delivery walks the dialogue with real typing pauses, and a provider that
+    doesn't get its acknowledgement quickly retries the callback — which is
+    exactly the duplicate confirmation `mark_paid` then has to fend off.
+    Better not to provoke it.
+    """
+    from app.services import background
+
+    async def run() -> None:
+        from app.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(Payment).where(Payment.id == payment_id))
+            payment = result.scalar_one_or_none()
+            if payment is not None:
+                await resume_after_payment(session, payment)
+
+    background.spawn(run(), name=f"deliver:{payment_id}")
+
+
+async def check_and_settle(db: AsyncSession, payment: Payment) -> PaymentStatus:
+    """Ask the provider where a payment stands right now, and deliver if it
+    turns out to be paid. What the buyer's "Я оплатил" runs for a provider
+    that has an API to ask — a webhook can be late, lost, or misconfigured in
+    the shop's dashboard, and the buyer shouldn't pay for that."""
+    provider = payment_providers.get_provider(payment.provider)
+    if not provider.supports_status_check:
+        raise ProviderError(f"{provider.title}: статус платежа так не проверяется")
+    if payment.status in (PaymentStatus.paid, PaymentStatus.refunded):
+        return payment.status
+
+    credentials, _is_test = await credentials_for(db, payment)
+    # Same reason as the callback route: the read below is an outbound HTTP
+    # call, and a buyer tapping «Я оплатил» must not hold a pooled connection
+    # for its duration.
+    await db.commit()
+    result = await provider.check_status(
+        credentials=credentials,
+        amount_minor=payment.amount_minor,
+        invoice_no=payment.invoice_no,
+        payment_id=payment.id,
+        provider_payment_id=payment.provider_payment_id,
+        meta=payment.meta or {},
+        currency=payment.currency,
+    )
+    await apply_result(db, payment, result)
+    return result.status
+
+
+async def claim_payment(db: AsyncSession, payment: Payment) -> None:
+    """The buyer says they paid, on a provider with nothing to ask.
+
+    Recorded rather than believed: the order shows up as claimed in the
+    owner's list and — if the owner has ever opened their own bot — as a
+    message with confirm/reject buttons. Only the owner's confirmation
+    releases the goods.
+    """
+    payment.meta = {**(payment.meta or {}), "claimed_at": datetime.now(timezone.utc).isoformat()}
+    await db.commit()
+    await _notify_owner_of_claim(db, payment)
+
+
+async def _notify_owner_of_claim(db: AsyncSession, payment: Payment) -> None:
+    """Best-effort ping to the shop owner. A bot may only message people who
+    have written to it first, so this quietly does nothing when the owner has
+    never opened their own bot — the claim is in the constructor's order list
+    either way, which is why nothing here is allowed to raise."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    from app.models.client import Client
+    from app.services import bot_registry
+
+    try:
+        result = await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))
+        bot_row = result.scalar_one_or_none()
+        if bot_row is None or bot_row.client_id is None:
+            return
+        result = await db.execute(select(Client).where(Client.id == bot_row.client_id))
+        owner = result.scalar_one_or_none()
+        if owner is None or not owner.telegram_user_id:
+            return
+
+        instance = await bot_registry.get_or_create(payment.bot_id, db)
+        if instance is None:
+            return
+
+        amount = payment_providers.money(payment.amount_minor, payment.currency)
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"payok:{payment.id.hex}"),
+                    InlineKeyboardButton(text="✖️ Отклонить", callback_data=f"payno:{payment.id.hex}"),
+                ]
+            ]
+        )
+        await instance.send_message(
+            owner.telegram_user_id,
+            f"💰 Заказ №{payment.invoice_no}: «{payment.description}» на {amount}.\n"
+            f"Покупатель говорит, что оплатил. Деньги пришли?",
+            reply_markup=keyboard,
+        )
+    except Exception:  # noqa: BLE001
+        logger.info("Could not notify the owner about claimed payment %s", payment.id, exc_info=True)
+
+
+async def _owner_of(db: AsyncSession, bot_id) -> tuple[int, object] | None:
+    """(owner's telegram id, bot instance) for pinging the shop owner."""
+    from app.models.client import Client
+    from app.services import bot_registry
+
+    bot_row = (await db.execute(select(BotModel).where(BotModel.id == bot_id))).scalar_one_or_none()
+    if bot_row is None or bot_row.client_id is None:
+        return None
+    owner = (await db.execute(select(Client).where(Client.id == bot_row.client_id))).scalar_one_or_none()
+    if owner is None or not owner.telegram_user_id:
+        return None
+    instance = await bot_registry.get_or_create(bot_id, db)
+    if instance is None:
+        return None
+    return owner.telegram_user_id, instance
+
+
+async def tell_owner(owner_id: int, shop_bot, text: str) -> None:
+    """Написать владельцу магазина.
+
+    Сначала через мета-бота — тем же путём, что и напоминания об оплате тарифа:
+    владелец читает там свой кабинет, а при входе через сайт он разрешил
+    боту писать ему. Бот магазина может писать только тем, кто ему уже
+    писал, поэтому он — запасной путь.
+    """
+    from app.services import platform_billing
+
+    meta = platform_billing._meta_bot()
+    if meta is not None:
+        try:
+            await asyncio.wait_for(meta.send_message(owner_id, text), timeout=10)
+            return
+        except Exception:  # noqa: BLE001
+            logger.info("Meta bot could not reach owner %s", owner_id, exc_info=True)
+    await shop_bot.send_message(owner_id, text)
+
+
+async def _notify_owner_of_sale(db: AsyncSession, payment: Payment) -> None:
+    """Tell the shop owner that someone bought something, and who.
+
+    There was no such message: a card payment settled, the goods went out,
+    and the owner learned about it only by reloading a panel inside the
+    constructor. For a coach taking bookings that meant refreshing a web page
+    to find out somebody had booked a slot — which is exactly the job a bot
+    is supposed to be doing for them.
+
+    Best-effort by construction: a bot may only message people who have
+    written to it first, so this quietly does nothing when the owner has
+    never opened their own bot, and nothing here is allowed to raise into the
+    payment path.
+    """
+    from app.services import subscribers, subscription_service
+
+    if payment.kind != PaymentKind.order:
+        return
+    try:
+        found = await _owner_of(db, payment.bot_id)
+        if found is None:
+            return
+        owner_id, instance = found
+
+        # Владелец мог выключить уведомления в мета-боте («Настройки»).
+        from app.models.client import Client
+
+        wants = (
+            await db.execute(select(Client.notify_sales).where(Client.telegram_user_id == owner_id))
+        ).scalar_one_or_none()
+        if wants is False:
+            return
+
+        buyer = await subscribers.get(db, payment.bot_id, payment.telegram_user_id)
+        who = buyer.title if buyer is not None else f"id {payment.telegram_user_id}"
+        amount = payment_providers.money(payment.amount_minor, payment.currency)
+
+        subscription = await subscription_service.find_for_payment(db, payment)
+        if subscription is not None and subscription.periods_paid > 1:
+            headline = f"🔁 Продление №{subscription.periods_paid}"
+        elif subscription is not None:
+            headline = "🎉 Новая подписка"
+        else:
+            headline = "💰 Оплачен заказ"
+
+        lines = [
+            f"{headline} №{payment.invoice_no}",
+            f"«{payment.description}» — {amount}",
+            f"Покупатель: {who}",
+        ]
+        picked = (payment.meta or {}).get("choices") or []
+        if picked:
+            lines.append("Выбрал: " + " · ".join(str(x) for x in picked))
+        if subscription is not None:
+            until = dates.day(subscription.current_period_end)
+            lines.append(f"Доступ оплачен до {until}")
+        await tell_owner(owner_id, instance, "\n".join(lines))
+    except Exception:  # noqa: BLE001
+        logger.info("Could not notify the owner about paid order %s", payment.id, exc_info=True)
+
+
+async def confirm_by_owner(db: AsyncSession, payment: Payment, *, deliver: bool = True) -> bool:
+    """The shop owner vouches for a payment we cannot verify ourselves."""
+    from app.services.payments import WebhookResult
+
+    return await apply_result(
+        db,
+        payment,
+        WebhookResult(status=PaymentStatus.paid, provider_payment_id=payment.provider_payment_id),
+        deliver=deliver,
+    )
+
+
+async def refund_by_owner(db: AsyncSession, payment: Payment) -> bool:
+    """Заказ возвращён: снять доступ и сказать покупателю.
+
+    Деньги через нас не проходили и вернуть их отсюда нельзя — это делает
+    владелец в кабинете своей кассы. Всё остальное делаем мы, потому что
+    вручную это как раз и не сделать: одноразовое приглашение уже
+    использовано, и выставить человека из закрытого чата владельцу пришлось
+    бы руками, помня, кто это был.
+
+    Возвращает, удалось ли закрыть доступ в чат.
+    """
+    from app.services import bot_registry, group_access
+
+    payment.status = PaymentStatus.refunded
+    payment.meta = {
+        **(payment.meta or {}),
+        "refunded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.commit()
+
+    removed = False
+    target = (payment.meta or {}).get("deliver_from")
+    if target and payment.telegram_user_id is not None:
+        block = (
+            await db.execute(select(BotBlock).where(BotBlock.id == uuid.UUID(str(target))))
+        ).scalar_one_or_none()
+        chat = group_access.chat_ref((block.content if block else None) or {})
+        if chat:
+            removed = await group_access.remove_member(
+                db, bot_id=payment.bot_id, chat=chat, telegram_user_id=payment.telegram_user_id
+            )
+
+    # Покупателю — обязательно. Он заплатил, получил товар, а потом доступ
+    # исчез: без объяснения это выглядит как поломка, а не как возврат.
+    if payment.chat_id is not None:
+        with contextlib.suppress(Exception):
+            instance = await bot_registry.get_or_create(payment.bot_id, db)
+            if instance is not None:
+                await instance.send_message(
+                    payment.chat_id,
+                    f"Заказ №{payment.invoice_no} отменён, продавец оформляет возврат."
+                    + (" Доступ в закрытый чат закрыт." if removed else ""),
+                )
+    return removed
+
+
+async def reject_by_owner(db: AsyncSession, payment: Payment) -> None:
+    if payment.status != PaymentStatus.pending:
+        return
+    payment.status = PaymentStatus.failed
+    await db.commit()
+
+    from app.services import bot_registry
+
+    if payment.chat_id is None:
+        return
+    try:
+        instance = await bot_registry.get_or_create(payment.bot_id, db)
+        if instance is not None:
+            await instance.send_message(
+                payment.chat_id,
+                "Пока не видим оплату по этому заказу. Если платёж прошёл — напишите продавцу, разберёмся.",
+            )
+    except Exception:  # noqa: BLE001
+        logger.info("Could not tell the buyer that payment %s was rejected", payment.id, exc_info=True)
+
+
+async def _extend_paid_period(db: AsyncSession, payment: Payment, now: datetime) -> None:
+    """A launch or a renewal has landed — move the bot's clock.
+
+    Reached exactly once per payment: `mark_paid`'s conditional UPDATE has
+    already decided who settled it, so a replayed callback cannot buy a
+    second period with the same money.
+    """
+    from app.services import platform_billing
+
+    bot = (await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))).scalar_one_or_none()
+    if bot is None:
+        logger.error("Payment %s settled for bot %s, which no longer exists", payment.id, payment.bot_id)
+        return
+    # Подписка одна на все боты клиента: платёж двигает счётчик у всех сразу.
+    siblings = await platform_billing.client_bots(db, bot.client_id)
+
+    if payment.kind == PaymentKind.publication:
+        if bot.publication_paid_at is not None:
+            # Второй платёж за запуск уже запущенного бота (два счёта, созданные
+            # с большим интервалом, оба могут сойтись). Деньги взяты, поэтому они
+            # засчитываются как продление подписки; в логе видно, что произошло.
+            logger.warning(
+                "Payment %s is a second launch fee for bot %s — credited as a subscription period instead",
+                payment.id, bot.id,
+            )
+            platform_billing.extend_all(siblings, bot, now)
+        else:
+            bot.publication_paid_at = now
+            # Запуск — разовый платёж за бота. Если подписки ещё нет (или она
+            # кончилась), он включает первый месяц для всех ботов клиента; если
+            # она идёт — бот просто встаёт под неё.
+            platform_billing.open_for_launch(siblings, bot, now)
+    else:
+        platform_billing.extend_all(siblings, bot, now)
+    await db.flush()
+    # Оплата подписки — это и возврат остановленных ботов, второй кнопки
+    # искать не нужно. Внутри `resume` коммит, до установки вебхука, чтобы к
+    # моменту, когда Telegram снова начнёт доставлять, строка уже говорила
+    # «в эфире».
+    for other in siblings:
+        await platform_billing.resume(db, other)
+
+
+async def mark_paid(db: AsyncSession, payment: Payment, provider_payment_id: str | None) -> bool:
+    """Flip a payment to paid, exactly once. True means *this* call did it.
+
+    The caller delivers the goods on True, so "exactly once" has to survive
+    concurrency, and it genuinely happens: Robokassa re-posts its ResultURL
+    until it gets `OK{InvId}`, ЮKassa retries on a slow response, and the
+    buyer can tap «Я оплатил» twice. Reading the status and then writing it
+    would let every one of those racers observe `pending` and deliver.
+
+    So the check and the write are one statement — `UPDATE … WHERE status
+    <> 'paid'` — and Postgres decides the winner. Exactly one caller sees a
+    row updated; the rest get zero and stay quiet.
+    """
+    now = datetime.now(timezone.utc)
+    values = {"status": PaymentStatus.paid, "paid_at": now}
+    if provider_payment_id:
+        values["provider_payment_id"] = provider_payment_id
+
+    result = await db.execute(
+        update(Payment)
+        .where(
+            Payment.id == payment.id,
+            # Only an open payment may become paid. `status != paid` also
+            # matched a *refunded* one, so a stale "я оплатил" tap after a
+            # refund re-settled the order and shipped the goods again — and
+            # put the money back into the revenue figure.
+            Payment.status.in_((PaymentStatus.pending, PaymentStatus.failed)),
+        )
+        .values(**values)
+    )
+    if result.rowcount == 0:
+        # Someone else got there first. Roll back rather than commit, so this
+        # call leaves no trace — but a rollback expires every ORM object in
+        # the session, and the caller goes on to read this payment (the router
+        # returns its status; the bot names its invoice_no in a message). Left
+        # expired, that read is lazy IO outside a greenlet and blows up, which
+        # turned a redelivered callback into a 500 and made the owner's
+        # confirm button silently do nothing the second time.
+        await db.rollback()
+        await db.refresh(payment)
+        return False
+
+    if payment.kind in (PaymentKind.publication, PaymentKind.renewal) and payment.bot_id:
+        await _extend_paid_period(db, payment, now)
+
+    # Оплачено — слепок ключей больше не нужен.
+    if "kassa" in (payment.meta or {}):
+        payment.meta = {k: v for k, v in payment.meta.items() if k != "kassa"}
+
+    await db.commit()
+    # The in-memory object was not touched by the UPDATE; refresh it so the
+    # caller (and anything it hands the payment to) sees the new state.
+    await db.refresh(payment)
+    if payment.kind in (PaymentKind.publication, PaymentKind.renewal):
+        _later(_confirm_to_client, payment.id, name=f"paid-notice-{payment.id}")
+    return True
+
+
+def _later(notifier, payment_id: uuid.UUID, *, name: str) -> None:
+    """Сообщения людям — после ответа платёжной системе, а не до него.
+
+    Telegram с некоторых серверов отвечает медленно или не отвечает вовсе, и
+    ожидание таймаута внутри обработчика уведомления держало бы провайдера:
+    он решил бы, что мы не ответили, и стал бы повторять платёж. Поэтому
+    письма уходят отдельной задачей со своей сессией БД.
+    """
+    from app.database import AsyncSessionLocal
+    from app.services import background
+
+    async def run() -> None:
+        async with AsyncSessionLocal() as db:
+            payment = (await db.execute(select(Payment).where(Payment.id == payment_id))).scalar_one_or_none()
+            if payment is not None:
+                await asyncio.wait_for(notifier(db, payment), timeout=30)
+
+    background.spawn(run(), name=name)
+
+
+async def _confirm_to_client(db: AsyncSession, payment: Payment) -> None:
+    """Человек заплатил нам — он должен сразу увидеть, что деньги дошли.
+
+    Тихая оплата (закрыл вкладку, ждёт, не зная, прошло ли) — главный страх
+    платящего: он тут же идёт в поддержку. Подтверждение приходит в Telegram,
+    чем бы ни платили — картой, криптой или звёздами. Не критично: сбой здесь
+    ничего не откатывает.
+    """
+    from app.services import platform_billing
+
+    try:
+        bot = (await db.execute(select(BotModel).where(BotModel.id == payment.bot_id))).scalar_one_or_none()
+        if bot is None:
+            return
+        name = bot.name or "бот"
+        amount = payment_providers.money(payment.amount_minor, payment.currency)
+        if payment.kind == PaymentKind.publication:
+            text = (
+                f"✅ Оплата получена: {amount}. Бот «{name}» готов к запуску — вернись в конструктор, "
+                f"вставь токен от @BotFather и нажми «Опубликовать»."
+            )
+        else:
+            until = dates.day(bot.paid_until) if bot.paid_until else ""
+            text = f"✅ Оплата получена: {amount}. Подписка на все ваши боты продлена" + (f" до {until}." if until else ".")
+        await platform_billing._tell_owner(db, bot, text)
+    except Exception:  # noqa: BLE001
+        logger.info("Could not confirm payment %s to the client", payment.id, exc_info=True)

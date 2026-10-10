@@ -22,3 +22,31 @@ frontend/.vite/
 
 # Logs
 *.log
+
+# Directly-uploaded media (local dev — see Settings.media_upload_dir;
+# docker-compose uses a named volume instead).
+/media_uploads/
+
+# Временные пробники проверок: файл, который пишут, чтобы воспроизвести
+# находку, и выбрасывают следом. В историю попадать он не должен —
+# настоящий тест на подтверждённую находку пишется рядом, в tests/.
+tests/zz_*
+
+# Coverage
+.coverage
+htmlcov/
+.ruff_cache/
+.pytest_cache/
+
+# Служебные метки скриптов deploy/
+.deployfirst.done
+.deploy-mode
+.deploy-prev
+.deploy-running
+.deploy-branch
+.media_chown_done
+backups/
+
+# Сертификаты, скачанные deploy/install-russian-ca.sh
+certs/*.pem
+brag-output/

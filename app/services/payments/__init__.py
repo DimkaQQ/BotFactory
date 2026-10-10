@@ -1,0 +1,175 @@
+"""Payment provider registry.
+
+Adding a provider means writing one module against `base.PaymentProvider`
+and registering it here — the settings form, the webhook route and the
+constructor's payment block all read this registry and need no changes of
+their own.
+
+Order matters: it is the order the shop owner sees in the settings form, so
+it runs by geography — Russia, then Central Asia, then Ukraine, then what
+works anywhere.
+"""
+
+from __future__ import annotations
+
+from app.services.payments.base import (
+    Checkout,
+    CheckoutRequest,
+    CredentialField,
+    PaymentProvider,
+    PaymentRef,
+    ProviderDefaults,
+    ProviderError,
+    WebhookResult,
+    fiscalization_enabled,
+    minor_to_major,
+    money,
+    same_currency,
+)
+from app.services.payments.click import ClickProvider
+from app.services.payments.cloudpayments import CloudPaymentsProvider
+from app.services.payments.cryptobot import CryptoBotProvider
+from app.services.payments.freedompay import FreedomPayProvider
+from app.services.payments.ioka import IokaProvider
+from app.services.payments.lavatop import LavaTopProvider
+from app.services.payments.lifepay import LifePayProvider
+from app.services.payments.link import LinkProvider
+from app.services.payments.liqpay import LiqPayProvider
+from app.services.payments.paymaster import PayMasterProvider
+from app.services.payments.payme import PaymeProvider
+from app.services.payments.processingkz import ProcessingKzProvider
+from app.services.payments.prodamus import ProdamusProvider
+from app.services.payments.robokassa import RobokassaProvider
+from app.services.payments.stripe import StripeProvider
+from app.services.payments.tbank import TBankProvider
+from app.services.payments.telegram_stars import TelegramStarsProvider
+from app.services.payments.test_provider import TestProvider
+from app.services.payments.yookassa import YooKassaProvider
+
+PROVIDERS: dict[str, PaymentProvider] = {
+    provider.slug: provider
+    for provider in (
+        # Works anywhere Telegram does, so it goes first.
+        TelegramStarsProvider(),
+        # Россия.
+        YooKassaProvider(),
+        TBankProvider(),
+        CloudPaymentsProvider(),
+        ProdamusProvider(),
+        RobokassaProvider(),
+        PayMasterProvider(),
+        LifePayProvider(),
+        LavaTopProvider(),
+        # Казахстан, Узбекистан, Кыргызстан.
+        FreedomPayProvider(),
+        IokaProvider(),
+        ProcessingKzProvider(),
+        ClickProvider(),
+        PaymeProvider(),
+        # Украина.
+        LiqPayProvider(),
+        # Везде.
+        StripeProvider(),
+        CryptoBotProvider(),
+        LinkProvider(),
+        TestProvider(),
+    )
+}
+
+
+def get_provider(slug: str) -> PaymentProvider:
+    provider = PROVIDERS.get((slug or "").strip().lower())
+    if provider is None:
+        raise ProviderError(f"Неизвестный платёжный провайдер: {slug!r}")
+    return provider
+
+
+#: Catalogue sections, in the order the constructor shows them. The slug is
+#: what each adapter carries in `region`; the title is what the settings form
+#: prints above the group. Kept here rather than on the frontend so the two
+#: cannot drift — a new adapter picks a region and appears in the right place
+#: without touching any TypeScript.
+REGIONS: tuple[tuple[str, str], ...] = (
+    ("global", "Работают везде"),
+    ("ru", "Россия"),
+    ("ca", "Казахстан, Узбекистан, Кыргызстан"),
+    ("ua", "Украина"),
+    ("manual", "Без подключения кассы"),
+)
+
+
+def offered_slugs() -> set[str] | None:
+    """Slugs shown to new choices (`OFFERED_PAYMENT_PROVIDERS`); None — everything."""
+    from app.config import get_settings
+
+    raw = (get_settings().offered_payment_providers or "").strip()
+    if raw == "*":
+        return None
+    return {part.strip().lower() for part in raw.split(",") if part.strip()}
+
+
+def is_offered(slug: str) -> bool:
+    offered = offered_slugs()
+    return offered is None or (slug or "").strip().lower() in offered
+
+
+def describe_providers(offered_only: bool = False) -> list[dict]:
+    """The provider catalogue the constructor renders its settings form
+    from — no provider-specific code on the frontend. `offered_only` hides
+    adapters that are registered (their webhooks still work) but not offered."""
+    return [
+        {
+            "slug": provider.slug,
+            "title": provider.title,
+            "hint": provider.hint,
+            "currencies": list(provider.currencies),
+            "region": provider.region,
+            # "gateway" — шлюз ведёт подписку сам; "token" — мы списываем с
+            # сохранённого способа оплаты; "none" — только новый счёт.
+            # Разница решает, что владелец продаёт, поэтому едет в каталог.
+            "recurring": provider.recurring.value,
+            "fields": [
+                {"key": f.key, "label": f.label, "hint": f.hint, "secret": f.secret, "required": f.required}
+                for f in provider.credential_fields
+            ],
+            # Asked once per product, on the payment block itself, rather
+            # than once per shop in the settings form.
+            "block_fields": [
+                {"key": f.key, "label": f.label, "hint": f.hint, "secret": f.secret, "required": f.required}
+                for f in provider.block_fields
+            ],
+            # Whether the bot can answer "я оплатил" by asking the provider,
+            # or has to ask the shop owner to confirm.
+            "supports_status_check": bool(provider.supports_status_check),
+            "uses_callback": bool(provider.uses_callback),
+            # Нужно ли владельцу вписывать адрес уведомления в своём
+            # кабинете, или мы отправляем его в каждом счёте сами.
+            "sends_own_callback_url": bool(provider.sends_own_callback_url),
+            # Whether to offer the "тестовый режим" switch at all.
+            "has_test_mode": bool(provider.has_test_mode),
+        }
+        for provider in PROVIDERS.values()
+        if not offered_only or is_offered(provider.slug)
+    ]
+
+
+__all__ = [
+    "fiscalization_enabled",
+    "Checkout",
+    "CheckoutRequest",
+    "ProviderDefaults",
+    "CredentialField",
+    "PaymentProvider",
+    "PaymentRef",
+    "PROVIDERS",
+    "ProviderError",
+    "money",
+    "REGIONS",
+    "WebhookResult",
+    "describe_providers",
+    "is_offered",
+    "offered_slugs",
+    "get_provider",
+    "minor_to_major",
+    "same_currency",
+]
