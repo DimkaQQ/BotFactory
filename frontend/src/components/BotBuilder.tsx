@@ -58,6 +58,13 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [siteOpen, setSiteOpen] = useState(false);
   const [salesPanelOpen, setSalesPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Окно открыто из меню настроек: «Назад» возвращает в меню, а не в пустоту.
+  const [backToSettings, setBackToSettings] = useState(false);
+  const closeSub = (close: () => void) => () => {
+    close();
+    if (backToSettings) setSettingsOpen(true);
+    setBackToSettings(false);
+  };
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [paymentProviders, setPaymentProviders] = useState<PaymentProviderInfo[]>([]);
   // Server-side switch: subscriptions are built but off while the one-off
@@ -909,14 +916,14 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                     ? `Не заполнено: ${paymentSettings.missing_fields.join(", ")}`
                     : "Не подключена: бот пока ничего не продаёт",
               tone: paymentSettings?.live ? "ok" : "warn",
-              onClick: () => setPaymentPanelOpen(true),
+              onClick: () => { setBackToSettings(true); setPaymentPanelOpen(true); },
             },
             {
               key: "sales",
               icon: <Receipt size={20} aria-hidden="true" />,
               title: "Продажи и заказы",
               hint: "Кто заплатил, выдача и возвраты",
-              onClick: () => setSalesPanelOpen(true),
+              onClick: () => { setBackToSettings(true); setSalesPanelOpen(true); },
             },
             ...(bot.status === "active"
               ? [
@@ -925,30 +932,30 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                     icon: <Palette size={20} aria-hidden="true" />,
                     title: "Оформление",
                     hint: "Фото, имя и описание бота в Telegram",
-                    onClick: () => setProfileOpen(true),
+                    onClick: () => { setBackToSettings(true); setProfileOpen(true); },
                   },
                   {
                     key: "site",
                     icon: <Globe size={20} aria-hidden="true" />,
                     title: "Страница для банка",
                     hint: "Цены и документы на сайте (нужно для Казахстана)",
-                    onClick: () => setSiteOpen(true),
+                    onClick: () => { setBackToSettings(true); setSiteOpen(true); },
                   },
                 ]
               : []),
           ]}
         />
       )}
-      {siteOpen && <SitePanel botId={bot.id} onClose={() => setSiteOpen(false)} />}
+      {siteOpen && <SitePanel botId={bot.id} onClose={closeSub(() => setSiteOpen(false))} />}
 
       {profileOpen && (
-        <BotProfilePanel botId={bot.id} botUsername={bot.telegram_bot_username ?? ""} onClose={() => setProfileOpen(false)} />
+        <BotProfilePanel botId={bot.id} botUsername={bot.telegram_bot_username ?? ""} onClose={closeSub(() => setProfileOpen(false))} />
       )}
 
       {paymentPanelOpen && (
         <PaymentSettingsPanel
           botId={bot.id}
-          onClose={() => setPaymentPanelOpen(false)}
+          onClose={closeSub(() => setPaymentPanelOpen(false))}
           onSaved={(settings) => setPaymentSettings(settings)}
           onOpenSales={() => {
             setPaymentPanelOpen(false);
@@ -958,7 +965,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       )}
 
       {salesPanelOpen && (
-        <SalesPanel botId={bot.id} onClose={() => setSalesPanelOpen(false)} onOrdersChanged={setSales} />
+        <SalesPanel botId={bot.id} onClose={closeSub(() => setSalesPanelOpen(false))} onOrdersChanged={setSales} />
       )}
 
       {previewOpen && <LivePreview bot={bot} botName={bot.name || bot.telegram_bot_username || ""} onClose={() => setPreviewOpen(false)} />}

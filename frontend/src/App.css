@@ -7143,3 +7143,32 @@ details.live-problems > summary::-webkit-details-marker {
   color: var(--tg-destructive);
   cursor: pointer;
 }
+
+/* Окна внутри настроек: слева стрелка «назад», название по центру, справа пустое место для симметрии. */
+.edit-panel__header--back {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+}
+.edit-panel__header--back .edit-panel__title {
+  text-align: center;
+}
+.edit-panel__back {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-left: -8px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.edit-panel__back:active {
+  background: color-mix(in srgb, var(--tg-text) 8%, transparent);
+}
+.edit-panel__header-spacer {
+  width: 44px;
+}

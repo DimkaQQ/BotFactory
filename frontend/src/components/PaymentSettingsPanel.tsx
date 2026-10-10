@@ -8,7 +8,7 @@ import {
 } from "../api/builderApi";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
-import { CreditCard, X } from "@phosphor-icons/react";
+import { ArrowLeft } from "@phosphor-icons/react";
 import { ArrowUUpLeft, ArrowsClockwise, CurrencyCircleDollar, Flask, LinkSimple, Prohibit, Swap, BellRinging, Copy } from "@phosphor-icons/react";
 
 
@@ -142,17 +142,15 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
       <div className="sheet-backdrop edit-panel-backdrop" onClick={onClose} />
       <div className="edit-panel" ref={panelRef}>
         <div
-          className="edit-panel__header"
+          className="edit-panel__header edit-panel__header--back"
           title="Потяни, чтобы переместить окно (двойной щелчок, вернуть на место)"
           {...dragProps}
         >
-          <span className="edit-panel__icon block-card__icon--delivery" aria-hidden="true">
-            <CreditCard size={20} aria-hidden="true" />
-          </span>
-          <span className="edit-panel__title">Оплата</span>
-          <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
-            <X size={18} aria-hidden="true" />
+          <button type="button" className="edit-panel__back" aria-label="Назад" onClick={onClose}>
+            <ArrowLeft size={22} aria-hidden="true" />
           </button>
+          <span className="edit-panel__title">Оплата</span>
+          <span className="edit-panel__header-spacer" aria-hidden="true" />
         </div>
 
         <div className="edit-panel__body">

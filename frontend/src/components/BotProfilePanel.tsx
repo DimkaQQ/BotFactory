@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, builderApi } from "../api/builderApi";
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
-import { Palette, X } from "@phosphor-icons/react";
+import { ArrowLeft } from "@phosphor-icons/react";
 
 interface Props {
   botId: string;
@@ -99,17 +99,15 @@ export function BotProfilePanel({ botId, botUsername, onClose }: Props) {
       <div className="sheet-backdrop edit-panel-backdrop" onClick={onClose} />
       <div className="edit-panel" ref={panelRef}>
         <div
-          className="edit-panel__header"
+          className="edit-panel__header edit-panel__header--back"
           title="Потяни, чтобы переместить окно (двойной щелчок, вернуть на место)"
           {...dragProps}
         >
-          <span className="edit-panel__icon block-card__icon--welcome" aria-hidden="true">
-            <Palette size={20} aria-hidden="true" />
-          </span>
-          <span className="edit-panel__title">Оформление @{botUsername}</span>
-          <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
-            <X size={18} aria-hidden="true" />
+          <button type="button" className="edit-panel__back" aria-label="Назад" onClick={onClose}>
+            <ArrowLeft size={22} aria-hidden="true" />
           </button>
+          <span className="edit-panel__title">Оформление @{botUsername}</span>
+          <span className="edit-panel__header-spacer" aria-hidden="true" />
         </div>
         <div className="edit-panel__body">
           {!loaded && !error && <p className="app-hint">Загружаем…</p>}
