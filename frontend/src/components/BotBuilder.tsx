@@ -22,12 +22,13 @@ import { FlowCanvas } from "./flow/FlowCanvas";
 import { LivePreview } from "./LivePreview";
 import { BotProfilePanel } from "./BotProfilePanel";
 import { PaymentSettingsPanel } from "./PaymentSettingsPanel";
+import { BotSettingsMenu } from "./BotSettingsMenu";
 import { SitePanel } from "./SitePanel";
 import { SalesPanel } from "./SalesPanel";
 import { PublishPaywall } from "./PublishPaywall";
 import { PublishButton } from "./PublishButton";
 import { ThemeToggle } from "./ThemeToggle";
-import { Check, CreditCard, DeviceMobile, Globe, Palette, PencilSimple, Robot, Trash, Warning, WarningCircle, Wrench } from "@phosphor-icons/react";
+import { Check, CreditCard, DeviceMobile, Gear, Globe, Palette, PencilSimple, Receipt, Robot, Trash, Warning, WarningCircle, Wrench } from "@phosphor-icons/react";
 
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -56,6 +57,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [siteOpen, setSiteOpen] = useState(false);
   const [salesPanelOpen, setSalesPanelOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [paymentProviders, setPaymentProviders] = useState<PaymentProviderInfo[]>([]);
   // Server-side switch: subscriptions are built but off while the one-off
@@ -664,74 +666,25 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             {!isMiniApp && (
               <button
                 type="button"
-                className={`bot-payments-button ${
-                  paymentSettings?.live
-                    ? "bot-payments-button--on"
-                    : paymentSettings?.provider
-                      ? "bot-payments-button--half"
-                      : ""
-                }`}
-                onClick={() => setPaymentPanelOpen(true)}
-                title={
-                  paymentSettings?.live
-                    ? "Платёжная система, через которую бот принимает деньги"
-                    : paymentSettings?.ready
-                      ? "Оплата в тестовом режиме: платежи ненастоящие"
-                      : paymentSettings?.provider
-                        ? `Оплата выбрана, но не заполнено: ${paymentSettings.missing_fields.join(", ")}`
-                        : "Платёжная система, через которую бот принимает деньги"
-                }
+                className={`bot-settings-button${paymentSettings?.live ? "" : " bot-settings-button--attention"}`}
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Настройки бота"
+                title={paymentSettings?.live ? "Настройки бота" : "Настройки бота: оплата ещё не готова"}
               >
-                {/* Two labels, one shown at a time by CSS: on a 390px phone
-                    this bar also carries "← Мои боты", and the long form
-                    squeezed the way out of the builder to 49px. */}
-                {/* Три состояния, а не два. «Касса подключена» по факту
-                    выбранного провайдера было прямой ложью: ключи пустые,
-                    оплата не откроется, а владелец видит зелёное. */}
-                {paymentSettings?.live || !paymentSettings?.provider ? <CreditCard size={16} aria-hidden="true" /> : <Warning size={16} aria-hidden="true" />}{" "}
-                <span className="bot-payments-button__long">
-                  {paymentSettings?.live
-                    ? "Оплата подключена"
-                    : paymentSettings?.ready
-                      ? "Оплата в тестовом режиме"
-                      : paymentSettings?.provider
-                        ? "Оплата не настроена"
-                        : "Подключить оплату"}
-                </span>
-                <span className="bot-payments-button__short">Оплата</span>
+                <Gear size={20} aria-hidden="true" />
               </button>
             )}
-            {!isMiniApp && bot.status === "active" && (
+            {isMiniApp && (
               <button
                 type="button"
-                className="bot-payments-button"
-                onClick={() => setProfileOpen(true)}
-                title="Фото, имя и описание бота в Telegram"
+                className="bot-delete-button"
+                onClick={handleDeleteBot}
+                disabled={deleting}
+                aria-label="Удалить бота"
               >
-                <Palette size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Оформление</span>
-                <span className="bot-payments-button__short">Вид</span>
+                <Trash size={18} aria-hidden="true" />
               </button>
             )}
-            {!isMiniApp && bot.status === "active" && (
-              <button
-                type="button"
-                className="bot-payments-button"
-                onClick={() => setSiteOpen(true)}
-                title="Страница с ценами и документами, для банка (Казахстан)"
-              >
-                <Globe size={16} aria-hidden="true" /> <span className="bot-payments-button__long">Страница</span>
-                <span className="bot-payments-button__short">Сайт</span>
-              </button>
-            )}
-            <button
-              type="button"
-              className="bot-delete-button"
-              onClick={handleDeleteBot}
-              disabled={deleting}
-              aria-label="Удалить бота"
-            >
-              <Trash size={18} aria-hidden="true" />
-            </button>
           </div>
         </div>
         <div className="app-header__top">
@@ -935,6 +888,57 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
         </div>
       )}
 
+      {settingsOpen && (
+        <BotSettingsMenu
+          onClose={() => setSettingsOpen(false)}
+          deleting={deleting}
+          onDelete={() => {
+            setSettingsOpen(false);
+            void handleDeleteBot();
+          }}
+          items={[
+            {
+              key: "payment",
+              icon: paymentSettings?.live ? <CreditCard size={20} aria-hidden="true" /> : <Warning size={20} aria-hidden="true" />,
+              title: "Оплата",
+              hint: paymentSettings?.live
+                ? "Подключена, бот принимает деньги"
+                : paymentSettings?.ready
+                  ? "Тестовый режим: платежи ненастоящие"
+                  : paymentSettings?.provider
+                    ? `Не заполнено: ${paymentSettings.missing_fields.join(", ")}`
+                    : "Не подключена: бот пока ничего не продаёт",
+              tone: paymentSettings?.live ? "ok" : "warn",
+              onClick: () => setPaymentPanelOpen(true),
+            },
+            {
+              key: "sales",
+              icon: <Receipt size={20} aria-hidden="true" />,
+              title: "Продажи и заказы",
+              hint: "Кто заплатил, выдача и возвраты",
+              onClick: () => setSalesPanelOpen(true),
+            },
+            ...(bot.status === "active"
+              ? [
+                  {
+                    key: "profile",
+                    icon: <Palette size={20} aria-hidden="true" />,
+                    title: "Оформление",
+                    hint: "Фото, имя и описание бота в Telegram",
+                    onClick: () => setProfileOpen(true),
+                  },
+                  {
+                    key: "site",
+                    icon: <Globe size={20} aria-hidden="true" />,
+                    title: "Страница для банка",
+                    hint: "Цены и документы на сайте (нужно для Казахстана)",
+                    onClick: () => setSiteOpen(true),
+                  },
+                ]
+              : []),
+          ]}
+        />
+      )}
       {siteOpen && <SitePanel botId={bot.id} onClose={() => setSiteOpen(false)} />}
 
       {profileOpen && (
