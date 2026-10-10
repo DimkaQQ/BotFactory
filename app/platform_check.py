@@ -71,11 +71,13 @@ async def _cryptobot(client: httpx.AsyncClient, creds: dict, is_test: bool) -> l
 
 
 async def _stars(client: httpx.AsyncClient) -> list[str]:
-    token = get_settings().meta_bot_token.strip()
+    settings = get_settings()
+    token = settings.meta_bot_token.strip()
     if not token:
         return [f"{BAD} META_BOT_TOKEN пуст: звёзды выставляет мета-бот"]
+    api_base = (settings.telegram_api_base_url or "https://api.telegram.org").rstrip("/")
     try:
-        resp = await client.get(f"https://api.telegram.org/bot{token}/getMe")
+        resp = await client.get(f"{api_base}/bot{token}/getMe")
     except httpx.HTTPError as exc:
         return [f"{WARN} Telegram недоступен с этого сервера: {type(exc).__name__}"]
     if resp.status_code != 200:
