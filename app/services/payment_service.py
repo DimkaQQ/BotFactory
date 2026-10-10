@@ -668,9 +668,9 @@ async def create_publication_payment(
         amount_minor=method.price_minor,
         currency=method.currency,
         description=f"Публикация бота в Telegram · {bot.name or 'Новый бот'}",
-        # Back into the constructor, which polls the payment and unlocks
+        # Back to this bot in the constructor (/bot/<id>), which polls the payment and unlocks
         # the publish button as soon as it turns paid.
-        return_url=f"{settings.public_base_url.rstrip('/')}/?paid={bot.id}",
+        return_url=f"{settings.public_base_url.rstrip('/')}/bot/{bot.id}",
         bot_id=bot.id,
         client_id=client_id,
         bot_token=_platform_bot_token(method),
@@ -712,7 +712,7 @@ async def create_renewal_payment(
         amount_minor=method.renewal_price_minor,
         currency=method.currency,
         description=f"Подписка на все боты, {period} дн.",
-        return_url=f"{settings.public_base_url.rstrip('/')}/?paid={bot.id}",
+        return_url=f"{settings.public_base_url.rstrip('/')}/bot/{bot.id}",
         bot_id=bot.id,
         client_id=client_id,
         bot_token=_platform_bot_token(method),
