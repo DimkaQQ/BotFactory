@@ -9,7 +9,7 @@ import {
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
 import { CreditCard, X } from "@phosphor-icons/react";
-import { ArrowUUpLeft, ArrowsClockwise, CurrencyCircleDollar, Flask, LinkSimple, Prohibit, Swap } from "@phosphor-icons/react";
+import { ArrowUUpLeft, ArrowsClockwise, CurrencyCircleDollar, Flask, LinkSimple, Prohibit, Swap, BellRinging, Copy } from "@phosphor-icons/react";
 
 
 interface Props {
@@ -63,6 +63,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
   const [saved, setSaved] = useState(false);
   // Сохранили, но касса ещё неполная: зелёное «Сохранено» тут вводило бы в заблуждение.
   const [savedPartial, setSavedPartial] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -365,13 +366,37 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                   )}
 
                   {settings?.callback_base && active.uses_callback && (
-                    <div className="payment-settings__callback">
-                      <span className="buttons-editor__field-label">
+                    <div className="payment-settings__notify">
+                      <div className="payment-settings__notify-head">
+                        <span className="payment-settings__notify-icon" aria-hidden="true">
+                          <BellRinging size={18} />
+                        </span>
+                        <div>
+                          <p className="payment-settings__notify-title">Адрес для уведомлений об оплате</p>
+                          <p className="payment-settings__notify-text">
+                            Так платёжная система сообщает нам, что покупатель заплатил, и бот сразу выдаёт товар.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="payment-settings__notify-url">
+                        <code>{`${settings.callback_base}/${active.slug}`}</code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void navigator.clipboard?.writeText(`${settings.callback_base}/${active.slug}`).then(() => {
+                              setCopied(true);
+                              setTimeout(() => setCopied(false), 2000);
+                            });
+                          }}
+                        >
+                          <Copy size={14} aria-hidden="true" /> {copied ? "Скопировано" : "Копировать"}
+                        </button>
+                      </div>
+                      <p className="payment-settings__notify-hint">
                         {active.sends_own_callback_url
-                          ? "Адрес уведомления об оплате: мы передаём его сами в каждом платеже. Если кабинет всё же просит указать адрес, впиши этот"
-                          : "Этот адрес нужно указать в кабинете платёжной системы как уведомление об оплате (куда присылать сообщение, что платёж прошёл)"}
-                      </span>
-                      <code>{`${settings.callback_base}/${active.slug}`}</code>
+                          ? "Вписывать необязательно: мы передаём этот адрес сами с каждым платежом. Если в кабинете есть поле для адреса уведомлений, можно указать и там."
+                          : "Вставь его в кабинете платёжной системы в поле для уведомлений об оплате (HTTP-уведомления, Result URL, Webhook)."}
+                      </p>
                     </div>
                   )}
                 </>

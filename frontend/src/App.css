@@ -6859,3 +6859,64 @@ details.live-problems > summary::-webkit-details-marker {
   color: var(--tg-button);
   cursor: pointer;
 }
+
+/* Адрес для уведомлений об оплате: карточка с отступом сверху, адресом и кнопкой «Копировать». */
+.payment-settings__notify {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: var(--sp-5) 0 var(--sp-3);
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--tg-text) 12%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--tg-text) 4%, var(--tg-bg));
+}
+.payment-settings__notify-head { display: flex; gap: var(--sp-3); align-items: flex-start; }
+.payment-settings__notify-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tg-button) 16%, var(--tg-bg));
+  color: var(--tg-button);
+}
+.payment-settings__notify-title { margin: 0 0 2px; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.payment-settings__notify-text { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.payment-settings__notify-url {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.payment-settings__notify-url code {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: var(--tg-bg);
+  border: 1px solid color-mix(in srgb, var(--tg-text) 12%, transparent);
+  font-size: 12px;
+  word-break: break-all;
+  user-select: all;
+}
+.payment-settings__notify-url button {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.payment-settings__notify-hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-tertiary); }
+@media (max-width: 480px) {
+  .payment-settings__notify-url { flex-direction: column; }
+  .payment-settings__notify-url button { justify-content: center; min-height: 40px; }
+}
