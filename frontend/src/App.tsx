@@ -44,6 +44,22 @@ export default function App() {
   // closed mid-edit. Opening a bot now pushes a state; Back pops it and
   // returns to the list, and the URL says which bot you are looking at, so a
   // reload or a shared link lands in the right place.
+  // Пока открыто нижнее окно, страница под ним не прокручивается: когда в окне
+  // нечего листать или оно долистано до края, палец иначе тянул заднюю часть сайта.
+  useEffect(() => {
+    const selector = ".edit-panel, .sheet, .paywall--open, .publish-form--sheet, .live-preview";
+    const update = () => {
+      document.documentElement.classList.toggle("has-sheet", Boolean(document.querySelector(selector)));
+    };
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true });
+    update();
+    return () => {
+      observer.disconnect();
+      document.documentElement.classList.remove("has-sheet");
+    };
+  }, []);
+
   useEffect(() => {
     const onPop = (event: PopStateEvent) => {
       const botId = (event.state as { botId?: string } | null)?.botId;

@@ -21,7 +21,8 @@ import { BlockEditPanel } from "./BlockEditPanel";
 import { BlockNode, type BlockNodeData } from "./BlockNode";
 import { FlowActionsContext, type FlowActions } from "./flowActions";
 import { StartNode } from "./StartNode";
-import { X } from "@phosphor-icons/react";
+import { Check, PencilSimple, X } from "@phosphor-icons/react";
+import { useWideScreen } from "../../hooks/useWideScreen";
 import { Play } from "@phosphor-icons/react";
 
 
@@ -211,6 +212,11 @@ function Inner({
   // canvas and the nodes half off-screen, showing slivers of white cards
   // with no text. Fit again the first time there is something to fit to.
   const { fitView, setCenter, getZoom, zoomIn, zoomOut } = useReactFlow();
+  // На телефоне холст по умолчанию заперт: палец прокручивает страницу, а не двигает граф.
+  // Кнопка «Редактировать» включает масштаб, перетаскивание блоков и связей.
+  const wide = useWideScreen();
+  const [canvasEditing, setCanvasEditing] = useState(false);
+  const locked = !wide && !canvasEditing;
   // На телефоне открываем схему с «▶ Старт» и первыми блоками цепочки, а не
   // с её середины: вписать всё целиком: значит ужать текст до нечитаемого.
   const fitOpts = useCallback(() => {
@@ -495,7 +501,34 @@ function Inner({
         )}
       </div>
 
-      <div className="flow-canvas" ref={wrapperRef}>
+      {!disabled && (
+        <div className="chat-composer flow-canvas__composer">
+          <button type="button" className="chat-composer__button" onClick={() => setSheetOpen(true)}>
+            <span className="chat-composer__plus">+</span>
+            Добавить блок
+          </button>
+        </div>
+      )}
+
+      <div className={`flow-canvas${locked ? " flow-canvas--locked" : ""}`} ref={wrapperRef}>
+        {!wide && !disabled && (
+          <button
+            type="button"
+            className={`flow-canvas__edit-toggle${canvasEditing ? " flow-canvas__edit-toggle--on" : ""}`}
+            onClick={() => setCanvasEditing((value) => !value)}
+            aria-pressed={canvasEditing}
+          >
+            {canvasEditing ? (
+              <>
+                <Check size={16} weight="bold" aria-hidden="true" /> Готово
+              </>
+            ) : (
+              <>
+                <PencilSimple size={16} aria-hidden="true" /> Редактировать
+              </>
+            )}
+          </button>
+        )}
         <FlowActionsContext.Provider value={actions}>
           <ReactFlow
             nodes={nodes}
@@ -505,8 +538,13 @@ function Inner({
             onEdgesDelete={disabled ? undefined : handleEdgesDelete}
             onNodeDragStop={disabled ? undefined : handleNodeDragStop}
             nodeTypes={nodeTypes}
-            nodesDraggable={!disabled}
-            nodesConnectable={!disabled}
+            nodesDraggable={!disabled && !locked}
+            nodesConnectable={!disabled && !locked}
+            panOnDrag={!locked}
+            zoomOnPinch={!locked}
+            zoomOnScroll={!locked}
+            zoomOnDoubleClick={!locked}
+            preventScrolling={!locked}
             elementsSelectable={!disabled}
             deleteKeyCode={disabled ? null : ["Backspace", "Delete"]}
             fitView
@@ -555,15 +593,6 @@ function Inner({
             </div>
           </div>
         </>
-      )}
-
-      {!disabled && (
-        <div className="chat-composer flow-canvas__composer">
-          <button type="button" className="chat-composer__button" onClick={() => setSheetOpen(true)}>
-            <span className="chat-composer__plus">+</span>
-            Добавить блок
-          </button>
-        </div>
       )}
 
       {editingBlock && (
