@@ -26,7 +26,8 @@ services:
     mem_limit: 192m
 
   bot:
-    mem_limit: 128m
+    # Мета-бот держит ~115 МБ реального (RSS) потребления: 128m оставляли ему запас в 10%.
+    mem_limit: 192m
 
   db:
     mem_limit: 256m
