@@ -14,6 +14,18 @@ class PaymentSettingsIn(BaseModel):
     credentials: dict[str, str] | None = None
 
 
+class SavedPaymentOut(BaseModel):
+    """Оплата, данные которой уже введены (активная или отложенная в сторону)."""
+
+    provider: str
+    #: Заполнено всё необходимое: переключение на неё сразу даёт рабочую оплату.
+    ready: bool
+    is_test: bool
+    active: bool = False
+    #: Какие поля уже заполнены (значения не отдаются никогда).
+    filled_fields: list[str] = []
+
+
 class PaymentSettingsOut(BaseModel):
     provider: str | None
     is_test: bool
@@ -38,6 +50,8 @@ class PaymentSettingsOut(BaseModel):
     #: Чего не хватает, человеческими названиями полей («shopId»,
     #: «Секретный ключ») — чтобы предупреждение могло сказать, что чинить.
     missing_fields: list[str] = []
+    #: Оплаты с уже введёнными данными: переключение между ними не требует ввода заново.
+    saved: list[SavedPaymentOut] = []
 
 
 class PaymentOut(BaseModel):

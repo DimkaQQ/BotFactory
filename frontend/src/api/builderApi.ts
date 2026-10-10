@@ -359,6 +359,9 @@ export const builderApi = {
   savePaymentSettings: (botId: string, payload: { provider: string | null; is_test: boolean; credentials?: Record<string, string> }) =>
     request<PaymentSettings>(`/bots/${botId}/payment-settings`, { method: "PUT", body: JSON.stringify(payload) }),
 
+  forgetSavedPayment: (botId: string, provider: string) =>
+    request<PaymentSettings>(`/bots/${botId}/payment-settings/saved/${provider}`, { method: "DELETE" }),
+
   getPublicationInfo: (botId: string) => request<PublicationInfo>(`/bots/${botId}/publication`),
   startPublicationCheckout: (botId: string, provider?: string) =>
     request<PaymentInfo>(`/bots/${botId}/publication-checkout`, {
@@ -499,8 +502,19 @@ export interface PaymentField {
   required?: boolean;
 }
 
+/** Оплата, данные которой уже введены: активная или отложенная в сторону. */
+export interface SavedPayment {
+  provider: string;
+  ready: boolean;
+  is_test: boolean;
+  active: boolean;
+  filled_fields: string[];
+}
+
 export interface PaymentSettings {
   provider: string | null;
+  /** Все оплаты с введёнными данными: переключение между ними без ввода заново. */
+  saved: SavedPayment[];
   is_test: boolean;
   /** Which credential fields already have a stored value, the values
    * themselves never leave the server. */

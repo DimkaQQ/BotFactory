@@ -230,13 +230,13 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     const payBlocks = bot.blocks.filter((b) => b.block_type === "payment");
 
     if (payBlocks.length > 0 && !paymentSettings?.provider) {
-      found.push("Касса не подключена: бот не сможет принять оплату.");
+      found.push("Оплата не подключена: бот не сможет принять платёж.");
     } else if (payBlocks.length > 0 && paymentSettings && !paymentSettings.ready) {
-      found.push(`В кассе не заполнено: ${paymentSettings.missing_fields.join(", ")}: оплата не откроется.`);
+      found.push(`В настройках оплаты не заполнено: ${paymentSettings.missing_fields.join(", ")}: оплата не откроется.`);
     } else if (payBlocks.length > 0 && paymentSettings && !paymentSettings.live) {
       // Галочка «тестовый режим» стоит по умолчанию, то есть по умолчанию
       // бот выходит в эфир, не принимая настоящих денег.
-      found.push("Касса в тестовом режиме: платежи будут ненастоящими. Выключи его в настройках кассы.");
+      found.push("Оплата в тестовом режиме: платежи будут ненастоящими. Выключи его в настройках оплаты.");
     }
 
     // Поля, которые заполняются в самом блоке, а не в кассе: ссылка на
@@ -281,7 +281,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
     if (allowed.length > 0) {
       const wrong = payBlocks.filter((b) => b.content.currency && !allowed.includes(String(b.content.currency).toUpperCase()));
       if (wrong.length > 0) {
-        found.push(`Валюта в блоке оплаты не подходит этой кассе (она принимает: ${allowed.join(", ")}).`);
+        found.push(`Валюта в блоке оплаты не подходит этой оплате (она принимает: ${allowed.join(", ")}).`);
       }
     }
 
@@ -676,9 +676,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                   paymentSettings?.live
                     ? "Платёжная система, через которую бот принимает деньги"
                     : paymentSettings?.ready
-                      ? "Касса в тестовом режиме: платежи ненастоящие"
+                      ? "Оплата в тестовом режиме: платежи ненастоящие"
                       : paymentSettings?.provider
-                        ? `Касса выбрана, но не заполнено: ${paymentSettings.missing_fields.join(", ")}`
+                        ? `Оплата выбрана, но не заполнено: ${paymentSettings.missing_fields.join(", ")}`
                         : "Платёжная система, через которую бот принимает деньги"
                 }
               >
@@ -691,14 +691,14 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
                 {paymentSettings?.live || !paymentSettings?.provider ? <CreditCard size={16} aria-hidden="true" /> : <Warning size={16} aria-hidden="true" />}{" "}
                 <span className="bot-payments-button__long">
                   {paymentSettings?.live
-                    ? "Касса подключена"
+                    ? "Оплата подключена"
                     : paymentSettings?.ready
-                      ? "Касса в тестовом режиме"
+                      ? "Оплата в тестовом режиме"
                       : paymentSettings?.provider
-                        ? "Касса не настроена"
-                        : "Подключить кассу"}
+                        ? "Оплата не настроена"
+                        : "Подключить оплату"}
                 </span>
-                <span className="bot-payments-button__short">Касса</span>
+                <span className="bot-payments-button__short">Оплата</span>
               </button>
             )}
             {!isMiniApp && bot.status === "active" && (

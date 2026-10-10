@@ -92,7 +92,7 @@ async def export(db: AsyncSession, telegram_id: int) -> dict:
     """
     client = await _client(db, telegram_id)
     bots = list((await db.execute(select(Bot).where(Bot.client_id == client.id))).scalars())
-    secret = {"bot_token_encrypted", "payment_credentials_encrypted"}
+    secret = {"bot_token_encrypted", "payment_credentials_encrypted", "payment_saved_encrypted"}
     result = {"client": _row(client, {"sessions_valid_from"}), "bots": []}
     for bot in bots:
         blocks = list((await db.execute(select(BotBlock).where(BotBlock.bot_id == bot.id))).scalars())

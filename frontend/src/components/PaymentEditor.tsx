@@ -143,6 +143,16 @@ export function PaymentEditor({
 
   return (
     <div className="payment-editor">
+      {provider && (
+        <div className="payment-editor__via">
+          <span>
+            Оплата через <strong>{providerInfo?.title ?? provider}</strong>. Ключи и данные меняются только в настройках оплаты.
+          </span>
+          <button type="button" onClick={onOpenSettings}>
+            Сменить оплату
+          </button>
+        </div>
+      )}
       {/* Предупреждение снимается только когда касса РЕАЛЬНО готова. Раньше
           оно гасло от одного выбора провайдера, то есть ровно там, где
           владелец переставал видеть проблему, она и начиналась. */}
@@ -151,12 +161,12 @@ export function PaymentEditor({
           <span>
             <Warning size={15} className="inline-icon" aria-hidden="true" /> Платёжная система не подключена: бот не сможет принять деньги, и этот блок остановит сценарий.
           </span>
-          <span className="payment-editor__warning-cta">Подключить кассу →</span>
+          <span className="payment-editor__warning-cta">Подключить оплату →</span>
         </button>
       ) : missingFields && missingFields.length > 0 ? (
         <button type="button" className="payment-editor__warning" onClick={onOpenSettings}>
           <span>
-            <Warning size={15} className="inline-icon" aria-hidden="true" /> В кассе не заполнено: {missingFields.join(", ")}. Оплата не откроется, покупатель увидит
+            <Warning size={15} className="inline-icon" aria-hidden="true" /> В настройках оплаты не заполнено: {missingFields.join(", ")}. Оплата не откроется, покупатель увидит
             ошибку.
           </span>
           <span className="payment-editor__warning-cta">Дозаполнить →</span>
@@ -367,7 +377,7 @@ export function PaymentEditor({
                 <p className="payment-editor__note payment-editor__note--good">
                   {isStars
                     ? "Telegram сам спишет звёзды раз в 30 дней, пока подписчик не отменит, отменяет он тоже внутри Telegram. Период фиксированный: 30 дней, другого Telegram не поддерживает."
-                    : `${providerInfo?.title ?? "Касса"} сама ведёт подписку: спишет следующий период без участия покупателя, сама повторит попытку при отказе карты и даст ему страницу, где отписаться.`}
+                    : `${providerInfo?.title ?? "Эта оплата"} сама ведёт подписку: спишет следующий период без участия покупателя, сама повторит попытку при отказе карты и даст ему страницу, где отписаться.`}
                 </p>
                 {providerInfo?.slug === "prodamus" && (
                   <p className="payment-editor__note payment-editor__note--manual">
@@ -400,9 +410,9 @@ export function PaymentEditor({
                   {/* "Мы не умеем", не "касса не умеет": у половины этих
                       шлюзов рекуррент есть, просто мы его ещё не подключили,
                       и врать про чужой продукт незачем. */}
-                  <Warning size={15} className="inline-icon" aria-hidden="true" /> Автосписание через {providerInfo?.title ?? "эту кассу"} бот пока не умеет. Он пришлёт новый
+                  <Warning size={15} className="inline-icon" aria-hidden="true" /> Автосписание через {providerInfo?.title ?? "эту оплату"} бот пока не умеет. Он пришлёт новый
                   счёт за 2 дня до конца периода и напомнит; доступ продлится, если счёт оплатят. Списывают
-                  сами двенадцать касс: они помечены значком повтора в списке.
+                  сами двенадцать способов: они помечены значком повтора в списке.
                 </p>
               </>
             )}

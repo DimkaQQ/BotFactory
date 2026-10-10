@@ -311,7 +311,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
             )}
             {!isMiniApp && <ThemeToggle />}
             {/* Выхода не было нигде. На общем компьютере токен живёт 30
-                дней, а за ним: касса, список покупателей и кнопка снятия
+                дней, а за ним: оплата, список покупателей и кнопка снятия
                 бота с эфира. */}
             {onLogout && (
               <button

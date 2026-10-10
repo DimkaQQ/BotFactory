@@ -39,6 +39,7 @@ from app.schemas.payment import (
     PublicationCheckoutIn,
     PublicationInfoOut,
     PublicationMethodOut,
+    SavedPaymentOut,
 )
 from app.services import dates, payment_service, platform_billing
 from app.services import payments as payment_providers
@@ -328,6 +329,51 @@ async def list_providers(_client: Client = Depends(get_current_client)) -> dict:
     }
 
 
+def _missing_fields(slug: str, credentials: dict) -> list[str]:
+    """Чего не хватает оплате, чтобы принимать деньги (человеческими названиями)."""
+    filled = {k for k, v in credentials.items() if str(v).strip()}
+    provider = payment_providers.get_provider(slug)
+    missing = [f.label for f in provider.credential_fields if f.required and f.key not in filled]
+    if payment_providers.fiscalization_enabled(credentials) and "fiscal_email" not in filled:
+        missing.append("Почта для чеков (включена передача чека)")
+    return missing
+
+
+def _saved_map(bot: BotModel) -> dict[str, dict]:
+    """Данные неактивных оплат: {slug: {"cred": {...}, "is_test": bool}}."""
+    raw = payment_service.decrypt_credentials(bot.payment_saved_encrypted)
+    return {k: v for k, v in raw.items() if isinstance(v, dict)}
+
+
+def _saved_list(bot: BotModel, credentials: dict) -> list[SavedPaymentOut]:
+    result: list[SavedPaymentOut] = []
+    if bot.payment_provider and credentials:
+        result.append(
+            SavedPaymentOut(
+                provider=bot.payment_provider,
+                ready=not _missing_fields(bot.payment_provider, credentials),
+                is_test=bot.payment_is_test,
+                active=True,
+                filled_fields=sorted(k for k, v in credentials.items() if str(v).strip()),
+            )
+        )
+    for slug, entry in _saved_map(bot).items():
+        try:
+            missing = _missing_fields(slug, entry.get("cred") or {})
+        except ProviderError:
+            continue
+        cred = entry.get("cred") or {}
+        result.append(
+            SavedPaymentOut(
+                provider=slug,
+                ready=not missing,
+                is_test=bool(entry.get("is_test", True)),
+                filled_fields=sorted(k for k, v in cred.items() if str(v).strip()),
+            )
+        )
+    return result
+
+
 @router.get("/api/bots/{bot_id}/payment-settings", response_model=PaymentSettingsOut)
 async def get_payment_settings(
     bot_id: uuid.UUID,
@@ -339,22 +385,18 @@ async def get_payment_settings(
     # «Подключена» = провайдер выбран И у него есть всё, что ему нужно.
     # Раньше второй половины не было: пустая форма сохранялась как успех,
     # красное предупреждение в блоке оплаты гасло, в шапке загоралось
-    # зелёное «Касса подключена» — а первый же покупатель получал «не
+    # зелёное «Оплата подключена» — а первый же покупатель получал «не
     # получилось открыть оплату». Владелец узнавал об этом от учеников.
     missing: list[str] = []
     ready = False
     live = False
     if bot.payment_provider:
         provider = payment_providers.get_provider(bot.payment_provider)
-        missing = [f.label for f in provider.credential_fields if f.required and f.key not in filled]
-        if payment_providers.fiscalization_enabled(credentials) and "fiscal_email" not in filled:
-            missing.append("Почта для чеков (включена передача чека)")
+        missing = _missing_fields(bot.payment_provider, credentials)
         ready = not missing
-        # «Готова» и «берёт настоящие деньги» — разные вещи, и вторую я
-        # пропустил, когда чинил первую. Тестовый режим стоит по умолчанию,
-        # ключи заполнены, касса объявляется подключённой — а платежи
-        # ненастоящие. Владелец объявляет боту подписчикам и не получает
-        # ничего.
+        # «Готова» и «берёт настоящие деньги» — разные вещи: тестовый режим
+        # стоит по умолчанию, ключи заполнены, оплата объявляется подключённой,
+        # а платежи ненастоящие.
         live = ready and not (bot.payment_is_test and provider.has_test_mode)
 
     return PaymentSettingsOut(
@@ -365,12 +407,8 @@ async def get_payment_settings(
         missing_fields=missing,
         # Which keys are filled in, never the keys themselves.
         filled_fields=sorted(filled),
-        # Only for providers that actually notify us. Stars, pay-by-link and
-        # Processing.kz never call this address, and offering it invited a
-        # shop owner to paste something into a dashboard that does nothing.
-        # Показываем адрес только тем, кому его действительно надо вписать
-        # руками. Раньше он показывался всем, кто нам звонит, — и у Prodamus
-        # соседствовал с собственной подсказкой «мы подставляем его сами».
+        saved=_saved_list(bot, credentials),
+        # Адрес уведомления, который надо вписать руками (у кого мы не передаём его в каждом счёте сами).
         callback_url=(
             f"{get_settings().public_base_url.rstrip('/')}/webhook/pay/{bot.payment_provider}"
             if bot.payment_provider
@@ -398,7 +436,7 @@ async def set_payment_settings(
         if not payment_providers.is_offered(payload.provider) and payload.provider != bot.payment_provider:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Эта касса пока не подключена к конструктору: выбери другую из списка.",
+                detail="Эта оплата пока не подключена к конструктору: выбери другую из списка.",
             )
 
     # Publishing refuses the test provider, but that check alone is a door
@@ -414,15 +452,21 @@ async def set_payment_settings(
             ),
         )
 
-    switching = (payload.provider or None) != bot.payment_provider
-    bot.payment_provider = payload.provider or None
-    bot.payment_is_test = payload.is_test
+    new_slug = payload.provider or None
+    switching = new_slug != bot.payment_provider
+    current = payment_service.decrypt_credentials(bot.payment_credentials_encrypted)
+    saved = _saved_map(bot)
 
-    # Keys belong to the provider they were issued for. Left merged, turning
-    # payments off or moving to another provider would keep live Robokassa
-    # passwords sitting in the database forever, and the settings API would
-    # go on listing them as filled.
-    existing = {} if switching else payment_service.decrypt_credentials(bot.payment_credentials_encrypted)
+    existing = current
+    if switching:
+        # Данные прежней оплаты не стираем, а откладываем: владелец вернётся к ней, и она сразу заработает.
+        if bot.payment_provider and current:
+            saved[bot.payment_provider] = {"cred": current, "is_test": bot.payment_is_test}
+        restored = saved.pop(new_slug, None) if new_slug else None
+        existing = dict(restored["cred"]) if restored else {}
+
+    bot.payment_provider = new_slug
+    bot.payment_is_test = payload.is_test
 
     if payload.credentials is not None or switching:
         supplied = {k: v for k, v in (payload.credentials or {}).items() if v.strip()}
@@ -438,8 +482,27 @@ async def set_payment_settings(
             merged = {}
         bot.payment_credentials_encrypted = payment_service.encrypt_credentials(merged) if merged else None
 
+    bot.payment_saved_encrypted = payment_service.encrypt_credentials(saved) if saved else None
+
     await db.commit()
     await db.refresh(bot)
+    return await get_payment_settings(bot_id, bot)
+
+
+@router.delete("/api/bots/{bot_id}/payment-settings/saved/{provider}", response_model=PaymentSettingsOut)
+async def forget_saved_payment(
+    bot_id: uuid.UUID,
+    provider: str,
+    bot: BotModel = Depends(get_owned_bot),
+    db: AsyncSession = Depends(get_db),
+) -> PaymentSettingsOut:
+    """Стереть сохранённые данные неактивной оплаты (ключи, которые больше не нужны)."""
+    saved = _saved_map(bot)
+    if provider in saved:
+        saved.pop(provider)
+        bot.payment_saved_encrypted = payment_service.encrypt_credentials(saved) if saved else None
+        await db.commit()
+        await db.refresh(bot)
     return await get_payment_settings(bot_id, bot)
 
 

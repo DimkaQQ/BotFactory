@@ -6782,3 +6782,80 @@ details.live-problems > summary::-webkit-details-marker {
   line-height: 1.5;
   color: var(--text-secondary, var(--text-tertiary));
 }
+
+/* Бейдж у способа оплаты: подключена, сохранена, неполная. */
+.payment-settings__badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--tg-text) 8%, var(--tg-bg));
+}
+.payment-settings__badge--ok {
+  color: var(--accent-success-ink, var(--tg-button));
+  background: color-mix(in srgb, var(--tg-button) 14%, var(--tg-bg));
+}
+/* Карточка «данные уже сохранены, достаточно переключить». */
+.payment-settings__switch {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  margin: var(--sp-4) 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--tg-button) 35%, transparent);
+  background: color-mix(in srgb, var(--tg-button) 9%, var(--tg-bg));
+}
+.payment-settings__switch-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tg-button) 18%, var(--tg-bg));
+  color: var(--tg-button);
+}
+.payment-settings__switch-title { margin: 0 0 2px; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.payment-settings__switch-text { margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.payment-settings__forget {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* В блоке оплаты: какая оплата стоит, и ссылка в настройки, где она меняется. */
+.payment-editor__via {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px var(--sp-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tg-text) 5%, var(--tg-bg));
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+.payment-editor__via strong { color: var(--text-primary); }
+.payment-editor__via button {
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--tg-button) 40%, transparent);
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tg-button);
+  cursor: pointer;
+}

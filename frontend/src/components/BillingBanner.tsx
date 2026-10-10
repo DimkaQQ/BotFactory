@@ -123,7 +123,7 @@ export function BillingBanner({ botId, billing, onRenewed }: Props) {
           <>
             <p className="billing__title">Период не продлён с {day(billing.paid_until)}</p>
             <p className="billing__hint">
-              Оплати подписку: все боты вернутся в строй сразу же, с теми же сценариями и той же кассой.
+              Оплати подписку: все боты вернутся в строй сразу же, с теми же сценариями и той же оплатой.
             </p>
           </>
         )}

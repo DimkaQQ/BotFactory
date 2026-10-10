@@ -56,6 +56,9 @@ async def rotate() -> dict[str, int]:
                 if bot.payment_credentials_encrypted:
                     bot.payment_credentials_encrypted = _redo(bot.payment_credentials_encrypted)
                     counts["payment_credentials"] += 1
+                if bot.payment_saved_encrypted:
+                    bot.payment_saved_encrypted = _redo(bot.payment_saved_encrypted)
+                    counts["payment_credentials"] += 1
             except Exception:
                 # Одна нерасшифровываемая строка не должна останавливать
                 # ротацию: сообщаем и идём дальше, иначе половина базы

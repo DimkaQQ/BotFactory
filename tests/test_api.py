@@ -585,3 +585,39 @@ async def test_button_clicks_are_counted_and_choices_reach_the_order(api, auth, 
     assert payment.meta["choices"] == ["12:00"]
     orders = (await api.get(f"/api/bots/{bot.id}/orders", headers=auth(owner))).json()
     assert orders["orders"][0]["choices"] == ["12:00"]
+
+
+async def test_going_back_to_a_previous_payment_needs_no_retyping(api, auth, owner):
+    """Ключи прежней оплаты откладываются, а не стираются: переключился на другую оплату и вернулся,
+    и первая сразу работает."""
+    headers = auth(owner)
+    bot_id = await create_bot(api, headers)
+    url = f"/api/bots/{bot_id}/payment-settings"
+
+    await api.put(url, headers=headers, json={
+        "provider": "yookassa", "is_test": True, "credentials": {"shop_id": "123", "secret_key": "live_KEY"}})
+    await api.put(url, headers=headers, json={
+        "provider": "robokassa", "is_test": True,
+        "credentials": {"merchant_login": "demo", "password1": "P1", "password2": "P2"}})
+
+    state = (await api.get(url, headers=headers)).json()
+    assert state["provider"] == "robokassa"
+    assert set(state["filled_fields"]) == {"merchant_login", "password1", "password2"}
+    saved = {item["provider"]: item for item in state["saved"]}
+    assert saved["yookassa"]["ready"] and not saved["yookassa"]["active"]
+    assert saved["robokassa"]["active"]
+    assert "live_KEY" not in str(state)
+
+    # Вернулись на ЮKassa, не вводя ничего: данные на месте, оплата готова.
+    back = (await api.put(url, headers=headers, json={"provider": "yookassa", "is_test": True})).json()
+    assert back["provider"] == "yookassa" and back["ready"] is True
+    assert set(back["filled_fields"]) == {"shop_id", "secret_key"}
+    # А Robokassa, в свою очередь, отложена и тоже готова.
+    assert {i["provider"]: i["ready"] for i in back["saved"]}["robokassa"] is True
+
+    # Отключили оплату совсем: данные не потеряны, а стёрты только по явной просьбе.
+    off = (await api.put(url, headers=headers, json={"provider": None, "is_test": True})).json()
+    assert off["provider"] is None and {i["provider"] for i in off["saved"]} == {"yookassa", "robokassa"}
+    gone = await api.delete(f"{url}/saved/robokassa", headers=headers)
+    assert gone.status_code == 200
+    assert {i["provider"] for i in gone.json()["saved"]} == {"yookassa"}

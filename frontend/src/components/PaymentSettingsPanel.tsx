@@ -9,7 +9,7 @@ import {
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
 import { CreditCard, X } from "@phosphor-icons/react";
-import { ArrowUUpLeft, ArrowsClockwise, CurrencyCircleDollar, Flask, LinkSimple, Prohibit } from "@phosphor-icons/react";
+import { ArrowUUpLeft, ArrowsClockwise, CurrencyCircleDollar, Flask, LinkSimple, Prohibit, Swap } from "@phosphor-icons/react";
 
 
 interface Props {
@@ -90,6 +90,29 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
   const linkProvider = (providers ?? []).find((p) => p.slug === "link") ?? null;
   const testProvider = (providers ?? []).find((p) => p.slug === "test") ?? null;
   const connected = settings?.provider ? providers?.find((p) => p.slug === settings.provider) : null;
+  const savedFor = (slugToFind: string) => settings?.saved?.find((item) => item.provider === slugToFind) ?? null;
+  const activeSaved = active ? savedFor(active.slug) : null;
+  // Выбрана другая оплата, чьи данные уже введены раньше: достаточно переключить.
+  const canSwitch = Boolean(active && activeSaved && !activeSaved.active && activeSaved.ready);
+  const typed = Object.values(values).some((v) => v.trim());
+
+  function choose(nextSlug: string) {
+    setSlug(nextSlug);
+    setValues({});
+    const known = nextSlug ? savedFor(nextSlug) : null;
+    // Режим (тест или боевой) возвращается таким, каким был у этой оплаты.
+    setIsTest(known ? known.is_test : true);
+  }
+
+  async function handleForget(forgetSlug: string) {
+    setError(null);
+    try {
+      const next = await builderApi.forgetSavedPayment(botId, forgetSlug);
+      setSettings(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не удалось стереть данные");
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -125,7 +148,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
           <span className="edit-panel__icon block-card__icon--delivery" aria-hidden="true">
             <CreditCard size={20} aria-hidden="true" />
           </span>
-          <span className="edit-panel__title">Приём оплаты</span>
+          <span className="edit-panel__title">Оплата</span>
           <button type="button" className="edit-panel__close" aria-label="Закрыть" onClick={onClose}>
             <X size={18} aria-hidden="true" />
           </button>
@@ -158,16 +181,16 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                 ) : (
                   <>
                     <strong>Сейчас: оплата не подключена</strong>
-                    <span>бот ничего не продаёт, пока ты не выберешь кассу</span>
+                    <span>бот ничего не продаёт, пока ты не выберешь оплату</span>
                   </>
                 )}
               </div>
 
               <div className="buttons-editor__field">
-                <h3 className="payment-settings__heading">1. Выбери, куда получать деньги</h3>
+                <h3 className="payment-settings__heading">1. Выбери способ оплаты</h3>
                 {subscriptionsEnabled && (
                   <p className="app-hint payment-settings__recurring-legend">
-                    Значок повтора: касса умеет списывать подписку сама. У остальных бот присылает новый счёт каждый период.
+                    Значок повтора: эта оплата умеет списывать подписку сама. У остальных бот присылает новый счёт каждый период.
                   </p>
                 )}
                 <div className="payment-settings__providers">
@@ -176,10 +199,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                       key={provider.slug}
                       type="button"
                       className={`payment-settings__provider ${slug === provider.slug ? "payment-settings__provider--active" : ""}`}
-                      onClick={() => {
-                        setSlug(provider.slug);
-                        setValues({});
-                      }}
+                      onClick={() => choose(provider.slug)}
                     >
                       <span className="payment-settings__provider-title">
                         {provider.title}
@@ -190,6 +210,20 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                       {SHORT[provider.slug] && (
                         <span className="payment-settings__provider-note">{SHORT[provider.slug]}</span>
                       )}
+                      {(() => {
+                        const known = savedFor(provider.slug);
+                        if (!known) return null;
+                        const label = known.active
+                          ? known.ready ? "Подключена" : "Не заполнена"
+                          : known.ready ? "Данные сохранены" : "Данные неполные";
+                        return (
+                          <span
+                            className={`payment-settings__badge${known.ready ? " payment-settings__badge--ok" : ""}`}
+                          >
+                            {label}
+                          </span>
+                        );
+                      })()}
                     </button>
                   ))}
                 </div>
@@ -198,11 +232,11 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                   <button
                     type="button"
                     className={`payment-settings__other ${slug === "link" ? "payment-settings__other--active" : ""}`}
-                    onClick={() => setSlug("link")}
+                    onClick={() => choose("link")}
                   >
                     <strong><LinkSimple size={15} className="inline-icon" aria-hidden="true" /> Своя ссылка на оплату</strong>
                     <span>
-                      Нет подключённой кассы? Бот пришлёт покупателю твою ссылку (например, на перевод по номеру
+                      Нет платёжной системы? Бот пришлёт покупателю твою ссылку (например, на перевод по номеру
                       карты), а ты сам подтвердишь оплату, деньги он получит только после этого.
                     </span>
                   </button>
@@ -210,7 +244,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                 <button
                   type="button"
                   className={`payment-settings__other ${slug === "" ? "payment-settings__other--active" : ""}`}
-                  onClick={() => setSlug("")}
+                  onClick={() => choose("")}
                 >
                   <strong><Prohibit size={15} className="inline-icon" aria-hidden="true" /> Пока без оплаты</strong>
                   <span>Бот только общается и раздаёт бесплатное. Блок «Оплата» в сценарии не сработает.</span>
@@ -222,12 +256,12 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                     <button
                       type="button"
                       className={`payment-settings__other ${slug === "test" ? "payment-settings__other--active" : ""}`}
-                      onClick={() => setSlug("test")}
+                      onClick={() => choose("test")}
                     >
                       <strong><Flask size={15} className="inline-icon" aria-hidden="true" /> Демо-оплата</strong>
                       <span>
-                        Это не касса: покупатель нажимает «оплатить» и сразу получает товар, деньги никуда не идут.
-                        Включай только чтобы проверить сценарий, перед запуском выбери настоящую кассу.
+                        Это не настоящая оплата: покупатель нажимает «оплатить» и сразу получает товар, деньги никуда не идут.
+                        Включай только чтобы проверить сценарий, перед запуском выбери настоящую оплату.
                       </span>
                     </button>
                   </details>
@@ -263,8 +297,26 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                     </div>
                   </div>
 
+                  {canSwitch && (
+                    <div className="payment-settings__switch">
+                      <span className="payment-settings__switch-icon" aria-hidden="true">
+                        <Swap size={18} />
+                      </span>
+                      <div>
+                        <p className="payment-settings__switch-title">Данные для {active.title} уже сохранены</p>
+                        <p className="payment-settings__switch-text">
+                          Нажми «Переключить»: оплата заработает сразу, вводить ключи заново не нужно. Прежняя оплата
+                          останется сохранённой, к ней можно вернуться так же.
+                        </p>
+                        <button type="button" className="payment-settings__forget" onClick={() => handleForget(active.slug)}>
+                          Стереть сохранённые данные
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {active.fields.map((field) => {
-                    const filled = settings?.provider === active.slug && settings.filled_fields.includes(field.key);
+                    const filled = Boolean(activeSaved?.filled_fields.includes(field.key));
                     return (
                       <label key={field.key} className="buttons-editor__field">
                         <span className="buttons-editor__field-label">
@@ -286,8 +338,8 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
 
                   {active.has_test_mode && (
                     <div className="buttons-editor__field">
-                      <h3 className="payment-settings__heading">3. Режим кассы</h3>
-                      <div className="payment-settings__modes" role="radiogroup" aria-label="Режим кассы">
+                      <h3 className="payment-settings__heading">3. Режим оплаты</h3>
+                      <div className="payment-settings__modes" role="radiogroup" aria-label="Режим оплаты">
                         <button
                           type="button"
                           role="radio"
@@ -296,7 +348,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                           onClick={() => setIsTest(true)}
                         >
                           <strong><Flask size={15} className="inline-icon" aria-hidden="true" /> Тестовый</strong>
-                          <span>Деньги не списываются. Для проверки (нужны тестовые ключи кассы).</span>
+                          <span>Деньги не списываются. Для проверки (нужны тестовые ключи из кабинета).</span>
                         </button>
                         <button
                           type="button"
@@ -312,10 +364,12 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                     </div>
                   )}
 
-                  {settings?.callback_base && !active.sends_own_callback_url && active.uses_callback && (
+                  {settings?.callback_base && active.uses_callback && (
                     <div className="payment-settings__callback">
                       <span className="buttons-editor__field-label">
-                        Этот адрес нужно указать в кабинете платёжной системы как уведомление об оплате
+                        {active.sends_own_callback_url
+                          ? "Адрес уведомления об оплате: мы передаём его сами в каждом платеже. Если кабинет всё же просит указать адрес, впиши этот"
+                          : "Этот адрес нужно указать в кабинете платёжной системы как уведомление об оплате (куда присылать сообщение, что платёж прошёл)"}
                       </span>
                       <code>{`${settings.callback_base}/${active.slug}`}</code>
                     </div>
@@ -326,10 +380,16 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
               {error && <p className="publish-form__error">{error}</p>}
 
               <button type="button" className="payment-settings__save" onClick={handleSave} disabled={saving}>
-                {saving ? "Сохраняем…" : saved ? (savedPartial ? "Сохранено, но поля заполнены не все" : "Сохранено") : "Сохранить"}
+                {saving
+                  ? "Сохраняем…"
+                  : saved
+                    ? savedPartial ? "Сохранено, но поля заполнены не все" : "Готово"
+                    : canSwitch && !typed
+                      ? `Переключить на ${active?.title ?? "эту оплату"}`
+                      : "Сохранить"}
               </button>
 
-              {/* Сами продажи живут на своём экране: настройки кассы
+              {/* Сами продажи живут на своём экране: настройки оплаты
                   трогают один раз, а заказы смотрят каждый день, и
                   проскроллить ради них семнадцать плиток было незачем. */}
               {onOpenSales && (

@@ -53,6 +53,10 @@ class Bot(Base):
     payment_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     payment_credentials_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     payment_is_test: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Данные ДРУГИХ оплат бота, которые владелец уже вводил: {slug: {"cred": {...}, "is_test": bool}},
+    # одним зашифрованным JSON. Активная оплата живёт в полях выше, как и раньше; при переключении
+    # они меняются местами, поэтому возврат на прежнюю оплату не требует вводить ключи заново.
+    payment_saved_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
     # Set once this bot's publication has been paid for (see PaymentKind.
     # publication) — publishing checks this, not the payment rows.
