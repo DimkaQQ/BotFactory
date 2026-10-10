@@ -795,9 +795,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
 
       {isMiniApp && (
         <div className="miniapp-banner">
-          <p><DeviceMobile size={16} aria-hidden="true" /> Здесь виден сценарий и кнопка публикации. Редактировать: в браузере, с телефона тоже удобно.</p>
+          <p><DeviceMobile size={16} aria-hidden="true" /> Здесь сценарий только для просмотра, оплаты и публикации. Менять блоки нужно в браузере, с телефона он тоже работает.</p>
           <button type="button" onClick={() => openExternal(`${window.location.origin}/`)}>
-            Открыть в браузере →
+            Открыть конструктор в браузере →
           </button>
         </div>
       )}

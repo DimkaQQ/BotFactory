@@ -340,8 +340,8 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
         </div>
         {isMiniApp && (
           <p className="app-hint" style={{ marginTop: "var(--sp-3)" }}>
-            <DeviceMobile size={16} aria-hidden="true" /> Здесь виден статус и кнопка публикации. Собирать бота: в браузере: открой {window.location.host},
-            с телефона это тоже работает.
+            <DeviceMobile size={16} aria-hidden="true" /> В Telegram ты видишь статус ботов, оплачиваешь и публикуешь.
+            Сам сценарий собирается в браузере: нажми кнопку «Открыть конструктор» внизу. Откроется {window.location.host}, с телефона он тоже работает.
           </p>
         )}
       </header>
@@ -417,7 +417,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                   <p className="empty-state__title">Здесь появятся твои боты</p>
                   <p className="empty-state__hint">
                     {isMiniApp
-                      ? "Собери первого в браузере: там визуальный холст с блоками и стрелками"
+                      ? "Первого бота собери в браузере: нажми «Открыть конструктор» внизу. Там холст с блоками и стрелками, а здесь потом оплатишь и опубликуешь"
                       : "Возьми готовый сценарий: блоки уже расставлены и связаны, останется вписать свой текст"}
                   </p>
 
@@ -504,7 +504,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
 
       <div className="app-footer">
         <button type="button" className="publish-button" onClick={handleCreateClick}>
-          {isMiniApp ? "Открыть в браузере →" : "+ Новый бот"}
+          {isMiniApp ? "Открыть конструктор в браузере →" : "+ Новый бот"}
         </button>
       </div>
 
