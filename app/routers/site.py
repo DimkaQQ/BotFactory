@@ -107,6 +107,11 @@ async def save_site(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Адрес страницы: 3–40 символов, латиница, цифры и дефис (не в начале и не в конце).",
         )
+    if payload.seller_id is not None and payload.seller_id.strip() and not re.search(r"(?<!\d)\d{10,12}(?!\d)", payload.seller_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ИИН/БИН (12 цифр) или ИНН (10 или 12 цифр) указан неверно: в нём должно быть 10-12 цифр подряд.",
+        )
     if site is None:
         site = BotSite(bot_id=bot.id, slug=slug)
         db.add(site)

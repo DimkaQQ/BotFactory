@@ -12,7 +12,7 @@ from app.services import suggestions
 async def test_a_client_can_send_and_see_their_ideas(api, auth, owner, stranger):
     mine, theirs = auth(owner), auth(stranger)
     sent = await api.post("/api/suggestions", headers=mine, json={"text": "Добавьте экспорт клиентов в Excel", "category": "idea"})
-    assert sent.status_code == 201 and sent.json()["status"] == "на рассмотрении"
+    assert sent.status_code == 201 and sent.json()["status"] == "получили, посмотрим"
 
     listed = (await api.get("/api/suggestions", headers=mine)).json()["suggestions"]
     assert [i["text"] for i in listed] == ["Добавьте экспорт клиентов в Excel"]

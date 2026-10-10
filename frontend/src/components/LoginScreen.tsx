@@ -311,6 +311,20 @@ export function LoginScreen({ onLoggedIn }: Props) {
             </div>
           )}
         </>
+      ) : config ? (
+        <p className="lp-login__hint">
+          Вход через Telegram временно недоступен. Попробуйте позже
+          {config.support_telegram ? (
+            <>
+              {" "}
+              или напишите в{" "}
+              <a href={`https://t.me/${config.support_telegram}`} target="_blank" rel="noreferrer">
+                поддержку
+              </a>
+            </>
+          ) : null}
+          .
+        </p>
       ) : !error ? (
         <p className="lp-login__hint">Загрузка…</p>
       ) : null}

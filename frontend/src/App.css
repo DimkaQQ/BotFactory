@@ -6735,3 +6735,16 @@ details.live-problems > summary::-webkit-details-marker {
 .header-create-button {
   white-space: nowrap;
 }
+
+/* Окна на ноутбуке: нижний край всегда в пределах экрана, прокручивается тело окна. */
+@media (min-width: 960px) {
+  .edit-panel {
+    max-height: calc(100dvh - 136px - var(--sp-4));
+  }
+}
+
+.edit-panel__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}

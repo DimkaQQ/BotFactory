@@ -1,6 +1,14 @@
 import type { BlockContent, BlockType } from "./api/builderApi";
 import { defaultWeekly, localTimezone } from "./booking";
 
+const KZ_ZONES = ["Asia/Almaty", "Asia/Qostanay", "Asia/Aqtobe", "Asia/Aqtau", "Asia/Atyrau", "Asia/Oral", "Asia/Qyzylorda"];
+
+/** Валюта нового блока оплаты, пока касса не подключена: по часовому поясу человека
+ * (Казахстан: тенге), иначе рубли. Как только касса выбрана, берётся её валюта. */
+function defaultCurrency(): string {
+  return KZ_ZONES.includes(localTimezone()) ? "KZT" : "RUB";
+}
+
 export interface BlockTypeDef {
   type: BlockType;
   label: string;
@@ -89,7 +97,7 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     // it is the same value PaymentEditor falls back to, so the canvas
     // and the editor agree from the first render. Once a cash desk is
     // connected, BotBuilder.handleAdd uses *its* currency instead.
-    defaultContent: () => ({ text: "", title: "", price: "", currency: "RUB", button_label: "" }),
+    defaultContent: () => ({ text: "", title: "", price: "", currency: defaultCurrency(), button_label: "" }),
   },
   {
     type: "contact",

@@ -187,6 +187,13 @@ function authHeaders(): Record<string, string> {
   return auth.kind === "session-token" ? { Authorization: `Bearer ${auth.token}` } : { "X-Telegram-Init-Data": auth.getInitData() };
 }
 
+/** Короткие английские ответы сервера, которые видит человек, по-русски. */
+const RU_ERRORS: Record<string, string> = {
+  "Bot not found": "Бот не найден",
+  "Not found": "Не найдено",
+  "Block not found": "Блок не найден",
+};
+
 /** Текст ошибки из ответа сервера. FastAPI при неверных данных отдаёт `detail` списком объектов —
  * в сообщении это превращалось в «[object Object]», поэтому берём человеческую строку. */
 async function errorDetail(response: Response): Promise<string> {
@@ -194,7 +201,7 @@ async function errorDetail(response: Response): Promise<string> {
   try {
     const body = await response.json();
     const detail = body?.detail;
-    if (typeof detail === "string" && detail.trim()) return detail;
+    if (typeof detail === "string" && detail.trim()) return RU_ERRORS[detail.trim()] ?? detail;
     if (Array.isArray(detail)) {
       const first = detail.find((item) => item && typeof item.msg === "string");
       if (first) return `Проверь введённые данные: ${first.msg}`;

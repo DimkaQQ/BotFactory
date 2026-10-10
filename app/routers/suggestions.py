@@ -24,7 +24,7 @@ def _view(item) -> dict:
         "id": str(item.id),
         "category": item.category,
         "text": item.text,
-        "status": suggestions.CLIENT_STATUS.get(item.status, "на рассмотрении"),
+        "status": suggestions.CLIENT_STATUS.get(item.status, "получили, посмотрим"),
         "done": item.status == "done",
         "created_at": item.created_at,
     }

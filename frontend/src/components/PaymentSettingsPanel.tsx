@@ -61,6 +61,8 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Сохранили, но касса ещё неполная: зелёное «Сохранено» тут вводило бы в заблуждение.
+  const [savedPartial, setSavedPartial] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -100,9 +102,10 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
       });
       setSettings(next);
       setValues({});
+      setSavedPartial(Boolean(next.provider) && !next.ready);
       setSaved(true);
       onSaved(next);
-      setTimeout(() => setSaved(false), 2500);
+      setTimeout(() => setSaved(false), 3500);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Не удалось сохранить");
     } finally {
@@ -311,7 +314,7 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
               {error && <p className="publish-form__error">{error}</p>}
 
               <button type="button" className="payment-settings__save" onClick={handleSave} disabled={saving}>
-                {saving ? "Сохраняем…" : saved ? "Сохранено" : "Сохранить"}
+                {saving ? "Сохраняем…" : saved ? (savedPartial ? "Сохранено, но поля заполнены не все" : "Сохранено") : "Сохранить"}
               </button>
 
               {/* Сами продажи живут на своём экране: настройки кассы

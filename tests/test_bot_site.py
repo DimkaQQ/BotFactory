@@ -109,3 +109,11 @@ async def test_support_chat_is_the_operator_when_no_admins_are_set(monkeypatch):
     assert settings.admin_ids == set()
     monkeypatch.setattr(settings, "admin_telegram_ids", "7", raising=False)
     assert settings.admin_ids == {7}
+
+
+async def test_a_made_up_tax_id_is_refused(api, auth, owner, make_bot, db):
+    bot = await _bot(make_bot, owner, db)
+    bad = await api.put(f"/api/bots/{bot.id}/site", headers=auth(owner), json={"seller_id": "123"})
+    assert bad.status_code == 400 and "10-12 цифр" in bad.json()["detail"]
+    ok = await api.put(f"/api/bots/{bot.id}/site", headers=auth(owner), json={"seller_id": "БИН 123456789012"})
+    assert ok.status_code == 200
