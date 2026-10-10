@@ -47,7 +47,9 @@ function recommendedProvider(providers: string[]): string | null {
   const lang = (typeof navigator !== "undefined" ? navigator.language : "").toLowerCase();
   const centralAsia = /^(Asia\/(Almaty|Aqtau|Aqtobe|Atyrau|Oral|Qostanay|Qyzylorda|Tashkent|Samarkand|Bishkek))$/.test(zone) ||
     lang.startsWith("kk") || lang.startsWith("uz");
-  const order = centralAsia ? ["stripe", "stars", "cryptobot"] : ["stars", "cryptobot", "stripe"];
+  // Звёзды всегда последние: Telegram отдаёт их владельцу не раньше чем через 21 день,
+  // поэтому предлагаем сначала карту и крипту.
+  const order = centralAsia ? ["stripe", "cryptobot", "stars"] : ["cryptobot", "stripe", "stars"];
   const isRussia = /^Europe\/(Moscow|Kaliningrad|Samara|Volgograd|Kirov|Saratov|Astrakhan|Ulyanovsk)$/.test(zone) ||
     /^Asia\/(Yekaterinburg|Omsk|Novosibirsk|Krasnoyarsk|Irkutsk|Yakutsk|Vladivostok|Magadan|Kamchatka)$/.test(zone);
   if (!centralAsia && !isRussia && !lang.startsWith("ru")) return null;
