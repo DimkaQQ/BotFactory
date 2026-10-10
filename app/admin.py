@@ -106,7 +106,12 @@ async def export(db: AsyncSession, telegram_id: int) -> dict:
             )
         ).scalars()
     )
-    result["payments"] = [_row(payment) for payment in payments]
+    rows = [_row(payment) for payment in payments]
+    for row in rows:
+        # В слепке кассы лежит шифртекст ключей, а в ссылке оплаты бывает подпись: это секреты.
+        if isinstance(row.get("meta"), dict):
+            row["meta"] = {k: v for k, v in row["meta"].items() if k not in ("kassa", "checkout_url")}
+    result["payments"] = rows
     return result
 
 

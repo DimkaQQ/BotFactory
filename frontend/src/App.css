@@ -6692,3 +6692,46 @@ details.live-problems > summary::-webkit-details-marker {
   color: var(--tg-button-text);
   box-shadow: var(--shadow-card);
 }
+
+/* ---------- Нейтральные плитки иконок: цвет только у выбранного ---------- */
+.block-library .block-library__icon,
+.block-chip .block-chip__icon,
+.template-card .template-card__icon {
+  background: var(--tg-secondary-bg);
+  color: var(--text-secondary);
+}
+
+.template-card--delivery,
+.template-card--buttons,
+.template-card--poll,
+.template-card--image,
+.template-card--delay,
+.template-card--welcome,
+.template-card--description,
+.template-card--video {
+  --tpl-accent: var(--accent-on-surface);
+}
+
+.template-card .template-card__badge {
+  background: var(--tg-secondary-bg);
+  color: var(--text-secondary);
+}
+
+/* Кнопка «Сохранить»/«Отправить» без доступа: читается и в тёмной теме. */
+.payment-settings__save:disabled,
+.publish-button:disabled {
+  background: var(--tg-secondary-bg);
+  color: var(--text-tertiary);
+  opacity: 1;
+}
+
+/* Телефон: одна кнопка «Новый бот» (внизу), в шапке она дублировала бы её и ломалась на две строки. */
+@media (max-width: 599px) {
+  .app-header__actions .header-create-button {
+    display: none;
+  }
+}
+
+.header-create-button {
+  white-space: nowrap;
+}

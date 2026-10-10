@@ -33,7 +33,7 @@ async def test_page_is_hidden_until_enabled_then_shows_products_and_docs(api, au
     page = await api.get("/s/my-shop")
     assert page.status_code == 200
     text = page.text
-    assert "Курс «Старт»" in text and "9900 ₸" in text
+    assert "Курс «Старт»" in text and "9\u202f900 ₸" in text
     assert "https://t.me/yoga_test_bot" in text and "ИП Иванов" in text
     assert "<b>йоги</b>" not in text and "&lt;b&gt;йоги" in text  # чужой текст экранирован
 
@@ -59,3 +59,53 @@ async def test_slug_is_unique_and_other_owners_cannot_touch_the_page(api, auth, 
     taken = await api.put(f"/api/bots/{other.id}/site", headers=auth(stranger), json={"slug": "my-shop"})
     assert taken.status_code == 409
     assert (await api.get(f"/api/bots/{bot.id}/site", headers=auth(stranger))).status_code == 404
+
+
+async def test_the_page_disappears_when_its_owner_is_banned_and_payment_text_follows_the_kassa(
+    api, auth, owner, make_bot, db
+):
+    from datetime import datetime, timezone
+
+    bot, _ = await make_bot(
+        owner, [(BlockType.payment, {"title": "Гайд", "price": "500", "currency": "XTR"})], provider="stars"
+    )
+    bot.telegram_bot_username = "stars_shop_bot"
+    await db.commit()
+    headers = auth(owner)
+    await api.put(f"/api/bots/{bot.id}/site", headers=headers, json={**FULL, "slug": "stars-shop", "enabled": True})
+    page = (await api.get("/s/stars-shop")).text
+    assert "Telegram Stars" in page and "банковской картой" not in page
+
+    owner.banned_at = datetime.now(timezone.utc)
+    await db.commit()
+    assert (await api.get("/s/stars-shop")).status_code == 404
+
+
+async def test_a_broken_platform_price_list_is_not_a_free_launch(monkeypatch):
+    from app.config import get_settings
+    from app.services import payment_service
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "platform_payment_methods", "", raising=False)
+    assert payment_service.platform_methods_misconfigured() is False  # пусто: платной публикации нет, так задумано
+    monkeypatch.setattr(settings, "platform_payment_methods", "[{oops", raising=False)
+    assert payment_service.platform_methods_misconfigured() is True
+    monkeypatch.setattr(settings, "platform_payment_methods", '[{"provider":"nope","price_minor":1,"currency":"USD"}]', raising=False)
+    assert payment_service.platform_methods_misconfigured() is True
+    monkeypatch.setattr(
+        settings, "platform_payment_methods", '[{"provider":"stars","price_minor":245000,"currency":"XTR"}]', raising=False
+    )
+    assert payment_service.platform_methods_misconfigured() is False
+
+
+async def test_support_chat_is_the_operator_when_no_admins_are_set(monkeypatch):
+    from app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "admin_telegram_ids", "", raising=False)
+    monkeypatch.setattr(settings, "support_chat_id", "408204060", raising=False)
+    assert settings.admin_ids == {408204060}
+    monkeypatch.setattr(settings, "support_chat_id", "-100123", raising=False)  # группа: не оператор
+    assert settings.admin_ids == set()
+    monkeypatch.setattr(settings, "admin_telegram_ids", "7", raising=False)
+    assert settings.admin_ids == {7}

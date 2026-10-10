@@ -99,6 +99,33 @@ class PlatformMethod:
         return _WHO_CAN_PAY.get(self.provider, "")
 
 
+def platform_methods_misconfigured() -> bool:
+    """`PLATFORM_PAYMENT_METHODS` задан, но разобрать из него ни одного способа нельзя.
+
+    Опечатка в JSON раньше превращала список в пустой, а пустой список означает
+    «платной публикации нет»: бот выходил в эфир бесплатно, и об этом знал только
+    журнал. Публикация обязана остановиться, а не раздавать запуск даром.
+    """
+    raw = get_settings().platform_payment_methods.strip()
+    if not raw:
+        return False
+    try:
+        entries = json.loads(raw)
+    except json.JSONDecodeError:
+        return True
+    if not isinstance(entries, list) or not entries:
+        return True
+    for entry in entries:
+        try:
+            payment_providers.get_provider(str(entry["provider"]).strip().lower())
+            int(entry["price_minor"])
+            str(entry["currency"])
+            return False
+        except (KeyError, TypeError, ValueError, ProviderError):
+            continue
+    return True
+
+
 def platform_methods() -> list[PlatformMethod]:
     """Every method offered at the publication checkout.
 

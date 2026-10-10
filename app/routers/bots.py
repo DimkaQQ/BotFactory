@@ -249,6 +249,13 @@ async def publish_bot(
     # the paywall exists only once there is somewhere for the money to go.
     from app.services import payment_service
 
+    if payment_service.platform_methods_misconfigured():
+        # Не «бесплатно по умолчанию»: цены заданы, но прочитать их не удалось.
+        logger.error("PLATFORM_PAYMENT_METHODS is set but unusable, refusing to publish for free")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Оплата запуска временно недоступна. Мы уже знаем и чиним, попробуй чуть позже.",
+        )
     if payment_service.platform_methods() and bot.publication_paid_at is None:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,

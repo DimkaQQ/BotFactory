@@ -36,7 +36,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     accent: "delivery",
     icon: "📦",
     label: "Разовый продукт",
-    pitch: "Гайд, курс, файл, путеводитель — купил один раз и получил",
+    pitch: "Гайд, курс, файл, путеводитель: купил один раз и получил",
     suggestedName: "Разовый продукт",
     blocks: [
       { block_type: "welcome", content: { text: "Здравствуйте! Здесь можно получить [название продукта] 👋" } },
@@ -179,7 +179,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     accent: "image",
     icon: "🎉",
     label: "Акции и новости",
-    pitch: "Кафе, магазин, шоурум — держи подписчиков в курсе скидок",
+    pitch: "Кафе, магазин, шоурум: держи подписчиков в курсе скидок",
     suggestedName: "Акции и новости",
     blocks: [
       { block_type: "welcome", content: { text: "Здравствуйте! Подпишитесь, чтобы не пропускать акции и новинки 🎉" } },
@@ -208,7 +208,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     accent: "buttons",
     icon: "⌨️",
     label: "Меню с быстрыми кнопками",
-    pitch: "Кафе, салон, магазин: кнопки внизу экрана — цены, отзывы, адрес. Хороший пример, как это выглядит",
+    pitch: "Кафе, салон, магазин: кнопки внизу экрана с ценами, отзывами и адресом",
     suggestedName: "Меню с быстрыми кнопками",
     blocks: [
       { block_type: "welcome", content: { text: "Здравствуйте! Выберите внизу, что показать 👇" } },
@@ -410,7 +410,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     accent: "welcome",
     icon: "❓",
     label: "Частые вопросы и поддержка",
-    pitch: "Бот отвечает на типовые вопросы кнопками, сложное — передаёт вам",
+    pitch: "Бот отвечает на типовые вопросы кнопками, сложное передаёт вам",
     suggestedName: "Помощь",
     blocks: [
       { block_type: "welcome", content: { text: "Здравствуйте! Выберите вопрос внизу — отвечу сразу 👇" } },
@@ -481,7 +481,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     accent: "video",
     icon: "🎓",
     label: "Мини-курс по дням",
-    pitch: "Купил — получает урок сразу, следующий через сутки",
+    pitch: "Купил: получает урок сразу, следующий через сутки",
     suggestedName: "Мини-курс",
     blocks: [
       { block_type: "welcome", content: { text: "Здравствуйте! Это мини-курс: один урок в день 🎓" } },
@@ -567,7 +567,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     accent: "poll",
     icon: "📊",
     label: "Опрос клиентов",
-    pitch: "Узнай, что нравится и чего не хватает, — два вопроса и благодарность",
+    pitch: "Узнай, что нравится и чего не хватает,: два вопроса и благодарность",
     suggestedName: "Опрос клиентов",
     blocks: [
       { block_type: "welcome", content: { text: "Здравствуйте! Два быстрых вопроса — это поможет сделать лучше 🙏" } },
@@ -587,7 +587,7 @@ export const BOT_TEMPLATES: BotTemplate[] = [
     accent: "delay",
     icon: "✏️",
     label: "С нуля",
-    pitch: "Пустой бот — соберёшь сам из блоков",
+    pitch: "Пустой бот: соберёшь сам из блоков",
     suggestedName: "",
     blocks: [],
   },

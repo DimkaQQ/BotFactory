@@ -1,13 +1,15 @@
 import { ArrowRight } from "@phosphor-icons/react";
 import { useState } from "react";
 
+import { plural } from "../plural";
+
 interface Props {
   launchUsd: number;
   renewalUsd: number | null;
   onStart: () => void;
 }
 
-const salesWord = (n: number) => (n === 1 ? "продажа" : n < 5 ? "продажи" : "продаж");
+const salesWord = (n: number) => plural(n, ["продажа", "продажи", "продаж"]);
 
 /** «Сколько продаж, чтобы бот окупился»: простая арифметика на цифрах из настроек
  * сервера, без обещаний дохода. Сколько товар стоит, решает сам человек, а мы лишь
@@ -56,7 +58,9 @@ export function PaybackCalculator({ launchUsd, renewalUsd, onStart }: Props) {
         {salesForMonth !== null && (
           <div className="payback__result">
             <span className="payback__big">{salesForMonth}</span>
-            <span className="payback__small">{salesWord(salesForMonth)} в месяц покрывают работу бота</span>
+            <span className="payback__small">
+              {plural(salesForMonth, ["продажа", "продажи", "продаж"])} в месяц {salesForMonth === 1 ? "покрывает" : "покрывают"} работу бота
+            </span>
             <span className="payback__sum">${renewalUsd} в месяц</span>
           </div>
         )}

@@ -164,6 +164,10 @@ async def _load(slug: str, db: AsyncSession) -> tuple[BotSite, Bot]:
     site, bot = row
     if not site.enabled or bot.status != BotStatus.active or not bot.telegram_bot_username or bot.moderation_blocked_at:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    owner = (await db.execute(select(Client).where(Client.id == bot.client_id))).scalar_one_or_none()
+    if owner is None or owner.banned_at is not None:
+        # Владелец заблокирован: его витрина не должна оставаться публичной.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     return site, bot
 
 
@@ -179,7 +183,7 @@ async def _products(bot: Bot, db: AsyncSession) -> list[dict]:
     for block in blocks:
         content = block.content or {}
         title = re.sub(r"\[[^\]]*\]", "", str(content.get("title") or "")).strip()
-        price = str(content.get("price") or "").strip()
+        price = _money(str(content.get("price") or "").strip())
         if not title or not price:
             continue
         cur = str(content.get("currency") or "").upper()
@@ -193,6 +197,30 @@ async def _products(bot: Bot, db: AsyncSession) -> list[dict]:
     return items
 
 
+def _money(raw: str) -> str:
+    """9900 -> «9 900» (узкий пробел), дробная часть сохраняется."""
+    whole, sep, frac = raw.replace(",", ".").partition(".")
+    if not whole.isdigit():
+        return raw
+    grouped = f"{int(whole):,}".replace(",", "\u202f")
+    return grouped + (("," + frac) if sep and frac else "")
+
+
+_CARD_PROVIDERS = {"yookassa", "cloudpayments", "tbank", "robokassa", "prodamus", "paymaster", "stripe", "freedompay", "payme", "click", "liqpay"}
+
+
+def _how_to_pay(bot: Bot) -> str:
+    """Как проходит оплата: по фактической кассе бота, а не одной фразой для всех."""
+    provider = (bot.payment_provider or "").lower()
+    if provider in _CARD_PROVIDERS:
+        return "после выбора товара вы переходите на защищённую страницу платёжной системы и платите банковской картой или другим доступным там способом. Данные карты продавцу не передаются."
+    if provider == "stars":
+        return "оплата проходит внутри Telegram звёздами Telegram Stars."
+    if provider == "cryptobot":
+        return "оплата проходит через Crypto Bot в криптовалюте."
+    return "способ оплаты показывается в боте перед оплатой."
+
+
 _STYLE = """
 :root { color-scheme: light dark; --fg:#1b1d22; --bg:#fff; --mut:#6b7280; --acc:#2563eb; --card:#f4f5f8; }
 @media (prefers-color-scheme: dark) { :root { --fg:#e8e9ee; --bg:#14151a; --mut:#9aa0ab; --acc:#6aa3ff; --card:#1f2128; } }
@@ -204,22 +232,25 @@ a { color:var(--acc); } .mut { color:var(--mut); font-size:14px; }
 .about { white-space:pre-line; }
 .item { display:flex; justify-content:space-between; gap:16px; padding:14px 16px; background:var(--card);
   border-radius:12px; margin-bottom:8px; } .item b { white-space:nowrap; }
-.cta { display:block; text-align:center; padding:15px; border-radius:12px; background:var(--acc); color:#fff;
+.cta { display:block; text-align:center; padding:15px; border-radius:12px; background:#1d4ed8; color:#fff;
   font-weight:700; text-decoration:none; margin:22px 0; }
-.docs a { margin-right:14px; } .req { background:var(--card); border-radius:12px; padding:14px 16px; font-size:14px; }
+.docs a { margin-right:14px; display:inline-block; padding:10px 0; } .steps { padding-left:20px; } .steps li { margin:6px 0; } .req { background:var(--card); border-radius:12px; padding:14px 16px; font-size:14px; }
 .note { margin-top:36px; font-size:13px; color:var(--mut); }
 """
 
 
-def _shell(site: BotSite, title: str, body: str) -> HTMLResponse:
-    name = _e(site.title or site.seller_name)
+def _shell(site: BotSite, title: str, body: str, description: str = "") -> HTMLResponse:
+    name = site.title or site.seller_name
+    title = title if title == name else f"{title}, {name}"
+    description = description or f"{name}: описание, цены, реквизиты продавца и документы."
     return HTMLResponse(
         f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>{_e(title)} — {name}</title><style>{_STYLE}</style></head>
-<body>{body}
+<meta name="description" content="{_e(description)}">
+<title>{_e(title)}</title><style>{_STYLE}</style></head>
+<body><main>{body}</main>
 <p class="note">Страница создана в конструкторе Bot Factory. За содержание, цены и документы отвечает продавец.</p>
 </body></html>"""
     )
@@ -259,43 +290,51 @@ async def landing(slug: str, db: AsyncSession = Depends(get_db)) -> HTMLResponse
 <a class="cta" href="https://t.me/{_e(bot.telegram_bot_username)}">Открыть в Telegram →</a>
 <h2>Товары и цены</h2>
 {rows or '<p class="mut">Цены будут опубликованы в боте.</p>'}
-<p class="mut">Оплата происходит в боте: после выбора товара вы переходите на защищённую страницу платёжной системы.
-Данные карты мы не получаем и не храним.</p>
+<h2>Как заказать</h2>
+<ol class="steps">
+<li>Нажмите «Открыть в Telegram» и запустите бота.</li>
+<li>Выберите товар или услугу в боте. Цена показывается до оплаты.</li>
+<li>Оплата: {_e(_how_to_pay(bot))}</li>
+<li>Выдача: цифровой товар или доступ приходит в бот сразу после подтверждения оплаты.</li>
+</ol>
 <h2>Реквизиты продавца</h2>{_requisites(site)}
 <h2>Документы</h2>{_docs_nav(slug)}"""
-    return _shell(site, site.title or site.seller_name, body)
+    desc = (site.about or "").strip().replace("\n", " ")[:150] or None
+    return _shell(site, site.title or site.seller_name, body, desc or "")
 
 
-def _offer(site: BotSite) -> str:
+def _offer(site: BotSite, bot: Bot) -> str:
     return f"""<h1>Публичная оферта</h1>
-<p>Продавец — <b>{_e(site.seller_name)}</b> ({_e(site.seller_id)}) — предлагает неограниченному кругу лиц
-приобрести товары и услуги, перечисленные на этой странице и в Telegram-боте @{{bot}}, на следующих условиях.</p>
+<p>Продавец {_e(site.seller_name)} ({_e(site.seller_id)}) предлагает неограниченному кругу лиц
+приобрести товары и услуги, перечисленные на этой странице и в Telegram-боте @{_e(bot.telegram_bot_username)}, на следующих условиях.</p>
 <ol>
-<li>Заказ оформляется в Telegram-боте. Акцепт оферты — оплата выбранного товара или услуги.</li>
-<li>Цена указана на странице и в боте. Оплата проводится на странице платёжной системы банковской картой или
-иным доступным способом; данные карты продавцу не передаются.</li>
-<li>Цифровой товар или доступ предоставляется в боте сразу после подтверждения оплаты платёжной системой.</li>
-<li>Условия возврата — в разделе «Условия возврата».</li>
+<li>Заказ оформляется в Telegram-боте. Акцепт оферты: оплата выбранного товара или услуги.</li>
+<li>Цена указана на странице и в боте. Оплата: {_e(_how_to_pay(bot))}</li>
+<li>Цифровой товар или доступ предоставляется в боте сразу после подтверждения оплаты.</li>
+<li>Условия возврата описаны в разделе «Условия возврата».</li>
 <li>Вопросы по заказу: {_e(site.email or site.phone)}.</li>
 </ol>"""
 
 
-def _refunds(site: BotSite) -> str:
+def _refunds(site: BotSite, bot: Bot) -> str:
     custom = (
         f'<p class="about">{_e(site.refund_text)}</p>'
         if site.refund_text
-        else "<p>Если товар не был предоставлен или не соответствует описанию, напишите продавцу по контактам ниже — "
-        "заявка рассматривается в разумный срок, возврат производится на ту карту, с которой была оплата.</p>"
+        else "<p>Если товар не был предоставлен или не соответствует описанию, напишите продавцу по контактам ниже. "
+        "Заявка рассматривается в разумный срок, возврат производится тем же способом, которым была оплата.</p>"
     )
     return f"<h1>Условия возврата</h1>{custom}"
 
 
-def _privacy(site: BotSite) -> str:
+def _privacy(site: BotSite, bot: Bot) -> str:
     return f"""<h1>Политика конфиденциальности</h1>
-<p>Оператор данных — <b>{_e(site.seller_name)}</b> ({_e(site.seller_id)}). Мы получаем от Telegram ваш
-идентификатор, имя и username, а также данные заказа (что куплено, когда, сумма) — только для выполнения заказа,
+<p>Оператор данных: {_e(site.seller_name)} ({_e(site.seller_id)}). Мы получаем от Telegram ваш
+идентификатор, имя и username, а также данные заказа (что куплено, когда, сумма) только для выполнения заказа,
 выдачи товара и связи с вами по заказу. Данные банковской карты вводятся на странице платёжной системы и нам
 не передаются. Мы не продаём ваши данные. Запрос на удаление или уточнение данных: {_e(site.email or site.phone)}.</p>"""
+
+
+_DOC_TITLES = {"offer": "Публичная оферта", "refunds": "Условия возврата", "privacy": "Политика конфиденциальности"}
 
 
 @public.get("/s/{slug}/{doc}", response_class=HTMLResponse)
@@ -305,10 +344,8 @@ async def document(slug: str, doc: str, db: AsyncSession = Depends(get_db)) -> H
     build = builders.get(doc)
     if build is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    text = build(site).replace("{bot}", _e(bot.telegram_bot_username))
     body = (
-        f'<p><a href="/s/{_e(slug)}">← {_e(site.title or site.seller_name)}</a></p>{text}'
+        f'<p><a href="/s/{_e(slug)}">← {_e(site.title or site.seller_name)}</a></p>{build(site, bot)}'
         f"<h2>Реквизиты продавца</h2>{_requisites(site)}"
-        '<p class="note">Текст — типовой шаблон конструктора; продавцу рекомендуется показать его юристу.</p>'
     )
-    return _shell(site, "Документ", body)
+    return _shell(site, _DOC_TITLES[doc], body)

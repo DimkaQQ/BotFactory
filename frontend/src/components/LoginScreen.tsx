@@ -84,7 +84,7 @@ const AUDIENCES = [
 
 const FREE_STEPS = [
   { Icon: UserCirclePlus, title: "Регистрация", text: "Вход через Telegram. Без пароля, без карты, без формы на десять полей." },
-  { Icon: PuzzlePiece, title: "Сборка", text: "Сколько угодно ботов и правок. Ничего не блокируется на полпути." },
+  { Icon: PuzzlePiece, title: "Сборка", text: "До 20 ботов и сколько угодно правок. Ничего не блокируется на полпути." },
   { Icon: FloppyDisk, title: "Хранение", text: "Собранный сценарий ждёт в аккаунте. Можно вернуться через месяц." },
   { Icon: Eye, title: "Предпросмотр", text: "Пройди весь диалог сам: с кнопками и той же скоростью печати, что у живого бота." },
 ];
@@ -109,7 +109,7 @@ const TRUST = [
   {
     Icon: Lifebuoy,
     title: "Не продлил, и ничего не пропало",
-    text: "Если период закончился, бот сначала предупредит, потом уйдёт с эфира. Сценарий, касса и заказы остаются, возврат одной кнопкой.",
+    text: "Если период закончился, бот сначала предупредит, потом уйдёт с эфира. Сценарий, касса и заказы остаются, а после оплаты бот возвращается в эфир сам.",
   },
 ];
 
@@ -124,7 +124,7 @@ const STEPS = [
   },
   {
     title: "Проверь и запусти",
-    text: "Пройди диалог в предпросмотре, вставь токен от @BotFather, и бот в эфире. Правки применяются сразу, без повторной публикации.",
+    text: "Пройди диалог в предпросмотре, вставь токен от @BotFather и оплати запуск: бот в эфире. Правки применяются сразу, без повторной публикации.",
   },
 ];
 
@@ -163,7 +163,7 @@ const FAQ = [
   },
   {
     q: "Можно ли вернуть деньги, если не получилось?",
-    a: "Если бот не запустился по нашей вине или платёж прошёл дважды, вернём. Условия возврата в документе «Возвраты» внизу страницы. Деньги твоих покупателей идут на твою кассу, их ты возвращаешь сам.",
+    a: "Если бот не запустился по нашей вине или платёж прошёл дважды, вернём. Условия возврата в документе «Условия возврата» внизу страницы. Деньги твоих покупателей идут на твою кассу, их ты возвращаешь сам.",
   },
   {
     q: "Нужен ли мне ИП или компания, чтобы принимать оплату?",
@@ -185,10 +185,15 @@ const FAQ = [
 export function LoginScreen({ onLoggedIn }: Props) {
   const widgetRef = useRef<HTMLDivElement | null>(null);
   const heroRef = useRef<HTMLDivElement | null>(null);
+  const finalRef = useRef<HTMLElement | null>(null);
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [widgetFailed, setWidgetFailed] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Виджет Telegram: пока он не нарисовался, вместо пустоты показываем кнопку-заглушку.
+  const [widgetReady, setWidgetReady] = useState(false);
+  // Дошли до финального блока: липкая кнопка внизу экрана больше не нужна.
+  const [nearEnd, setNearEnd] = useState(false);
   // Липкая кнопка внизу экрана на телефоне: появляется, когда форма входа из
   // героя уже уехала вверх,, чтобы на длинной странице путь к входу всегда
   // был под большим пальцем.
@@ -236,12 +241,19 @@ export function LoginScreen({ onLoggedIn }: Props) {
     // script: an ad blocker, a corporate proxy or a bad day at telegram.org
     // left the card showing a heading and nothing else, with no error and no
     // way forward. If nothing has rendered by now, offer the bot directly.
+    const poll = setInterval(() => {
+      if (widgetRef.current?.querySelector("iframe")) {
+        setWidgetReady(true);
+        clearInterval(poll);
+      }
+    }, 250);
     const timer = setTimeout(() => {
       if (!widgetRef.current?.querySelector("iframe")) setWidgetFailed(true);
     }, 4000);
 
     return () => {
       clearTimeout(timer);
+      clearInterval(poll);
       delete window.onTelegramAuth;
     };
   }, [botUsername, onLoggedIn, loading]);
@@ -254,8 +266,19 @@ export function LoginScreen({ onLoggedIn }: Props) {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const node = finalRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setNearEnd(entry.isIntersecting), { threshold: 0 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   function scrollToLogin() {
-    heroRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+    const hero = heroRef.current;
+    hero?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
+    // Фокус на блок входа, чтобы клавиатура и скринридер оказались там же, куда прокрутили.
+    hero?.querySelector<HTMLElement>(".lp-login")?.focus({ preventScroll: true });
   }
 
   const legalLinks = {
@@ -264,18 +287,23 @@ export function LoginScreen({ onLoggedIn }: Props) {
   };
 
   const loginWidget = (
-    <div className="lp-login">
+    <div className="lp-login" tabIndex={-1}>
       <p className="lp-login__title">Войти через Telegram</p>
       {loading ? (
         <p className="lp-login__hint">Входим…</p>
       ) : botUsername ? (
         <>
-          <div ref={widgetRef} className="login-widget" hidden={widgetFailed} />
+          {!widgetReady && !widgetFailed && (
+            <a className="lp-btn lp-btn--primary lp-login__skeleton" href={`https://t.me/${botUsername}`} target="_blank" rel="noreferrer">
+              Войти через Telegram
+            </a>
+          )}
+          <div ref={widgetRef} className="login-widget" hidden={widgetFailed || !widgetReady} />
           {widgetFailed && (
             <div className="lp-login__fallback">
               <p className="lp-login__hint">
-                Кнопка входа Telegram не загрузилась, её мог заблокировать браузер или расширение. Откройте бота и
-                нажмите «Открыть конструктор»: он работает прямо внутри Telegram.
+                Кнопка входа Telegram не загрузилась, её мог заблокировать браузер или расширение. Открой бота и
+                нажми «Открыть конструктор»: он работает прямо внутри Telegram.
               </p>
               <a className="lp-btn lp-btn--primary" href={`https://t.me/${botUsername}`} target="_blank" rel="noreferrer">
                 Открыть @{botUsername}
@@ -322,6 +350,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
 
   return (
     <div className="screen screen--login lp">
+      <a className="lp-skip" href="#main">К содержанию</a>
       {/* Шапка одной строкой и не выше 72px: «Войти» и цена всегда под рукой. Тема здесь же:
           это единственное место, где её можно сменить до входа. */}
       <header className="lp-nav">
@@ -341,6 +370,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
         </button>
       </header>
 
+      <main id="main">
       {/* ===== Hero ===== */}
       <section className="lp-hero" id="top" ref={heroRef}>
         <div className="lp-hero__copy">
@@ -370,7 +400,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
         </li>
         <li>
           <Check size={18} weight="bold" aria-hidden="true" />
-          Платный только запуск бота в Telegram
+          Платишь только за бота в эфире
         </li>
       </ul>
 
@@ -498,7 +528,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
           <div className="lp-pay__gateways">
             <ul className="lp-gateways">
               {gatewayNames.map((name) => (
-                <li key={name}>{name}</li>
+                <li key={name}>{name.replace(/\s*⭐️?/u, "")}</li>
               ))}
             </ul>
             <p className="lp-note">
@@ -537,11 +567,11 @@ export function LoginScreen({ onLoggedIn }: Props) {
       <section className="lp-section lp-price" id="price">
         <Reveal>
           <h2 className="lp-h2 lp-h2--wide">
-            {pricing.length ? "Платный только запуск. Всё до него бесплатно" : "Сейчас запуск бота бесплатный"}
+            {pricing.length ? "Собирать бесплатно, платишь за запуск и работу бота" : "Сейчас запуск бота бесплатный"}
           </h2>
           <p className="lp-lead">
             {pricing.length
-              ? "Заказывать бота у разработчика долго и дорого. Здесь ты собираешь сам за вечер, платишь за запуск каждого бота и одну общую подписку на все боты. Собирать и проверять бесплатно, без срока."
+              ? "Заказывать бота у разработчика долго и дорого. Здесь ты собираешь сам за вечер. Платишь один раз за запуск каждого бота и одну общую подписку за все боты. Собирать и проверять можно бесплатно и без срока."
               : "Собирать, сохранять, проверять и запускать бота можно без оплаты. Если условия изменятся, цена будет видна на кнопке публикации до того, как что-то спишется."}
           </p>
         </Reveal>
@@ -586,7 +616,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
                 ))}
               </div>
             ) : (
-              <p className="lp-note">Цена появится здесь и на кнопке публикации, если запуск станет платным.</p>
+              <div className="lp-prices"><div className="lp-prices__item"><p className="lp-prices__amount">Запуск бесплатно</p><p className="lp-prices__label">Если условия изменятся, цена появится здесь и на кнопке публикации до того, как что-то спишется.</p></div></div>
             )}
             <p className="lp-note">
               Деньги твоих покупателей сюда не входят: они идут напрямую в твою кассу, без нашей комиссии.
@@ -646,7 +676,7 @@ export function LoginScreen({ onLoggedIn }: Props) {
       </section>
 
       {/* ===== Финальный призыв ===== */}
-      <section className="lp-final">
+      <section className="lp-final" ref={finalRef}>
         <h2 className="lp-final__title">Собери первого бота сегодня</h2>
         <p className="lp-final__text">
           Вход через Telegram, без пароля и без карты. Платить нужно, только если решишь запустить бота.
@@ -655,11 +685,12 @@ export function LoginScreen({ onLoggedIn }: Props) {
           Начать бесплатно <ArrowRight size={18} aria-hidden="true" />
         </button>
       </section>
+      </main>
 
       {/* ===== Подвал ===== */}
       <SiteFooter config={config} />
 
-      {stickyCta && (
+      {stickyCta && !nearEnd && (
         <div className="lp-sticky">
           <button type="button" className="lp-btn lp-btn--primary" onClick={scrollToLogin}>
             Начать бесплатно

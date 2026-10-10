@@ -108,7 +108,7 @@ def card_text(item: Suggestion, author: Client | None) -> str:
     who = f"<code>{author.telegram_user_id}</code>" if author else "—"
     label = CATEGORIES.get(item.category, item.category)
     status = {"new": "новая", "planned": "в работе", "done": "сделано", "ignored": "игнор"}.get(item.status, item.status)
-    return f"{label} · {status} · {item.created_at:%d.%m %H:%M} UTC\nАвтор: {who}\n\n{escape(item.text)}"[:3800]
+    return f"{label} · {status} · {item.created_at:%d.%m %H:%M} UTC\nАвтор: {who}\n\n{escape(item.text[:3000])}"
 
 
 async def set_status(db: AsyncSession, suggestion_id: uuid.UUID, action: str) -> Suggestion:

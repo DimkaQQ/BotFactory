@@ -53,6 +53,7 @@ export function HeroMockup() {
           </span>
         </motion.div>
       </div>
+      <p className="lp-phone__caption">Пример диалога, цифры условные</p>
     </div>
   );
 }

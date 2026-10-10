@@ -24,10 +24,10 @@ export function LaunchOffer({ endsAt, regularPrice }: { endsAt: string; regularP
   const pad = (n: number) => String(n).padStart(2, "0");
 
   return (
-    <div className="landing-offer" role="status">
+    <div className="landing-offer">
       <p className="landing-offer__title">Специальная цена для первых клиентов</p>
       <p className="landing-offer__text">
-        Цена запуска действует до {new Date(end).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}. После этого запуск
+        Цена запуска действует до {new Date(end).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })}. После этого запуск
         будет стоить {regularPrice}.
       </p>
       <p className="landing-offer__timer" aria-label="Время до конца акции">

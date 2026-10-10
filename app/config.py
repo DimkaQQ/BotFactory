@@ -277,6 +277,12 @@ class Settings(BaseSettings):
             part = part.strip()
             if part.lstrip("-").isdigit():
                 ids.add(int(part))
+        # Операторы не заданы, а чат обращений есть и это личный чат (положительный id):
+        # карточки идут туда, значит и кнопки под ними должны принимать нажатия оттуда.
+        if not ids:
+            chat = self.support_chat
+            if chat is not None and chat > 0:
+                ids.add(chat)
         return ids
 
     @property

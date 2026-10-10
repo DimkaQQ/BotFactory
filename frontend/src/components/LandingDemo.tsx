@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Coffee } from "@phosphor-icons/react";
+import { useReducedMotion } from "framer-motion";
 import { scrollBehavior } from "../motion";
 
 interface DemoChoice {
@@ -60,6 +61,8 @@ export function LandingDemo() {
   const [finished, setFinished] = useState(false);
   const [typing, setTyping] = useState(false);
   const [visible, setVisible] = useState(false);
+  // «Уменьшить движение»: демо не крутится само, продолжается только по нажатиям.
+  const reduce = useReducedMotion();
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -95,7 +98,7 @@ export function LandingDemo() {
         setPending(null);
         setFinished(true);
       }
-    }, TYPING_MS);
+    }, seq.current === 0 ? 350 : TYPING_MS);
 
     return () => clearTimeout(timer);
   }, [pending, visible]);
@@ -108,14 +111,14 @@ export function LandingDemo() {
 
   // Nobody tapped: the demo picks for itself so the loop keeps moving.
   useEffect(() => {
-    if (!visible || !awaiting) return;
+    if (!visible || !awaiting || reduce) return;
     const choices = SCRIPT[awaiting].choices!;
     const timer = setTimeout(() => pick(choices[loop.current % choices.length]), AUTO_PICK_MS);
     return () => clearTimeout(timer);
-  }, [awaiting, visible, pick]);
+  }, [awaiting, visible, pick, reduce]);
 
   useEffect(() => {
-    if (!visible || !finished) return;
+    if (!visible || !finished || reduce) return;
     const timer = setTimeout(() => {
       loop.current += 1;
       setMessages([]);
@@ -123,7 +126,7 @@ export function LandingDemo() {
       setPending("start");
     }, RESTART_MS);
     return () => clearTimeout(timer);
-  }, [finished, visible]);
+  }, [finished, visible, reduce]);
 
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: scrollBehavior() });
