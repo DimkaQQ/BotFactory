@@ -85,8 +85,11 @@ class RobokassaProvider(ProviderDefaults):
     slug = "robokassa"
     title = "Robokassa"
     hint = (
-        "Логин магазина и оба пароля — в личном кабинете Robokassa, раздел «Технические настройки». "
-        "Там же укажи Result URL, который мы покажем ниже, и метод отправки POST. Success URL и Fail URL поставь равными ссылке на твоего бота (https://t.me/имя_бота): Robokassa берёт адрес возврата покупателя из кабинета, и без этого он останется на странице банка. Счёт выставляется в валюте твоего магазина Robokassa — для тенге удобнее Freedom Pay, ioka или CloudPayments."
+        "Логин магазина и оба пароля лежат в личном кабинете Robokassa, в разделе «Технические настройки». "
+        "Там же впиши Result URL, который мы покажем ниже, и выбери метод POST.\n\n"
+        "!Ещё поставь Success URL и Fail URL: https://t.me/имя_твоего_бота. Иначе покупатель после оплаты "
+        "останется на странице банка.\n\n"
+        "Счёт выставляется в валюте твоего магазина Robokassa. Для тенге удобнее Freedom Pay, ioka или CloudPayments."
     )
     currencies = ("RUB",)
     region = "ru"

@@ -9,7 +9,7 @@ import {
 import { useDraggablePanel } from "../hooks/useDraggablePanel";
 import { useEscape } from "../hooks/useEscape";
 import { CreditCard, X } from "@phosphor-icons/react";
-import { ArrowsClockwise, CurrencyCircleDollar, Flask, LinkSimple, Prohibit } from "@phosphor-icons/react";
+import { ArrowUUpLeft, ArrowsClockwise, CurrencyCircleDollar, Flask, LinkSimple, Prohibit } from "@phosphor-icons/react";
 
 
 interface Props {
@@ -250,11 +250,18 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                       </p>
                     ),
                   )}
-                  <p className="payment-settings__hint">
-                    После оплаты покупатель возвращается в твоего бота, если бот уже опубликован (у него есть имя
-                    @username). Пока бот не опубликован или в режиме «Как в чате», вместо бота откроется страница
-                    «Готово»: это нормально. Если у кассы адрес возврата задаётся в её кабинете, об этом написано выше.
-                  </p>
+                  <div className="payment-settings__return">
+                    <span className="payment-settings__return-icon" aria-hidden="true">
+                      <ArrowUUpLeft size={18} />
+                    </span>
+                    <div>
+                      <p className="payment-settings__return-title">Куда вернётся покупатель после оплаты</p>
+                      <p className="payment-settings__return-text">
+                        В твоего бота, если он уже опубликован. Пока бота нет в Telegram или ты смотришь «Как в чате»,
+                        покупатель увидит страницу «Готово». Так и должно быть.
+                      </p>
+                    </div>
+                  </div>
 
                   {active.fields.map((field) => {
                     const filled = settings?.provider === active.slug && settings.filled_fields.includes(field.key);

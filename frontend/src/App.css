@@ -6748,3 +6748,37 @@ details.live-problems > summary::-webkit-details-marker {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+
+/* Подсказка про возврат покупателя: спокойная карточка с иконкой, не вторая строка мелкого текста. */
+.payment-settings__return {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  margin: var(--sp-4) 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle, color-mix(in srgb, var(--text-primary) 12%, transparent));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--tg-button) 7%, var(--tg-bg));
+}
+.payment-settings__return-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--tg-button) 16%, var(--tg-bg));
+  color: var(--tg-button);
+}
+.payment-settings__return-title {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.payment-settings__return-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary, var(--text-tertiary));
+}
