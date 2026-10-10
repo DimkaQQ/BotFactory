@@ -256,7 +256,28 @@ async def publish_bot(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Оплата запуска временно недоступна. Мы уже знаем и чиним, попробуй чуть позже.",
         )
-    if payment_service.platform_methods() and bot.publication_paid_at is None:
+    # Пробный запуск: токен подключается ДО оплаты, бот отвечает только владельцу.
+    # Включается лишь когда запуск платный и ещё не оплачен: иначе пробовать нечего.
+    wants_trial = bool(
+        payload.trial and bot.publication_paid_at is None and payment_service.platform_methods()
+    )
+    if wants_trial:
+        in_trial = (
+            await db.execute(
+                select(func.count())
+                .select_from(Bot)
+                .where(Bot.client_id == client.id, Bot.trial_mode.is_(True), Bot.id != bot.id)
+            )
+        ).scalar_one()
+        if in_trial >= get_settings().max_trial_bots_per_client:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Пробных ботов может быть не больше {get_settings().max_trial_bots_per_client}. "
+                    "Оплати запуск одного из них или удали лишний пробный."
+                ),
+            )
+    elif payment_service.platform_methods() and bot.publication_paid_at is None:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="Публикация бота не оплачена",
@@ -321,6 +342,7 @@ async def publish_bot(
     bot.bot_token_encrypted = encrypt_token(payload.token.strip())
     bot.telegram_bot_username = me.username
     bot.status = BotStatus.active
+    bot.trial_mode = wants_trial
     bot.published_at = bot.published_at or datetime.now(timezone.utc)
     await db.commit()
 
@@ -331,9 +353,16 @@ async def publish_bot(
             await asyncio.wait_for(
                 meta.send_message(
                     client.telegram_user_id,
-                    f"✅ Бот @{me.username} запущен. Сюда будут приходить уведомления о продажах.",
+                    (
+                        f"🧪 Пробный запуск @{me.username}: бот отвечает только тебе. Проверь сценарий в Telegram, "
+                        "а когда всё нравится, оплати запуск в конструкторе, и бот откроется для всех."
+                        if wants_trial
+                        else f"✅ Бот @{me.username} запущен. Сюда будут приходить уведомления о продажах."
+                    ),
                 ),
                 timeout=8,
             )
 
-    return PublishResponse(status=bot.status, telegram_bot_username=bot.telegram_bot_username)
+    return PublishResponse(
+        status=bot.status, telegram_bot_username=bot.telegram_bot_username, trial_mode=bot.trial_mode
+    )

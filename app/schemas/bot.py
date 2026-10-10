@@ -24,6 +24,8 @@ class BotOut(BaseModel):
     paid_until: datetime | None = None
     #: Владелец поставил бота на паузу (мета-бот): новых диалогов нет.
     paused: bool = False
+    #: Пробный режим: бот отвечает только владельцу, запуск ещё не оплачен.
+    trial_mode: bool = False
 
 
 class BotWithBlocksOut(BotOut):
@@ -40,8 +42,11 @@ class BotUpdate(BaseModel):
 
 class PublishRequest(BaseModel):
     token: str
+    #: Пробный запуск до оплаты: бот отвечает только владельцу.
+    trial: bool = False
 
 
 class PublishResponse(BaseModel):
     status: BotStatus
     telegram_bot_username: str
+    trial_mode: bool = False

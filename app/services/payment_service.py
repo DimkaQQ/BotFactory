@@ -1612,6 +1612,8 @@ async def _extend_paid_period(db: AsyncSession, payment: Payment, now: datetime)
             platform_billing.extend_all(siblings, bot, now)
         else:
             bot.publication_paid_at = now
+            # Пробный бот открывается для всех сам, повторно публиковать не нужно.
+            bot.trial_mode = False
             # Запуск — разовый платёж за бота. Если подписки ещё нет (или она
             # кончилась), он включает первый месяц для всех ботов клиента; если
             # она идёт — бот просто встаёт под неё.

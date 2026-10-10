@@ -17,9 +17,11 @@ interface Props {
    * живым покупателям оставался без единой проверки. */
   problems?: string[];
   onPublish: (token: string) => Promise<void>;
+  /** Пробный запуск до оплаты: бот отвечает только владельцу. */
+  trial?: boolean;
 }
 
-export function PublishButton({ disabled, orphanCount = 0, problems = [], onPublish }: Props) {
+export function PublishButton({ disabled, orphanCount = 0, problems = [], onPublish, trial = false }: Props) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
 
@@ -71,8 +73,13 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
 
   if (!open) {
     return (
-      <button type="button" className="publish-button" disabled={disabled} onClick={() => setOpen(true)}>
-        <RocketLaunch size={18} aria-hidden="true" /> Опубликовать
+      <button
+        type="button"
+        className={`publish-button${trial ? " publish-button--secondary" : ""}`}
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        <RocketLaunch size={18} aria-hidden="true" /> {trial ? "Сначала попробовать бесплатно" : "Опубликовать"}
       </button>
     );
   }
@@ -107,6 +114,12 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
       <p className="publish-form__hint">
         <strong>Шаг 2.</strong> Вставь токен бота от <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">@BotFather</a>
       </p>
+      {trial && (
+        <p className="publish-form__hint">
+          Пробный запуск бесплатный: бот заработает в Telegram, но ответит только тебе. Проверь, как всё выглядит,
+          и оплати запуск, когда понравится. После оплаты бот откроется для всех сам.
+        </p>
+      )}
       <BotFatherSteps />
       {problems.length > 0 && (
         <div className="paywall__problems">
@@ -138,7 +151,7 @@ export function PublishButton({ disabled, orphanCount = 0, problems = [], onPubl
         </button>
         <button type="submit" disabled={submitting || !token.trim()}>
           {submitting && <span className="btn-spinner" aria-hidden="true" />}
-          {submitting ? "Публикуем…" : "Опубликовать"}
+          {submitting ? "Запускаем…" : trial ? "Запустить пробный" : "Опубликовать"}
         </button>
       </div>
         </>

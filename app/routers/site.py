@@ -131,7 +131,7 @@ async def save_site(
                 )
                 if not value
             ]
-            if bot.status != BotStatus.active or not bot.telegram_bot_username:
+            if bot.status != BotStatus.active or bot.trial_mode or not bot.telegram_bot_username:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT, detail="Страницу можно включить после публикации бота."
                 )
@@ -167,7 +167,7 @@ async def _load(slug: str, db: AsyncSession) -> tuple[BotSite, Bot]:
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     site, bot = row
-    if not site.enabled or bot.status != BotStatus.active or not bot.telegram_bot_username or bot.moderation_blocked_at:
+    if not site.enabled or bot.status != BotStatus.active or bot.trial_mode or not bot.telegram_bot_username or bot.moderation_blocked_at:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     owner = (await db.execute(select(Client).where(Client.id == bot.client_id))).scalar_one_or_none()
     if owner is None or owner.banned_at is not None:

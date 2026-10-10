@@ -467,7 +467,7 @@ export function BotList({ greetingName, isMiniApp, onOpen, onLogout }: Props) {
                     <span className="bot-card__name">{botTitle(bot)}</span>
                     <span className="bot-card__meta">
                       <span className={`bot-card__status bot-card__status--${bot.status}`}>
-                        {bot.status === "active" && bot.paused ? "На паузе" : STATUS_LABEL[bot.status]}
+                        {bot.status === "active" && bot.paused ? "На паузе" : bot.status === "active" && bot.trial_mode ? "Пробный" : STATUS_LABEL[bot.status]}
                       </span>
                       <span className="bot-card__dot">·</span>
                       {blockCountLabel(bot.block_count)}

@@ -53,6 +53,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bot import Bot as BotModel
 from app.models.bot_block import BlockType, BotBlock
+from app.models.client import Client
 from app.services import dates, scheduler, subscribers
 
 logger = logging.getLogger(__name__)
@@ -1346,7 +1347,45 @@ def _sender_and_chat(update: dict) -> tuple[dict | None, int | None]:
     return None, None
 
 
+_TRIAL_TEXT = (
+    "🚧 Этот бот пока в пробном режиме: он отвечает только своему владельцу. "
+    "Загляни чуть позже, когда он откроется."
+)
+
+
+async def _trial_gate(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSession) -> bool:
+    """True, если апдейт остановлен: бот в пробном режиме, а писал не владелец.
+
+    Чужие сообщения не запоминаем и не обрабатываем: бот ещё не оплачен и не открыт.
+    """
+    row = (
+        await db.execute(
+            select(BotModel.trial_mode, Client.telegram_user_id)
+            .join(Client, Client.id == BotModel.client_id)
+            .where(BotModel.id == bot_id)
+        )
+    ).first()
+    if row is None or not row[0]:
+        return False
+    owner_id = row[1]
+    user, chat_id = _sender_and_chat(update)
+    if user is not None and user.get("id") == owner_id:
+        return False
+    with contextlib.suppress(Exception):
+        pre_checkout = update.get("pre_checkout_query")
+        callback = update.get("callback_query")
+        if pre_checkout:
+            await bot.answer_pre_checkout_query(pre_checkout["id"], ok=False, error_message="Бот в пробном режиме")
+        elif callback:
+            await bot.answer_callback_query(callback["id"], text="Бот в пробном режиме", show_alert=True)
+        elif update.get("message") and chat_id is not None:
+            await bot.send_message(chat_id, _TRIAL_TEXT)
+    return True
+
+
 async def process_update(bot: Bot, update: dict, bot_id: uuid.UUID, db: AsyncSession) -> None:
+    if await _trial_gate(bot, update, bot_id, db):
+        return
     # Before anything is answered: record who this is. Every later capability
     # — naming the buyer in the sales log, sending next week's video, kicking
     # a lapsed subscriber out of a group — needs a person to attach to, and

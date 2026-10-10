@@ -108,6 +108,8 @@ export interface Bot {
   start_block_id: string | null;
   /** Владелец поставил бота на паузу (кнопка в мета-боте). */
   paused?: boolean;
+  /** Пробный режим: бот отвечает только владельцу, пока не оплачен запуск. */
+  trial_mode?: boolean;
   /** End of the paid period, or null when the bot is not on a clock. */
   paid_until: string | null;
 }
@@ -295,10 +297,10 @@ export const builderApi = {
   metaBotStatus: () =>
     request<{ configured: boolean; reachable: boolean; username: string; url: string }>(`/meta-bot/status`),
 
-  publishBot: (botId: string, token: string) =>
-    request<{ status: string; telegram_bot_username: string }>(`/bots/${botId}/publish`, {
+  publishBot: (botId: string, token: string, trial = false) =>
+    request<{ status: string; telegram_bot_username: string; trial_mode?: boolean }>(`/bots/${botId}/publish`, {
       method: "POST",
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token, trial }),
     }),
 
   listBlocks: (botId: string) => request<BotBlock[]>(`/bots/${botId}/blocks`),

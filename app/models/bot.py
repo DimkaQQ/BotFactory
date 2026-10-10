@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, LargeBinary, SmallInteger, String, func
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy import false as sa_false
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -56,6 +57,9 @@ class Bot(Base):
     # Данные ДРУГИХ оплат бота, которые владелец уже вводил: {slug: {"cred": {...}, "is_test": bool}},
     # одним зашифрованным JSON. Активная оплата живёт в полях выше, как и раньше; при переключении
     # они меняются местами, поэтому возврат на прежнюю оплату не требует вводить ключи заново.
+    # Пробный режим: токен подключён и бот в Telegram, но отвечает ТОЛЬКО владельцу, пока не оплачен
+    # запуск. Оплата снимает флаг, и бот открывается всем без повторной публикации.
+    trial_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa_false())
     payment_saved_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
 
     # Set once this bot's publication has been paid for (see PaymentKind.

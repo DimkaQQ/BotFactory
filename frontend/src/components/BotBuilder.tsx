@@ -600,9 +600,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
   );
 
   const handlePublish = useCallback(
-    async (token: string) => {
+    async (token: string, trial = false) => {
       if (!bot) return;
-      await builderApi.publishBot(bot.id, token);
+      await builderApi.publishBot(bot.id, token, trial);
       const refreshed = await builderApi.getBot(bot.id);
       setBot(refreshed);
     },
@@ -733,7 +733,9 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
             )}
             <p className="app-header__greeting">
               {bot.status === "active"
-                ? "Опубликован: изменения применяются сразу"
+                ? bot.trial_mode
+                  ? "Пробный запуск: бот отвечает только тебе"
+                  : "Опубликован: изменения применяются сразу"
                 : bot.status === "disabled"
                   ? "Остановлен: правки сохраняются как обычно"
                   : "Черновик"}
@@ -769,7 +771,7 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
           </div>
           <div>
             <p className="published-banner__title">
-              {bot.paused ? "Бот на паузе: " : "Бот работает: "}
+              {bot.paused ? "Бот на паузе: " : bot.trial_mode ? "Пробный режим: " : "Бот работает: "}
               <strong>@{bot.telegram_bot_username}</strong>
             </p>
             {bot.paused && (
@@ -862,12 +864,22 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
       {bot.status === "draft" && (
         <div className="app-footer" ref={footerRef}>
           {publication?.required && !publication.paid ? (
-            <PublishPaywall
-              botId={bot.id}
-              problems={publishProblems}
-              info={publication}
-              onPaid={() => setPublication((prev) => (prev ? { ...prev, paid: true } : prev))}
-            />
+            <>
+              <PublishPaywall
+                botId={bot.id}
+                problems={publishProblems}
+                info={publication}
+                onPaid={() => setPublication((prev) => (prev ? { ...prev, paid: true } : prev))}
+              />
+              {/* Пробный запуск: бот в Telegram отвечает только владельцу, оплата позже. */}
+              <PublishButton
+                trial
+                onPublish={(token) => handlePublish(token, true)}
+                disabled={bot.blocks.length === 0}
+                orphanCount={orphanBlocks(bot.blocks, bot.start_block_id).length}
+                problems={publishProblems}
+              />
+            </>
           ) : (
             <PublishButton
               onPublish={handlePublish}
@@ -884,6 +896,23 @@ export function BotBuilder({ botId, isMiniApp, onBack, onDeleted }: Props) {
 
       {bot.status === "active" && (
         <div className="app-footer" ref={footerRef}>
+          {bot.trial_mode && publication?.required && !publication.paid && (
+            <>
+              <p className="trial-note">
+                Пробный режим: бот отвечает только тебе. Открой его в Telegram и проверь, а когда понравится, оплати
+                запуск: бот откроется для всех сам.
+              </p>
+              <PublishPaywall
+                botId={bot.id}
+                problems={publishProblems}
+                info={publication}
+                onPaid={() => {
+                  setPublication((prev) => (prev ? { ...prev, paid: true } : prev));
+                  void builderApi.getBot(bot.id).then(setBot);
+                }}
+              />
+            </>
+          )}
           <a
             className="publish-button publish-button--link"
             href={`https://t.me/${bot.telegram_bot_username}`}
