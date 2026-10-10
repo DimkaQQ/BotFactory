@@ -250,6 +250,11 @@ export function PaymentSettingsPanel({ botId, onClose, onSaved, onOpenSales }: P
                       </p>
                     ),
                   )}
+                  <p className="payment-settings__hint">
+                    После оплаты покупатель возвращается в твоего бота, если бот уже опубликован (у него есть имя
+                    @username). Пока бот не опубликован или в режиме «Как в чате», вместо бота откроется страница
+                    «Готово»: это нормально. Если у кассы адрес возврата задаётся в её кабинете, об этом написано выше.
+                  </p>
 
                   {active.fields.map((field) => {
                     const filled = settings?.provider === active.slug && settings.filled_fields.includes(field.key);

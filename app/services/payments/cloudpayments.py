@@ -127,6 +127,10 @@ class CloudPaymentsProvider(ProviderDefaults):
                 # Our payment id is the invoice id, so both the notification
                 # and the status re-read find the order by it.
                 "InvoiceId": str(request.payment_id),
+                # Куда вернуть покупателя после страницы банка: в бота, а не
+                # на экран CloudPayments без кнопки «назад».
+                "SuccessRedirectUrl": request.return_url,
+                "FailRedirectUrl": request.return_url,
             },
             request.credentials,
         )
