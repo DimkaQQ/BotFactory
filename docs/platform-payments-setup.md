@@ -63,8 +63,8 @@ docker compose exec api python -m app.platform_check
 
 1. Убедиться, что мета-бот работает (`META_BOT_TOKEN` в `.env`, контейнер `bot` запущен).
 2. В `PLATFORM_PAYMENT_METHODS` добавить способ (число звёзд умножается на 100):
-   `{"provider":"stars","price_minor":245000,"renewal_price_minor":75000,"currency":"XTR"}`
-   Это 2450 ⭐ за запуск и 750 ⭐ в месяц (покупатель платит около $0,02 за звезду, на вывод через Fragment
+   `{"provider":"stars","price_minor":380000,"renewal_price_minor":115000,"currency":"XTR"}`
+   Это 3800 ⭐ за запуск и 1150 ⭐ в месяц (покупатель платит около $0,02 за звезду, на вывод через Fragment
    приходит около $0,013, поэтому число звёзд выше, чем «в долларах»).
 3. Пересоздать `api` и `bot`, запустить `platform_check`: «мета-бот отвечает».
 4. Живой тест: временно поставить `price_minor: 100` (это 1 ⭐), оплатить со своего аккаунта, вернуть цену.
@@ -76,7 +76,7 @@ docker compose exec api python -m app.platform_check
 ## 4. Итоговая переменная (три способа сразу)
 
 ```
-PLATFORM_PAYMENT_METHODS=[{"provider":"stripe","price_minor":4900,"renewal_price_minor":1500,"currency":"USD","credentials":{"secret_key":"sk_live_…","webhook_secret":"whsec_…"}},{"provider":"cryptobot","price_minor":4900,"renewal_price_minor":1500,"currency":"USDT","credentials":{"token":"…"}},{"provider":"stars","price_minor":245000,"renewal_price_minor":75000,"currency":"XTR"}]
+PLATFORM_PAYMENT_METHODS=[{"provider":"stripe","price_minor":4900,"renewal_price_minor":1500,"currency":"USD","credentials":{"secret_key":"sk_live_…","webhook_secret":"whsec_…"}},{"provider":"cryptobot","price_minor":4900,"renewal_price_minor":1500,"currency":"USDT","credentials":{"token":"…"}},{"provider":"stars","price_minor":380000,"renewal_price_minor":115000,"currency":"XTR"}]
 ```
 
 Проверить: `curl https://<домен>/api/config`, в `pricing` должны быть все способы. Если JSON с опечаткой,
